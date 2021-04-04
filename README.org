@@ -27,7 +27,7 @@ raco test org-mode
 #+end_src
 
 You can also parse individual Org files using [[file:./org-mode/cli.rkt]].
-#+begin_src bash
+#+begin_src bash :results drawer
 org-mode/cli.rkt docs/thoughts.org org-mode/test.org
 #+end_src
 * Status

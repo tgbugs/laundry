@@ -6,4 +6,4 @@
 
 (module+ main
   (for ([path-string (current-command-line-arguments)])
-    (pretty-print (dotest-file path-string #:verbose #t))))
+    (pretty-print (dotest-file path-string))))

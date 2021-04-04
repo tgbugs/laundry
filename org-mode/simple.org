@@ -1,0 +1,60 @@
+* Heading
+Hrm
+
+  Leading whitespace is broken in the grammar.
+
+Wat
+
+#+begin_src language
+ """ . """
+#+end_src
+
+current =.= or ="= will work but =a= =ab= will not??
+#+header: :epilogue "import pprint; return pprint.pformat(data)"
+#+begin_src python :results drawer :exports both :cache yes :tangle ./broken.py
+ab :
+
+ .c
+
+#+end_src
+
+#+begin_src sh
+ab :
+ .c
+
+#+end_src
+
+#+begin_src sh
+ .c
+
+#+end_src
+
+oh dear
+#+begin_src sh
+ab
+ |
+#+end_src
+now ok, the issue for all these was a =word-char-n= again
+
+#+begin_src sh
+ab
+ .
+#+end_src
+
+#+begin_src sh
+foo stool
+#+end_src
+* wat
+ .
+ ,
+ _
+ :
+ |
+ !
+ @
+ #
+ $
+ %
+ ^
+ &
+ *

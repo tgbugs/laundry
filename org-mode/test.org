@@ -1,0 +1,98 @@
+# -*- mode: org -*-
+#lang org-mode
+# [[file:test.html]]
+# [[file:test.pdf]]
+
+* plain lists
+hello
+1. There
+   A. asdf
+
+   B. asdf
+
+2. 
+
+wat
+a) asdf
+b) asdf
+
+
+sigh
+A) zz
+B) qq
+
+
+asdf
+a. b
+c. d
+e. f
+
+3. [@3] [X] wat :: some values
+4. [ ]
+5. [  ] more than one space does not work in the checkbox
+6. [	] tab does not work in the checkbox
+7. [X]
+8. 
+
+
+1. 
+2. 
+3. 
+4. 
+
+* drawers
+
+                  :drawer:
+yes this
+is a drawer?
+           :end:
+more
+                  :end:
+
+:drawer:
+
+:drawer-not-a-drawer:
+| im a table | shor tand stout |
+|            | lol             |
+contents?!?
+:end:
+
+:end:
+* [#D] qq
+
+
+A. heloo
+B. there
+
+***nasdf
+* tables
+| i | am | a | table
+| I | don't | need | to end in a pipe
+
+
+| can you have newlines in cells?
+  this seems strange to me? | no, you can't
+
+* export snip
+@@something: some words
+and a newline too?
+@@
+Hrm
+   
+*this
+is bold*
+
+*test
+a*
+
++this
+should be
+struck+
+
+So the spec is inaccurate here. It is > 2 lines not > 3 lines. LESS than 3 lines is accurate.
+
+~what
+the code~
+
+=what
+the verbatim=

@@ -1,0 +1,87 @@
+* data structures for org files 
+:PROPERTIES:
+:CREATED:  [2020-12-10 Thu 22:39]
+:END:
+
+In brief.
+
+Double rooted tree should minimize book keeping needs requiring
+reparenting only when the cursor changes section or when headlines are
+added, removed, or moved.
+
+Reparsing only required worst case for the current level 1 section.
+Best case only for current section to the first node that ends beyond
+the bottom of the window.
+
+# started writing in the parser as a comment, moved here
+
+if we were trying to come up with a reasonable data structure for
+holding org documents, I think a double rooted tree might be one of
+them, all headlines above the cursor in the top list all headlines
+below the cursor to the the bottom, that way if someone is typing in
+the buffer the relative positions of the headlines does not change,
+any movement down and you have to do an additional subtraction from
+the new length of the buffer, but the offsets never change, and when
+transiting headings going down you have to move headings to the
+bottom of the top list and update their top down offset, but you
+only have to calculate the change for the first heading because all
+the rest will have moved the exact same distance
+
+I think it is similarly good for reordering headines
+if your cursor is on a headline then it is in the bottom list (is it? the starts would be up buffer?)
+so that all nested headings share the offset, if it moves up
+then ... if it moves down then that is the same as the next
+headline moving up 1 except that the headline below has to
+move from bottom to top, which means ... bad things? or no
+I think you only have to compute the relative offset ... wait
+
+so this is a bit more complicated because we are not going to use
+a line oriented structure, we are going to use the linear position
+actually this might simplify, just subtract like this
+(- point-heading-current (- point-heading-sl-next point-heading-sl-next-next))
+and yes, this can be a nested tree since everything outside the current
+level is stationary for M-<up> and M-<down>, I think M-<left> is
+actually probably more problematic for this, M-<right> is easy, you just
+move the heading to the end of the tree for the previous at the same level
+so a single cons I think, for M-<left> ... oh, not so bad maybe but only
+if you are in list of list mode, which you probably would be so that you
+had a homogenous representation
+(**       (**  
+(***  ->  (**
+(***      (***
+
+I'm not entirely sure what the utility of this is yet, but it does
+minimize the amount of operations needed to keep track of where
+everything is, so, for example, you can jump between headings
+without having to scan the buffer every time, but it seems that
+the buffers in emacs already sort of work like this for lines?
+except for the bit about long lines ... but that is a separate issue
+or maybe not given the difference in performance scrolling up vs down
+in a buffer
+
+oh right, this is actually useful for exactly what I was working out
+above, calculating the actual position in the buffer into which to
+insert something if you have to linearize it, one potential issue
+is what to do about cases where there is significant disparity
+between the depths of the headings
+
+oh right again, the reason why we want something like this is
+precisely so that we can reduce the scope of any reparsing that we
+have to do, addition and removal of headlines maximally affects
+only previous and next level 1 headings and usually it will be much
+better than that if people are working within a single section, this
+means that we can store the parsed representation for all the other
+headlines knowing that they will not change, and with a few
+exceptions, such as detached blocks, only the current element would
+be affected, everything down section is affect, however there is a
+major advantage there which is that we have time to parse what is
+currently below the bottom of the window and we only have to parse
+beyond the last visible line prior to redisplay when we hit a node
+that has not terminated
+
+this means that we might need a mechanism that can somehow alert the
+underlying stream that we are going to need to parse more than we
+thought, or we can parse each node incrementally, consuming only
+a single node instead of org-node* until the end point of the
+last parsed node is out of sight beyond the bottom of the window
+then we are done

@@ -4,7 +4,7 @@
 # Laundry list!
 # laundry-mode
 
-An attempt to specify a formal grammar for Org syntax.
+An attempt to specify a formal grammar for [[https://orgmode.org/worg/dev/org-syntax.html][Org syntax]].
 
 The grammar itself lives [[file:./org-mode/parser.rkt][parser.rkt]]. It is implemented using Racket's
 [[https://docs.racket-lang.org/brag/#%28part._.The_language%29][#lang brag]]. The details of the implementation are in the comments.

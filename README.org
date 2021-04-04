@@ -1,0 +1,39 @@
+#+title: Mobster: Org mode for Racket
+
+An attempt to specify a formal grammar for Org syntax.
+
+The grammar itself is in [[file:./org-mode/parser.rkt]]. Most of the
+details of the implementation are described in the comments.
+
+* Status
+Most of the core elements of Org syntax have been fully specified,
+however other important forms such as the markup syntax have not been
+fully implemented.
+
+The second pass operations needed to define Org semantics has not been
+implemented yet.
+* Objectives
+The primary objective of this work is to provide a reference grammar
+and implementation that can be used to test other implementations of
+org mode. The elisp implementation has inconsistent behavior in a
+number of critical areas, such as the parsing of headline tags. A
+reference grammar will help to elucidate the issues.
+
+This work was originally inspired by a desire to regularize the
+behavior of Org babel, however the lack of a consistent reference for
+the grammar of Org as a whole turned out to be a significant stumbling
+block due to the fact that Org babel interacts with nearly every
+aspect of Org. Therefore work to standardize Org syntax became a
+priority.
+
+The long term goal of this work is to provide a reference that can be
+used to standardize Org syntax and behavior and to specify various
+levels of compliance for an implementation of Org mode.
+* Performance
+Until recently the performance of the parser was exceptionally bad due
+to some hidden quadratic behavior in Racket =parser-tools=. To work
+around this issue the tokenizer has been made more complex, so sometimes
+you may find that there is an opaque token appearing in the grammar
+that obscures some of the details. In most cases the full grammar
+is retained, but unless it has been test with less complex and thus
+slower tokenizer the full grammar may be incorrect.

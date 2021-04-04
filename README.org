@@ -1,10 +1,35 @@
-#+title: Mobster: Org mode for Racket
+#+title: Laundry: Org mode for Racket
+# An organized racket?
+# How about money laundering?
+# Laundry list!
+# laundry-mode
 
 An attempt to specify a formal grammar for Org syntax.
 
 The grammar itself is in [[file:./org-mode/parser.rkt]]. Most of the
 details of the implementation are described in the comments.
 
+* Getting started
+Install [[https://download.racket-lang.org/][Racket]] for your platform.
+From the location of this readme run the following.
+#+begin_src bash
+raco pkg install brag
+raco pkg install org-mode/
+#+end_src
+There is another package named =org-mode= in the Racket package
+manager so the trailing slash is required. Eventually we'll get around
+to working out the naming issues.
+
+Once everything is installed you can run the tests by invoking the
+following in the directory of this readme.
+#+begin_src bash
+raco test org-mode
+#+end_src
+
+You can also parse individual Org files using [[file:./org-mode/cli.rkt]].
+#+begin_src bash
+org-mode/cli.rkt docs/thoughts.org org-mode/test.org
+#+end_src
 * Status
 Most of the core elements of Org syntax have been fully specified,
 however other important forms such as the markup syntax have not been

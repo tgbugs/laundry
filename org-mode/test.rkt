@@ -40,7 +40,7 @@
   #;
   (define (t) (org-mode-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
   (define hrm
-    (with-input-from-file (string->path path)
+    (with-input-from-file (expand-user-path (string->path path))
       (λ ()
         (let ([t (org-mode-make-tokenizer (current-input-port))])
           (parse-to-datum t)))
@@ -1098,7 +1098,7 @@ drawer contents
        (stars "*")
        (headline-content (h-priority (priority-level (not-whitespace1 "P")))))))))
 
-(module+ test ; sentinel
+(module+ test-sentinel
   ; things that work and should continue to work
 
   (dotest "* " #:eq h-l1)
@@ -1179,7 +1179,7 @@ drawer contents
 
 (module+ test-files
   #; ; #+CAPTION: Value bug ...
-  (define setup (dotest-file "/home/tom/git/sparc-curation/docs/setup.org"))
+  (define setup (dotest-file "~/git/sparc-curation/docs/setup.org"))
 
   ; this takes WAY too long to parse it is _abysmally_ slow !??!?!
   ; it is just plain text wat wat wat !??!?!
@@ -1190,17 +1190,17 @@ drawer contents
   ; nasty quadratic behavior when parsing paragraphs with normal prose due to short token quadratic issues
   ;; XXX a workaround for the quadraticness has been acomplished by parsing the 80% case for paragraphs
   ;; via the tokenizer
-  (define notes (dotest-file "/home/tom/git/sparc-curation/docs/notes.org"))
+  (define notes (dotest-file "~git/sparc-curation/docs/notes.org"))
 
   ; OOF this one still hits the quatratic behavior very hard
   ; WOW it actually parses ...
-  (define apinatomy (dotest-file "/home/tom/git/sparc-curation/docs/apinatomy.org"))
+  (define apinatomy (dotest-file "~/git/sparc-curation/docs/apinatomy.org"))
 
-  (define alt (dotest-file "/home/tom/git/interlex/alt/README.org"))
+  (define alt (dotest-file "~/git/interlex/alt/README.org"))
 
-  (define rel (dotest-file "/home/tom/git/pyontutils/docs/release.org")) ; x
+  (define rel (dotest-file "~/git/pyontutils/docs/release.org")) ; x
 
-  (define scig (dotest-file "/home/tom/git/pyontutils/nifstd/scigraph/README.org")) ; x
+  (define scig (dotest-file "~/git/pyontutils/nifstd/scigraph/README.org")) ; x
 
   (dotest "
 wat
@@ -1228,7 +1228,7 @@ wat
   (define test-org (dotest-file "test.org")) ; WOOOOOOOOOOOOOOO all working ?! yay for tokenizers simplifying things?
 
   #; ; #+results[a]: issue
-  (define dev-guide (dotest-file "/home/tom/git/sparc-curation/docs/developer-guide.org"))
+  (define dev-guide (dotest-file "~/git/sparc-curation/docs/developer-guide.org"))
 
   (dotest "
 #+RESULTS[99f2d5eba83acdff6934d4fdfe64da4170348550]:
@@ -1302,7 +1302,7 @@ you called?
 
   )
 
-(module+ test-all
+(module+ test
   (require
    ;(submod ".." test-headline-content)
    (submod ".." test-bof)
@@ -1326,7 +1326,7 @@ you called?
    (submod ".." test-hcom)
    (submod ".." test-tags)
    (submod ".." test-keywords)
-   (submod ".." test) ; FIXME make this the test-all entry point? or no?
+   (submod ".." test-sentinel)
    (submod ".." test-word-char-vs-word-char-n)
    ;;(submod ".." test-files) ; XXX big boy
    (submod ".." test-markup)

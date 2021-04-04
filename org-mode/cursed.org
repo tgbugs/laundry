@@ -1,0 +1,565 @@
+#+title: I can't believe you've done this.
+[fn:x] lol
+* comments
+other element
+
+# hello
+# there
+  # hrm
+       # zz
+     #
+# qq
+
+# asdf  
+# asdf
+
+* comments
+
+a paragraph with comments in it?
+# a comment? moving this out of the two other paragraphs is
+# an irreversable change because they join to form a single
+# paragraph
+more paragraph?
+
+#+KEYWORD does it bind?
+other paragraph
+
+#+hrm asdf
+yes it does work doesn't it
+
+#+ATTR_HTML: value
+# on a comment element?
+
+#+ATTR_HTML: asdf
+paragraph
+
+1.asdf
+1. asdf
+2.
+* comments
+#+name: a named comment
+# LOL A NAMED COMMENT
+# ORG U W0T M8
+# Naming a comment breaks comment elements seprating the first line
+# of the comment from the rest, DERP
+
+some text 
+
+# lol
+# wut
+
+* :tag:gat:
+* I don't have a priority [#D] woah dude.                               :tag:
+That's not a real priority but you can change it ...
+super confusingly
+* [#A] a real priority
+~(message "%S" (org-element-at-point))~
+* DONE [#A] HRM
+#+begin_src elisp
+(push "HAS SPACE" org-todo-keywords-1)
+org-todo-keywords-1
+#+end_src
+#+todo: (identity "HAS SPACE")
+#+todo: TODO | DONE
+#+todo: HAS-HRM
+#+todo: [#E] | EVIL
+** HAS-HRM
+** (identity
+** "HAS
+** SPACE") asdf
+** BUT WAIT[#B]THERE's MORE!
+** [#E] WAT
+LOL it works how evil is this
+** [#A]AH POOP
+** [#O]:OHNO:
+** [#K] :YES:
+** :tag:
+this is not a tag
+** :not:tag:
+neither is this
+** :not: :tag:
+this is 
+** TODO [#A] :ag:
+** DONE[#A]AH POOP                                                      :bug:
+lol highlighting error that is not what you think it is
+** HAS SPACE OH NO
+** ASDF [#1] asdf
+** ASDF [#A] asdf
+** [#M] asdf
+** [#1] asdf
+** [#0] asdf
+** [#c] asdf
+**     DONE asdf asdf [#1] oops
+** [#$] LOL
+lol this is actually a valid priority for org-element !??!?!
+but not for any of the M-arrows functionality
+** [#A]COMMENT :bug:
+ah behold the complete fooery of the elisp implementation
+the comment doesn't highlight, the title CAN be empty with tags
+as long as COMMENT is there since it is technically part of the title
+but the title string is actually null (!?) wat
+** trailing whitespace in the tag :YEAH:    
+yep ... why the heck is this allowed and not cleaned up
+** what happens if we do this :tag: :tag: :tag:
+only the last connected tags go through
+** NOT-ACTUALLY-A-TODO-KEYWORD [#Q] but will it have a priority anyway?
+** [#G] COMMENT :tag:
+** COMMENTasdf
+**           COMMENThrm
+**           COMMENT hrm
+** COMMENT[#A]
+this is a comment but despite the highlighting, that is not actually priority unless
+you were evil and made COMMENT a todo-keyword (lol)
+** COMMENT [#A] COMMENT
+I am evil, yes this does what you think it does
+#+todo: COMMENT
+** COMMENT [#A] lol
+LOOK AT ALL THE BUGS this isn't commented
+** [#A]aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+** TODO[#A] test
+** [#A]Title
+** [#A]COMMENT
+** [#A]COMMENTTitle :t:
+** [#A]COMMENT:t:
+The elisp implementation treats the ~:t:~ as title here but not in the next one.
+** [#A]COMMENT                                                            :t:
+** [#P]:t:
+tags nil
+** [#P]                                                                   :t:
+tags nil, but move
+** :ARCHIVE:
+LOL FOO ARE YOU KIDDING ME?! org-element is a giant mess and a it
+fails to match the behavior of a TON of the functionality that
+actually does things
+
+org element says that this heading is not archived ... but literally
+the archive functionality says that it is archived because org element
+is completely broken when dealing with tags and titles
+*** asdf
+
+** T :!asdft1@#_%:       
+** T ::!sdf::
+** T ::!sdf:: :t:
+** TODO:not_a_tag:
+
+* what does the :grammar say about this?                         :tagme:baby:
+[[*what does the :grammar say about this?][what does the :grammar say about this?]]
+* this is :not-a-tag:
+* comments
+# wait ...
+#+wait oh no
+#
+
+* properties                                                           :tag: 
+:properties:       
+:header-args:python+: yeah?
+:hrm: asdf
+:k: |
+:+: look look! the spec is wrong!
+:k+:
+:v+:
+:key: value
+:wat:    
+          :end:
+NOTE that =:wat:= above fails to highlight correctly however it does behave correctly.
+
+:properties:
+:yes: no
+:: nope
+:end:
+
+:properties:
+:asdf: wat
+this isn't actually a property drawer
+@@comment: this@@
+     :end:
+
+:drawer-thing:
+:hrm: oh no
+anyway
+:end:
+
+drawers end at the first end
+:end:
+
+:asdf:
+:end:
+
+note the trailing whitespace after :properties:
+:properties:    
+hrm
+:end:
+
+note the trailing whitespace after :drawer:
+:drawer:                  
+hrm
+:end:
+
+* affiliated keywords test
+# before
+
+#+NAME: how many lines of separation can we deal with here ?
+
+
+asdf asdf asdf asd fasd f
+asdf
+as
+df
+as
+df
+asd
+f
+
+#+name: must be touching?
+yes?
+
+# AFTER
+
+Yes these are paragraphs
+#+name
+#+attr_html
+
+* test table
+||
+||
+
+|
+
+|ah poop| wut
+|is going| on here| oh hai mark
+
+|-
+
+|---+---|
+| a | b |
+|   |   |
+-
+1.
+* COMMENT COMMENT Blocks
+# FIXME lol foo when something is broken in the export backend using the :noexport: tag
+# still foos it you have to comment it out ... fffs no idea what is breaking everything
+# but it is something in here something about a consp
+see also [[file:./test-header-args.org]]
+
+#+begin_src bash -r -l "\([[:space:]]\|;\)*(ref:%s)$" :noweb yes
+(+ 1 2)
+#+end_src
+
+#+RESULTS:
+
+
+#+begin_example org
+,#+begin_src bash -r -l :noweb yes
+(+ 1 2)
+,#+end_src
+#+end_example
+
+#+begin_example org
+,#+begin_src bash -l -r :noweb yes
+(+ 1 2)
+,#+end_src
+#+end_example
+
+#+begin_holy:poop-boys
+#+end_holy:poop-boys
+
+#+BEGIN: wat
+#+begin_src elisp
+#+end_src
+wat
+#+END:
+
+#+end:
+
+before
+
+#+name: lol
+#+keyword: LOL
+
+after
+
+#+keyword: thing
+#+lol: thing
+wow this saves me so much angst there is a fallthrough for keywords which means
+that only the ones lacking colons are not keywords
+#+keyword thing
+
+#+keyword:value: hrm
+#+keyword: value: hrm
+
+#+:aaaaaaaaaaaaaaaaaaaaaaaaa:
+lol broken highlighting
+
+#+k:
+#+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:assdddddddddddddddddddddfaa:asdfasd 
+#+assdfasdf asdfffffffasdfasdf:
+
+
+#+begin:poop
+asdf
+#+end
+
+#+begin: 
+wat
+#+end:
+
+
+#+begin: wat wat
+ARGH somehow this is not a keyword to org-element but ~#+begin:~ alone is !?!??!! FOOING FOO POOP FOO
+come on guys this is insane
+
+#+wat: wat wat
+
+
+ah poop this is bad
+:drawer:
+** 
+:end:
+** MADLADS
+
+#+begin: the-dynamic-block
+IN THE BATTLE OF THE AGES WHO WILL WIN?
+:the-drawer:
+or
+#+end:
+:end:
+ITS THE DYNAMIC BLOCK
+Hrm, this is problematic though ... but not really ?
+Let's see what the grammar does. We may have to use drawer-dyn to prevent #+end: from showing up in there
+#+end:
+
+as expected cannot nest dynamic blocks either
+#+begin: tdb
+:d:
+#+begin: HRM
+asdf
+#+end:
+:end:
+#+end:
+
+-
++
+*
+
+#+call:end:
+#+call:properties:
+#+keyword:end:
+#+keyword:properties:
+
+lol fooing broken fontification among other insanity
+DOUBLE lol on broken fontification in here ???!?!?! no actually that one pipe is correct
+#+begin_src org
+ ,#+begin_src                  
+foo
+,* poop
+,#+begin_src racket -l "foo" :poop "oh no"
+#|
+|#
+,#+TBLFMT: (message "oops I will evaluate code even though I highlight as something else")
+,* asdf
+#+end_src
+
+#+begin_
+#+end_
+
+lol highlighting error boys org-element is correct in this case
+#+begin_:
+#+end_:
+
+#+begin_-
+#+end_-
+
+#+begin_a
+#+end_a
+
+* TODO COMMENT asdf (lol foo me breaking comment is beyond insane) AND THIS LINE ISN'T EVEN THE ISSUE
+** asdf ::tag:asdf:
+** asdf :::
+lol foo come on guys even org lint is confused
+ahahahahahah, org element says
+** asdf ::
+** asdf blocks:tag:
+** OH? You're approaching me? :I::Have:
+Hey ~org-lint~ you're fooing dumb. The error message should be "Hey
+foowit do you know you have an empty tag?"
+* plain list tags
+1. :: poop
+2. ARE YOU FOOING KIDDING ME :: poop
+4. [@4] poop
+5. 
+   
+
+1. fooing really kids? :: this is some fooing stupid poop right here :: you said it not me :: lol foo
+
+   
+
+1. wat?
+   this is not an issue?
+2. asdf
+   huh?
+
+foo
+
+- hello there
+  friend
+- what are you doing
+  ???
+
+* footnotes :oh:poo:what:the:foo:
+# [fn:x] I WIN. woah, don't uncomment this line, the whole cursed section will dissapear!
+;_; THIS IS MADNESS [fn:sadness]
+asdf [fn:1] well poop [fn:: Why hello there
+you must be new here
+this is a footnote.] anyway. [fn:2: what is this thing?] lol foo your numbers
+
+ [fn:this-is-inconsistent]
+
+[fn:foo-this-poop] is a footnote that starts at the start of a line? I DONT THINK SO
+# this should be the split? but actually you can define a footnote ANYWHERE !?!?!?! after its anchor???
+[fn:foo-this-poop] is a footnote that starts at the start of a line? I DONT THINK SO
+LOL FOO ME THESE THINGS DON'T EXPORT! ... AND NEITHER DOES THIS !??!!?!?
+
+[fn:x] I WIN.
+# indeed you need two paragraphs or an intervening non-paragraph section
+# WAIT WHAT THE FOO!? ok, footnotes behave differently than other elements they include comments
+# in themselves
+
+See?
+
+
+HRM why do I get the feeling that footnotes literally _define_ the start of the end of the section and leave everything else out? Actually I'm wrong. [fn:9] [fn:10]
+
+[fn:this-is-inconsistent] now this will render
+
+[fn:1] oh foo me right? wait ... the footnote definition can now appear anywhere !?
+
+hello there [fn:poop]
+
+[fn:poop: but maybe they can!? OH FOO WHAT HAVE I DONE?! I just destroyed the fontification here
+lol foo, is this running all the way back to the fn1 definition !? how the foo?!]
+[fn:poop] general kenobi, these things can't be multiline can then :(
+# this is some fooed up poop. I have no idea what is going on.
+
+
+#+begin_src elisp
+; aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+#+end_src
+
+[fn:2] So you see, this ... overwrites the inline contents ?! lol nope this just gets blackholed without any warning at all ... what the foo?
+
+[[file:./test-comments.html]]
+LOL NOT A FOOTNOTE GET FOOED
+WHY WOULD YOU DO THIS!?
+[fn:1] The actual footnote
+[fn:sadness] NO THIS IS ORG MODE FOOTNOTES
+Please let these be multi-line here? Please !??!?! Apparently they have to come after all other footnotes or something? 
+YAY! [fn:: MULTI LINE WORKS! :D ] An so do nested footnotes, despite what the spec says.
+
+So do footnotes in footnotes [fn:z]. Though apparently the number is a bit strange.
+The footnotes in footnotes get footnoted immedately after their anchoring footnote?
+
+[fn:x] ARE YOU READY FOR POOP BEING COMPLETELY OUT OF ORDER?
+YES. YES I AM.
+
+[fn:z] It would seem that the only requirement is that a footnote definition appear down page from the anchor?
+Is this even true [fn:x]?
+#+begin_src elisp
+(+ 1 2)
+#+end_src
+All elements?
+
+[fn:untypeable-charachter] I haz no ref
+
+
+ARE YOU READY? [fn:TO-FOOING-ROCK:
+#+begin_src org
+THIS IS AN INLINE FOOTNOTE WITH A FOOING SOURCE BLOCK IN IT
+_*WHAT THE FOOING POOP*_
+#+end_src
+highlighting works at least ... looks like org-export isn't quite up to the task
+understandable given that this is a nightmare.
+]
+
+Well poop this used to work, why is it broken now ;_; or maybe I just misread it.
+The syntax highlighting seems to be working as expected, but org-export is broken.
+
+I think the only sane thing to do here is to treat either break call
+the inline footnote invalide if it contains a footnote definition
+node, or to treat footnote definition lines as one of our YOU HAVE
+FOOED UP parses for paragraph-line-f like we do for the detached
+blocks. I'm fairly certain the reason why org-export has bad behavior
+is because the implementation just looks for ~\n[fn:~ and calls it a
+day. Since you can't render a footnote definition inside another
+footnote definition, and you can't "break out" of the inline footnote
+the way you can start a new footnote in the not-inline definitions, it
+only make sense to say that it is not a footnote and warn.
+
+lol ok so this is completely fooing broken, fontification reality are
+completely out of wack, and the ~[fn:help]~ definition completely blasts
+
+
+Ah of course! You can do inline footnotes with labels in case you need
+to reference them somewhere else! Just like my exploration with the
+keywords!
+
+[fn:9] asdf
+asdf
+asdf
+[fn:10] breaks the footnote definition
+yeah?
+** OH NO
+In summary. Anchors can go anywhere. The first anchor in the 
+** help
+It is getting confusing in here.
+er [fn:we-re-fooed:This should be a friendly footnote right?
+Oh foo oh poop [fn:help].
+Poop.
+[fn:help] We are so fooed.
+EEEEEEEEEEEEEEEEEEEEEEEEEEEE] Maybe?
+
+* asdf 
+** a
+                 DEADLINE:         SCHEDULED:             CLOSED:
+:properties:
+:poop: foo
+:end:
+
+
+** a
+DEADLINE:         SCHEDULED:             CLOSED:
+
+:properties:
+:poop: foo
+:end:
+
+** b
+SCHEDULED:         CLOSED:             DEADLINE:
+
+** c
+deadline: <2020-12-10 Thu>  scheduled: <2020-12-11 Fri> closed: <2020-12-12 Sat>   deadline: <2020-12-12 Sat> 
+
+** d
+    DEADLINE: <2020-12-10 Thu>SCHEDULED: <2020-12-11 Fri> CLOSED: <2020-12-12 Sat>
+
+DEADLINE: <2020-12-12 Sat> 
+
+** e
+DEADLINE:SCHEDULED:CLOSED:
+
+** e
+DEADLINE:YOUR MOTHER SMELT OF ELDERBERRIES CLOSED: <2020-12-10 Thu> SCHEDULED: <2020>
+
+** f
+SCHEDULED: <2020-11>
+
+** g
+SCHEDULED: <2020-11-01>
+
+** h
+DEADLINE: <2020-11-29                                          Sun>
+
+** 
+:PROPERTIES:
+:CREATED:  [2020-12-11 Fri 12:11]
+:END:
+

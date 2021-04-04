@@ -1,3 +1,4 @@
+;; it is easier to navigate this file if you use `outline-minor-mode'
 #lang brag
 
 ;test: /BOF no-headlines-hungry-no-src-end
@@ -56,7 +57,10 @@ org-file : org-node*
 
 org-node : headline-node | org-node-basic
 
-@org-node-basic : affiliated-keyword* ( org-node-basic-element | double-blank-line | newline | bof )
+@org-node-basic : affiliated-keyword* ( org-node-basic-element
+                                      | double-blank-line
+                                      | newline
+                                      | bof )
 
 @org-node-basic-element : drawer
                         | blk-dyn
@@ -187,7 +191,7 @@ nc-start : parl-ncln-bt-l-d
 
 ;;; headlines
 
-;; it is pretty much impossible parse headlines
+;; it is pretty much impossible to parse headlines
 ;; newline first grammar makes it impossible to parse * H :n: :t:
 ;; todo-keywords can only be known at runtime * EXPIRED [#A] could be just a title
 ;; It is possible to write a negated grammar for COMMENT but it pushes enormous
@@ -357,7 +361,7 @@ priority-level : not-whitespace1 ; XXX spec and impl are divergent here ; XXX LO
 ;; tags
 
 ; XXX the spec is extremely unclear about how tags work
-; org-element behavior is current that you MUST have a non-empty title
+; org-element behavior is currently that you MUST have a non-empty title
 ; in order for tags to actually be tags the impl for structured
 ; editing interaction and formatting is inconsistent with this but
 ; only when the not-actually-tag is separated by a space from the
@@ -714,7 +718,7 @@ pl-tag-end : COLON COLON
 
 ; XXX impl note: these bind the paragraph that follow them ... but they do it
 ; differently than other elements, probably due to ... who knows? what differences
-; in the implementation, actually they bind all elements that follow the except for
+; in the implementation, actually they bind all elements that follow them except for
 ; a double blank line
 footnote-definition : footnote-definition-line org-node-f*
 
@@ -884,8 +888,8 @@ verbatim :        mu-pre "="        mu-content "="        mu-post
 
 ;;; whitespace
 
-;; an org parser must parse whitespace as significant
-;; XXX suggestion: disallow all leading whitespace
+;; the elisp org parser parses whitespace as significant
+;; XXX suggestion: disallow all leading whitespace or invoke undefined behavior
 
 @newline-or-bof : newline | /BOF
 @newline-or-eof : newline? ; XXXXXXXXXXXXXXXXX this might might might work if not major structure starts with a newline, we will be able to test that once the newline first form is working

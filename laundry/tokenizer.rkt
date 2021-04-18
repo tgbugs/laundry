@@ -1,7 +1,22 @@
 #lang racket/base
 (require racket/pretty)
 (require brag/support)
-(provide org-mode-make-tokenizer)
+(provide laundry-make-tokenizer
+         paragraph-make-tokenizer
+
+         heading
+         hyperlink
+         comment-element
+         drawer-ish
+
+         paragraph
+         markup-*
+         markup-/
+         markup-_
+         markup-+
+         markup-=
+         markup-~
+         )
 (define-lex-abbrev newlines (:+ (char-set "\xA\xD")))
 (define-lex-abbrev 0-9 (char-set "0123456789"))
 (define-lex-abbrev lower-case (char-set "abcdefghijklmnopqrstuvwxyz"))
@@ -12,16 +27,25 @@
 
 ; fast heading detection since we can't parse them in one pass in a newline first grammar anyway
 ; note that this can't match a bof heading again due to the newline first design
+; from/stop-before could also be used here, but negating the newline is probably ok
 (define-lex-abbrev heading (:seq "\n" (:+ "*") (:or " " "\t") (:* (:~ "\n"))))
 
-(define-lex-abbrev hyperlink (from/to "[[" "]]"))
+; XXX this is better than the from/to version in one sense, but worse
+; in another becuase this one is greedy
+(define-lex-abbrev hyperlink (:seq "[[" (:+ (:~ "\n")) "]]"))
 
 #; ; can't use this variant because it gobbles \n# in the \n#+name: case
 (define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:* (:seq (:or " " "\t") (:* (:~ "\n")))))))
 (define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
 
+(define-lex-abbrev drawer-ish
+  (from/to (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":") ; FIXME this is not right, check the spec to see
+           (:seq "\n" (:* " " "\t") ":end:")))
+
 (define-lex-abbrev par-start (:or alpha 0-9 " " "\t"))
-(define-lex-abbrev par-rest-ok (:or par-start "-" "_" "(" ")" "." "," "?" "!" "'" "\"" "/" "~" "|" "*" "\\" "^" "=" ";"))
+(define-lex-abbrev par-rest-ok (:or par-start "-" "(" ")" "." "," "?" "!" "'" "\""
+                                    ; "*" "/" "_" "+" "=" "~" ; markup markers can't be included
+                                    "|" "\\" "^" ";"))
 ; parsing paragraph here in this way is an optimization that is absolutely necessary for performance
 ; in order to avoid some quadratic algorithm lurking somewhere in the grammar or in brag or in parser-tools
 #;
@@ -41,6 +65,23 @@
                                              (:or (:seq (:~ "*") (:+ (:~ "\n")))
                                                   (:seq (:+ "*") (:~ "*" " " "\t" "\n")))))
                                    (:* "\n" " " "\t") "#+end_src" (:* " " "\t")))
+
+(define-lex-abbrev whitespace (:or "\n" "\t" " ")) ; pretty sure this is complete
+(define-lex-abbrev mu-pre (:or whitespace "-" "(" "{" "'" "\""))
+; FIXME mu-post can also be newline, which is a problem due to newline
+; first from/stop-before solves this
+(define-lex-abbrev mu-post (:or "\n" "\t" " " "-" "." "," ";" ":" "!" "?" "'" ")" "}" "[" "\""))
+(define-lex-abbrev mu-border (:~ whitespace))
+(define-lex-abbrev mu-marker (:or "*" "/" "_" "+" "=" "~"))
+; using from/stop-before and not worrying about the 3 line limit due to its increased complexity
+; XXX the issue is that this eats any number of other things that have higher priority, such as
+; headlines, so I'm 99% sure that this has to be done in a second pass that only applies to paragraphs
+(define-lex-abbrev markup-* (:seq (from/stop-before (:seq mu-pre "*" mu-border) (:seq mu-border "*" mu-post)) "*"))
+(define-lex-abbrev markup-/ (:seq (from/stop-before (:seq mu-pre "/" mu-border) (:seq mu-border "/" mu-post)) "/"))
+(define-lex-abbrev markup-_ (:seq (from/stop-before (:seq mu-pre "_" mu-border) (:seq mu-border "_" mu-post)) "_"))
+(define-lex-abbrev markup-+ (:seq (from/stop-before (:seq mu-pre "+" mu-border) (:seq mu-border "+" mu-post)) "+"))
+(define-lex-abbrev markup-= (:seq (from/stop-before (:seq mu-pre "=" mu-border) (:seq mu-border "=" mu-post)) "="))
+(define-lex-abbrev markup-~ (:seq (from/stop-before (:seq mu-pre "~" mu-border) (:seq mu-border "~" mu-post)) "~"))
 
 (define-lex-abbrev src-block (:seq "#+begin_src" (:+ (:~ "*")) "#+end_src"))
 (define-lex-abbrev negated-set
@@ -72,6 +113,48 @@
 ;(define-lex-abbrev day-major-digit (char-set "0123"))
 ;(define-lex-abbrev time-major-digit (char-set "012"))
 
+(define paragraph-lexer
+  (lexer-srcloc
+   [(:+ (:~ mu-pre mu-marker)) (token 'STUFF lexeme)]
+   [markup-* (token 'BOLD lexeme)]
+   [markup-/ (token 'ITALIC lexeme)]
+   [markup-_ (token 'UNDERLINE lexeme)]
+   [markup-+ (token 'STRIKE lexeme)]
+   [markup-= (token 'VERBATIM lexeme)]
+   [markup-~ (token 'CODE lexeme)]
+   [(:+ (:or mu-pre mu-marker)) (token 'STUFF lexeme)])
+  #;
+  (
+   ["\n" (token 'NEWLINE)]
+   [(:>= 2 whitespace) (token 'WHITESPACE-GT2 lexeme)]
+
+
+   ; not clear this is needed
+   [" " (token 'SPACE)]
+   ["\t" (token 'TAB)]
+   ["-" (token 'HYPHEN lexeme)]
+   ["." (token 'PERIOD lexeme)]
+   ["," (token 'COMMA lexeme)]
+   [";" (token 'SC lexeme)]
+   [":" (token 'COLON lexeme)]
+   ["'" (token 'SQ lexeme)]
+   ["\"" (token 'DQ lexeme)]
+   [")" (token 'R-PAREN lexeme)]
+   ["}" (token 'RCB lexeme)]
+   ["[" (token 'LSB lexeme)]
+   ["!" (token 'BANG lexeme)]
+   ["?" (token 'QM lexeme)]
+
+   ))
+
+(define (paragraph-make-tokenizer port)
+  (define (next-token)
+    (let ([out (paragraph-lexer port)])
+      #;
+      (pretty-print out)
+      out))
+  next-token)
+
 ;; I have no idea why this was defined inside of make-tokenizer in the
 ;; original example I copied years ago ...
 
@@ -96,7 +179,7 @@
 ;; used to be invoked only inside a function call ?
 ;; ah foo, but it could still be compiled ahead of time
 
-(define org-mode-lexer
+(define laundry-lexer
   (lexer-srcloc
 
    ; for testing secondary headline parser
@@ -136,9 +219,8 @@
              (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t")))
     (token 'DRAWER-PROPS lexeme)]
 
-   [(from/to (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":") ; FIXME this is not right, check the spec to see
-             (:seq "\n" (:* " " "\t") ":end:"))
-    (token 'DRAWER lexeme)]
+   [drawer-ish (token 'DRAWER lexeme)]
+
    [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
 
 
@@ -152,8 +234,8 @@
 
    ; these are lexemes so that we can ignore them if they don't start the line
 
-   ["[fn:" (token 'FOOTNOTE-START)]
-   ["[fn::" (token 'FOOTNOTE-START-INLINE)] ; here longest match helps us
+   ["[fn:" (token 'FOOTNOTE-START lexeme)]
+   ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
 
    ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; FIXME ALPHA-N takes priority over this >_< FFS
 
@@ -284,8 +366,7 @@
    ; still need to check though
 )
 
-(define (org-mode-make-tokenizer port)
-  ;(define org-mode-lexer (make-lexer-at-runtime strings))
+(define (laundry-make-tokenizer port)
   (define bof (= (file-position port) 0))
   (define (next-token)
     (if bof ; sigh branches instead of rewriting
@@ -299,8 +380,21 @@
           #;
           (pretty-print token-BOF)
           token-BOF)
-        (let ([out (org-mode-lexer port)])
+        (let ([out (laundry-lexer port)])
           #;
           (pretty-print out)
           out)))
   next-token)
+
+(module+ test
+
+  (define (dotest str)
+    (let ([next-token (laundry-make-tokenizer (open-input-string str))])
+      (next-token)
+      (next-token)))
+
+  (dotest " =hello= ")
+  (dotest "=hello= ")
+  (dotest "=hello=")
+
+  )

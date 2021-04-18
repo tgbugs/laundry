@@ -1,7 +1,8 @@
 #lang racket/base
 (require syntax/strip-context
-         org-mode/tokenizer
-         org-mode/parser)
+         laundry/tokenizer
+         laundry/colorer
+         laundry/parser)
 (require racket/pretty)
 
 (define printed #t)
@@ -10,10 +11,10 @@
   ; why is this called more than once???
   (define parse-tree
     (parse source-name
-           (org-mode-make-tokenizer in-port)))
+           (laundry-make-tokenizer in-port)))
   (define output-syntax
     (strip-context
-     #`(module asdf org-mode/expander
+     #`(module org-module laundry/expander
          #,parse-tree)))
   (when (not printed)
     (begin (pretty-write (syntax->datum output-syntax))
@@ -25,5 +26,7 @@
   (define (get-info port sourc-module source-line
                     source-collection source-position)
     (define (handle-query key default)
-      (case key [else default]))
+      (case key
+        [(color-lexer) colorer]
+        [else default]))
     handle-query))

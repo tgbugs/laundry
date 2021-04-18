@@ -5,8 +5,8 @@
          racket/path
          racket/pretty
          racket/string
-         org-mode/parser
-         org-mode/tokenizer)
+         laundry/parser
+         laundry/tokenizer)
 
 (provide dotest dotest-q dotest-file)
 (define (rec-cont tree atom)
@@ -14,7 +14,7 @@
   (string-contains? (pretty-format tree) (symbol->string atom)))
 
 (define (dotest test-value #:eq [eq #f] #:node-type [node-type #f] #:quiet [quiet #f])
-  (define (t) (org-mode-make-tokenizer (open-input-string test-value)))
+  (define (t) (laundry-make-tokenizer (open-input-string test-value)))
   #;
   (let ([asdf (t)]) ; uncomment this to test the lexer independent of the parser
     (for/list ([i test-value]) (asdf)))
@@ -38,11 +38,11 @@
 (define (dotest-file path #:eq [eq #f])
   ; FIXME super inefficient
   #;
-  (define (t) (org-mode-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
+  (define (t) (laundry-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
   (define hrm
     (with-input-from-file (expand-user-path (string->path path))
       (λ ()
-        (let ([t (org-mode-make-tokenizer (current-input-port))])
+        (let ([t (laundry-make-tokenizer (current-input-port))])
           (parse-to-datum t)))
       #:mode 'text))
   (if eq
@@ -553,6 +553,27 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "\n0123456789A")
   (dotest "0123456789A") ; broken BOF
   (dotest "paragraph\n") ; broken BOF
+
+  )
+
+(module+ test-markup
+
+  (dotest " *hello* ")
+  (dotest " /hello/ ")
+  (dotest " _hello_ ")
+  (dotest " +hello+ ")
+  (dotest " =hello= ")
+  (dotest " ~hello~ ")
+
+  (dotest " ~hello~ there")
+
+  (dotest "a *b* /c/ _d_ +e+ =f= ~g~ ")
+
+  (dotest " ~hello~ there")
+  (dotest "/hahaha/") ; XXX bof issues in the tokenizer
+  (dotest " /asdf/")
+  (dotest "\n/asdf/")
+  (dotest "\n**oops\n* hello\nOH NO *lol*")
 
   )
 
@@ -1163,7 +1184,7 @@ drawer contents
   (dotest "* Heading\n  a|")
 
   (dotest "* Heading\n  aB1d")
-  (dotest "#lang org-mode")
+  (dotest "#lang org")
   (dotest "#a c d")
   (dotest " #a c d")
   (dotest "#ab c d")
@@ -1314,6 +1335,7 @@ you called?
    (submod ".." test-planning)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
+   (submod ".." test-markup)
    (submod ".." test-comments)
    (submod ".." test-rando)
    (submod ".." test-drawers)

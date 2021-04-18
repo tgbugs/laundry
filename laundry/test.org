@@ -1,7 +1,10 @@
-# -*- mode: org -*-
-#lang org-mode
+; @@comment: the colon is the only thing that cannot be avoided in this approach
+#lang org
+; @@
 # [[file:test.html]]
 # [[file:test.pdf]]
+
+#+keyword: hello
 
 * plain lists
 hello
@@ -96,3 +99,5 @@ the code~
 
 =what
 the verbatim=
+
+a *b* /c/ _d_ +e+ =f= ~g~ yes newline is a bug

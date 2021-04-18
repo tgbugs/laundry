@@ -6,14 +6,13 @@
 
 An attempt to specify a formal grammar for [[https://orgmode.org/worg/dev/org-syntax.html][Org syntax]].
 
-The grammar itself lives in [[file:./org-mode/parser.rkt][parser.rkt]]. It is implemented using Racket's \\
+The grammar itself lives in [[file:./laundry/parser.rkt][parser.rkt]]. It is implemented using Racket's \\
 [[https://docs.racket-lang.org/brag/#%28part._.The_language%29][#lang brag]]. The details of the implementation are in the comments.
 * Getting started
 Install [[https://download.racket-lang.org/][Racket]] for your platform.
 From the location of this readme run the following.
 #+begin_src bash
-raco pkg install brag
-raco pkg install org-mode/
+raco pkg install laundry/
 #+end_src
 There is another package named =org-mode= in the Racket package
 manager so the trailing slash is required. Eventually we'll get around
@@ -22,12 +21,12 @@ to working out the naming issues.
 Once everything is installed you can run the tests by invoking the
 following in the directory of this readme.
 #+begin_src bash
-raco test org-mode
+raco test laundry
 #+end_src
 
-You can also parse individual Org files using [[file:./org-mode/cli.rkt]].
+You can also parse individual Org files using [[file:./laundry/cli.rkt]].
 #+begin_src bash :results drawer
-org-mode/cli.rkt docs/thoughts.org org-mode/test.org
+laundry/cli.rkt docs/thoughts.org org-mode/test.org
 #+end_src
 * Status
 Most of the core elements of Org syntax have been fully specified,
@@ -62,7 +61,7 @@ that obscures some of the details. In most cases the full grammar
 is retained, but unless it has been test with less complex and thus
 slower tokenizer the full grammar may be incorrect.
 * A note on terminology
-The current terminology used in [[file:./org-mode/parser.rkt][parser.rkt]] matches the terminology
+The current terminology used in [[file:./laundry/parser.rkt][parser.rkt]] matches the terminology
 used in [[https://orgmode.org/worg/dev/org-syntax.html][Org syntax]]. This is expected to change so that, for example
 terms such as =headline= will be renamed to =heading=. This has not
 been done to simplify comparison to the existing Org syntax document

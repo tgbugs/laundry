@@ -85,6 +85,7 @@ org-node : headline-node | org-node-basic
 
 @org-nbe-f-in : @org-nbe-less-df
               | paragraph-f-in
+              | comment-element ; XXX I think comments can be part of footnotes ...
 
 ;;;; everything else
 
@@ -423,7 +424,7 @@ property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newli
 ; XXX the grammer becomes more complicated because regular drawers are allowed to match properties
 ; this means that we have to fully specify how drawers and property drawers because the ambiguity
 ; in the grammar is exploited by the parser to increase performance
-drawer : DRAWER | drawer-spec
+drawer : DRAWER | drawer-spec | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
 @drawer-spec : newline-or-bof wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end ; XXX the second wsnn* is undocumented
 drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ; FIXME word constituent ???
 ;drawer-contents : ( newline @not-newline )* ; FIXME big issue with headlines
@@ -444,9 +445,9 @@ comment-line : newline-or-bof wsnn* HASH ( wsnn+ @not-newline? )?
 @nlbofwsnn : /newline-or-bof wsnn*
 babel-call : nlbofwsnn CALL /COLON not-newline?
 
-keyword : nlbofwsnn keyword-line 
-keyword-line : ( HASH PLUS keyword-key | END-DB ) COLON keyword-value? ; elisp does longest match to colon
-             | HASH PLUS keyword-key-sigh keyword-value-sigh?
+keyword : nlbofwsnn @keyword-line
+keyword-line : ( /HASH /PLUS keyword-key | END-DB ) /COLON keyword-value? ; elisp does longest match to colon
+             | /HASH /PLUS keyword-key-sigh keyword-value-sigh?
 
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
@@ -645,7 +646,7 @@ table : table-row+
 table-dumb : /newline-or-bof /PIPE @not-newline ; as a matter of last resort
 table-row : /newline-or-bof /wsnn* table-cell+ /PIPE?
 ;table-cell : /PIPE @not-pipe-not-newline? ; this is NOT ambiguous the minimal match is /PIPE+ PIPE? !??!?!
-table-cell : /PIPE ( @not-pipe-bs-newline | /BS PIPE | BS )* ; XXX divergence
+table-cell : /PIPE /space? ( @not-pipe-bs-newline | /BS PIPE | BS )* /space? ; XXX divergence
 table-row-rule : /newline-or-bof /wsnn* /PIPE /HYPHEN /not-newline? ; everything else gets wiped
 
 ;;;;
@@ -849,41 +850,6 @@ not-at-at : ( @not-at1 | ( AT @not-at1 ) )+
 ;item
 ;section
 
-;;;; */_=~
-
-;;; markup
-
-; XXX LOL yeah newline *some text* is used all over the place and everywhere
-; asterisk is pretty heavily used in here
-
-;; sigh, again here grammar fails due to the need to match delimiters
-;; the expresiveness of the ebnf is insufficient to be able to communicate
-;; the fact that the starting marker must match the ending maker and then
-;; just provide a list of markers, therefore we have to special case all of these
-
-;; NOTE FURTHER that MARKUP actually CANNOT BE PART OF THE GRAMMAR
-;; because org files CAN DEFINE THEIR OWN MARKUP DELIMITERS!!!!!!!
-markup : bold | italic | underline | strike-through | code | verbatim
-; PRE MARKER CONTENTS MARKER POST
-
-mu-pre-common : HYPHEN | L-PAREN | LCB | SQ | DQ
-mu-pre : HYPHEN | L-PAREN | LCB | SQ | DQ | whitespace
-mu-pre-no-newline : HYPHEN | L-PAREN | LCB | SQ | DQ | wsnn
-
-mu-marker : "*" | "/" | "_" | "+" | "=" | "~"
-mu-post : "-"|"."|","|";"|":"| "!"| "?"| "'"| L-PAREN | LCB | RSB | DQ
-; up to 1 newlines and any object in a paragraph but only for */+_ not ~=
-mu-content : mu-border not-newline ( newline not-newline )? mu-border
-mu-border : not-whitespace
-mu-contents-cv : not-newline ( newline not-newline )?
-
-bold : mu-pre-no-newline ASTERISK   mu-content ASTERISK   mu-post ; NOTE mu-post must backtrack
-italic :          mu-pre "/"        mu-content "/"        mu-post
-underline :       mu-pre UNDERSCORE mu-content UNDERSCORE mu-post
-strike-through :  mu-pre PLUS       mu-content PLUS       mu-post
-code :            mu-pre "~"        mu-content "~"        mu-post
-verbatim :        mu-pre "="        mu-content "="        mu-post
-
 ;;;; tokens
 
 ;;; whitespace
@@ -1008,7 +974,7 @@ alphas-unmixed : alpha | alpha-n ; needed for cases where case mixing is not all
 @word-char : DIGIT | alpha
 word-char-less-X : DIGIT | ALPHA
 word-char-n : digit-n | @alpha-n
-wordhyus : ( word-char | HYPHEN | UNDERSCORE | word-char-n)+
+wordhyus : ( word-char | HYPHEN | UNDERSCORE | word-char-n )+
 wordhy : ( word-char | HYPHEN )+
 
 ;;;; negation

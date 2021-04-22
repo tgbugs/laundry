@@ -1,8 +1,11 @@
 #lang racket/base
 (require racket/pretty)
-(require brag/support)
+(require brag/support
+         (for-syntax racket/base))
 (provide laundry-make-tokenizer
          paragraph-make-tokenizer
+         ;heading-make-tokenizer
+         bind-runtime-todo-keywords
 
          heading
          hyperlink
@@ -32,6 +35,10 @@
 
 ; XXX this is better than the from/to version in one sense, but worse
 ; in another becuase this one is greedy
+; XXX this is also incorrect due to the fact that hyperlinks support
+; backslash escape
+; https://orgmode.org/list/87tvguyohn.fsf@nicolasgoaziou.fr/T/#u
+; https://orgmode.org/list/87sgvusl43.fsf@nicolasgoaziou.fr/T/#u
 (define-lex-abbrev hyperlink (:seq "[[" (:+ (:~ "\n")) "]]"))
 
 #; ; can't use this variant because it gobbles \n# in the \n#+name: case
@@ -112,6 +119,94 @@
 ;(define-lex-abbrev month-major-digit (char-set "01"))
 ;(define-lex-abbrev day-major-digit (char-set "0123"))
 ;(define-lex-abbrev time-major-digit (char-set "012"))
+
+#;
+(define-syntax (dla stx)
+  (syntax-parse stx
+    ([_ name list-of-strings]
+     #`(define-lex-abbrev name (or #,@())))))
+
+#;
+(begin-for-syntax
+  (define-struct lex-abbrev (get-abbrev))) ; will this well be a doozy
+
+(define (get-tokens tokenizer)
+  (define (sigh next-token [accum '()])
+    (let ([t (next-token)])
+      (if (eq? t eof)
+          accum
+          (sigh next-token (cons t accum)))))
+  (reverse (sigh tokenizer)))
+
+(define (bind-runtime-todo-keywords keywords)
+  ; FIXME I swear this is as close to absolutely having to use
+  ; eval as I have ever come, and it is because brag and agg
+  ; are completely static macros with regard to specifying the tokenizer
+  ; (define-syntax NAME (make-lex-abbrev (λ () (quote-syntax RE))))
+  #;
+  (define-syntax runtime-todo-keyword
+    (make-lex-abbrev (λ () (datum->syntax #f `(:or ,@keywords)))))
+  (eval-syntax #`(define-lex-abbrev runtime-todo-keyword (:or #,@keywords)))
+  ;;(define-lex-abbrev eof (eof))
+  (define heading-lexer-src
+    #`(lexer-srcloc
+       [(:seq "\n" (:+ "*") (:+ " ")) ; eat > 1 whitespace after stars
+        ; why the heck doesn't this take priority over the regular old newline??
+        (token 'STARS lexeme)]
+       ["*" (token 'ASTERISK lexeme)]
+       [(:or (:seq (:+ (:or " " "\t"))
+                   (:+ ":" (:+ (:or alpha "_" "@" "#" "%")))
+                   ":"
+                   ; FIXME SIGH we can't include eof here because ... reasons ??
+                   (:* (:or " " "\t"))
+                   "\n"))
+        (token 'TAGS lexeme)]
+       ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; this must come befor RTK
+       [":ARCHIVE:" (token 'ARCHIVE lexeme)] ; we keep this so we can catch lone archive tags more easily
+       [runtime-todo-keyword (token 'RUNTIME-TODO-KEYWORD lexeme)]
+       [(:seq "[#" upper-case "]") (token 'PRIORITY lexeme)]
+       #;
+       [":" (token 'COLON lexeme)]
+       #;
+       ["[" (token 'LSB lexeme)]
+       #;
+       ["]" (token 'RSB lexeme)]
+       #;
+       ["#" (token 'HASH lexeme)]
+       ; FIXME markup is allowed here too
+       [(:or " " "\t") (token 'BLANK lexeme)] ; unfortunately we still have to split on space
+       [(:seq (:+ (:~ "*" "[" "]" ":" "\n" " " "\t")))
+        (token 'OTHER lexeme)]
+       ["\n" (token 'NEWLINE)]
+       [#;any-char (:~ "*") (token 'OOPS lexeme)]
+     )) 
+  (define (heading-make-tokenizer port)
+    ; FIXME can't run compile-syntax due to use of eval above probably?
+    (define heading-lexer (eval-syntax heading-lexer-src))
+    (define (next-token)
+      (let ([out (heading-lexer port)])
+        ; #;
+        (pretty-print out)
+        out))
+    next-token)
+  heading-make-tokenizer)
+
+(module+ test-heading
+  (require laundry/heading)
+  (define heading-make-tokenizer (bind-runtime-todo-keywords '("TODO" "DONE" "CERT")))
+  (get-tokens (heading-make-tokenizer (open-input-string "* h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "* TODO h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "* CERT [#A] h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "** COMMENT DONE [#B] z : z :t:\n")))
+  (define (hrm str) (heading-make-tokenizer (open-input-string str)))
+  (get-tokens (hrm "** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
+  (get-tokens (heading-make-tokenizer (open-input-string "** COMMENT DONE [#B] z [lol] : z :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "* :t:ARCHIVE:\n")))
+  (parse-to-datum (hrm "** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
+  (parse-to-datum (hrm "* TODO something\n"))
+  (parse-to-datum (hrm "*** LOL ***\n"))
+
+  )
 
 (define paragraph-lexer
   (lexer-srcloc
@@ -224,8 +319,8 @@
    [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
 
 
-   ["*" (token 'ASTERISK lexeme)]
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
+   ["*" (token 'ASTERISK lexeme)]
    ["\n" (token 'NEWLINE)]
    [" " (token 'SPACE)]
    #; ; TODO should help with perf
@@ -371,6 +466,11 @@
   (define (next-token)
     (if bof ; sigh branches instead of rewriting
         (let ([token-BOF
+               ; making the input-prefix a newline massively ; simplifies the grammer at
+               ; virtually no cost, and if we can fix the parser so that this doesn't have
+               ; to branch, then even better
+               (token 'NEWLINE)
+               #;
                (token 'BOF)
                #;
                (srcloc-token (token-struct 'BOF #f #f #f #f #f #f)
@@ -386,7 +486,24 @@
           out)))
   next-token)
 
-(module+ test
+(define-lex-abbrev section (from/stop-before heading heading)) ; FIXME BOF EOF issues
+
+(define section-lexer
+  (lexer-srcloc
+   [section (token 'SECTION lexeme)]
+   [(from/stop-before any-char heading) ; should only fire once
+    (token 'ZEROTH lexeme)]))
+; random thought: this could be converted to a purely line based first
+; pass IF AND ONLY IF every top level expression in the grammar ends
+; with a newline or eof and can freely transition to any other line
+; type or backtrack
+
+#;
+(define (make-section-tokenizer port)
+  next-token
+  )
+
+(module+ test-markup
 
   (define (dotest str)
     (let ([next-token (laundry-make-tokenizer (open-input-string str))])

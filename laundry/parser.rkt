@@ -84,7 +84,7 @@ org-node : headline-node | org-node-basic
                 | paragraph ; FIXME paragraph-line doesn't know about footnotes yet
 
 @org-nbe-f-in : @org-nbe-less-df
-              | paragraph-f-in
+              | paragraph-f-in ; FIXME I'm pretty sure we need org-node-footnote just like org-node-dyn
               | comment-element ; XXX I think comments can be part of footnotes ...
 
 ;;;; everything else
@@ -201,7 +201,7 @@ nc-start : parl-ncln-bt-l-d
 
 ; both planning and property drawer can only have a single newline each before them
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
-headline : HEADING | newline-or-bof stars /wsnn+ headline-content?
+headline : HEADING | newline-or-bof stars /wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wssn+ due to the fact that we are going to reparse and thus would lose srcloc
 stars : ASTERISK | STARS ; ASTERISK+ destorys performance
 headline-content : @not-newline
 
@@ -258,7 +258,7 @@ planning-dissociated : planning
 
 ; note that even in this setting COMMENT cannot be a todo keyword
 ; becuase it will require a change to the lexer since COMMENT would
-; appear in two two places in the grammar which would force the grammar
+; appear in two places in the grammar which would force the grammar
 ; to change, which it can't, I really don't like reserved words anywhere
 ; in a grammar, but if there are going to be headline comments then we
 ; will deal with it
@@ -602,6 +602,7 @@ blk-src-line-rest-alt : switches-sane /wsnn blk-src-args-after-switches-sane
                       | switches-sane
                       | @not-switch @not-newline?
 
+@--test--switches-sane : /BOF? switches-sane
 switches-sane : ( switch-sane ( /wsnn format-string )? /wsnn )* switch-sane ( /wsnn format-string )?
 switch-sane : switch-sign alpha
 last-switch-string : wsnn format-string
@@ -614,12 +615,12 @@ not-switch : @not-plus-hyphen1
 | PLUS   @alpha @not-whitespace1
 | HYPHEN @alpha @not-whitespace1
 
-blk-src-paramaters : COLON not-newline ; TODO
+blk-src-parameters : COLON not-newline ; TODO
 ; NOTE the correct parameters grammar is a subset of
 ; the not-a-format-string grammar since it starts with colon
                    | wsnn+ COLON not-newline ; TODO
 
-@blk-src-args-after-switches-sane : blk-src-paramaters
+@blk-src-args-after-switches-sane : blk-src-parameters
                                   | not-dq-ph-newline not-newline? ; TODO not-dq-ph-colon-newline for params
                                   | switch-sign not-alpha-newline1 not-newline?
                                   | switch-sign ( @alpha @not-whitespace | @word-char-n ) @not-newline?
@@ -858,7 +859,7 @@ not-at-at : ( @not-at1 | ( AT @not-at1 ) )+
 ;; XXX suggestion: disallow all leading whitespace or invoke undefined behavior
 
 @newline-or-bof : newline | /BOF
-@newline-or-eof : newline? ; XXXXXXXXXXXXXXXXX this might might might work if not major structure starts with a newline, we will be able to test that once the newline first form is working
+@newline-or-eof : newline? ; XXXXXXXXXXXXXXXXX this might might might work if no major structure starts with a newline, we will be able to test that once the newline first form is working
 nlws : newline ( tab | space )* ; TODO FIXME this has to be parsed as significant whitespace
 nlpws : newline+ ( tab | space )* ; variant to handle cases like #+end_src ; TODO FIXME this has to be parsed as significant whitespace
 whitespace : newline | space | tab
@@ -968,12 +969,12 @@ big-tokes-less-s : bt-colon
 @alpha : ALPHA | CHAR-UPPER-X ; CHAR-LOWER-L ; XXX complexity
 alpha-n : ALPHA-LOWER-N | ALPHA-UPPER-N
 digit-n : DIGIT-2 | DIGIT-3 | DIGIT-4 | DIGIT-N ; FIXME in roughly 7979 years will need DIGIT-5
-digits : DIGIT | digit-n
+digits : DIGIT | @digit-n ; FIXME +?
 alphas : ( alpha | alpha-n )+ ; need the + here due to mixed case
 alphas-unmixed : alpha | alpha-n ; needed for cases where case mixing is not allowed
 @word-char : DIGIT | alpha
 word-char-less-X : DIGIT | ALPHA
-word-char-n : digit-n | @alpha-n
+word-char-n : @digit-n | @alpha-n
 wordhyus : ( word-char | HYPHEN | UNDERSCORE | word-char-n )+
 wordhy : ( word-char | HYPHEN )+
 

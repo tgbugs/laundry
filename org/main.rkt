@@ -7,11 +7,11 @@
 
 (define printed #t)
 
-(define (read-syntax source-name in-port)
+(define (read-syntax source-name input-port)
   ; why is this called more than once???
   (define parse-tree
     (parse source-name
-           (laundry-make-tokenizer in-port)))
+           (laundry-make-tokenizer input-port)))
   (define output-syntax
     (strip-context
      #`(module org-module laundry/expander

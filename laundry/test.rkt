@@ -9,30 +9,50 @@
          laundry/tokenizer)
 
 (provide dotest dotest-q dotest-file)
+(define testing-parse (make-parameter parse))
+#;
+(define testing-parse-to-datum (make-parameter parse-to-datum))
 (define (rec-cont tree atom)
   ; I'm lazy and not going to write a proper bfs
   (string-contains? (pretty-format tree) (symbol->string atom)))
 
-(define (dotest test-value #:eq [eq #f] #:node-type [node-type #f] #:quiet [quiet #f])
-  (define (t) (laundry-make-tokenizer (open-input-string test-value)))
-  #;
-  (let ([asdf (t)]) ; uncomment this to test the lexer independent of the parser
-    (for/list ([i test-value]) (asdf)))
-  (define hrm (parse-to-datum (t)))
-  (cond [node-type (unless (rec-cont hrm node-type)
-                     (error (format "parse does not contain ~s" node-type)))]
-        ; FIXME fall through
-        [eq (unless (equal? eq hrm)
-              (error (format "foo ~s" test-value)))]
-        [(not quiet) (pretty-print hrm)]))
 
+(define-namespace-anchor anc-test)
+(define ns-test (namespace-anchor->namespace anc-test))
+(define (dotest test-value #:eq [eq #f] #:node-type [node-type #f] #:quiet [quiet #f]
+                #:parse-to-datum [parse-to-datum #f]
+                ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
+                #:expand? [do-expand #t])
+  (define (t) (laundry-make-tokenizer (open-input-string test-value)))
+  (define hrm ((if parse-to-datum
+                   parse-to-datum
+                   (compose syntax->datum (testing-parse)))
+               (t)))
+  (when (and node-type (not (rec-cont hrm node-type)))
+    (error (format "parse does not contain ~s" node-type)))
+  (when (and eq (not (equal? eq hrm)))
+    (error (format "foo ~s" test-value)))
+  (when (not quiet)
+    (pretty-write (cons 'dotest: hrm)))
+  (when do-expand
+    (define hrms #`(module org-module laundry/expander
+                    #,((testing-parse) ; FIXME this has GOT to be a bug
+                       #; ; NAH just a completely insane case-lambda
+                       ; that causes the call to revert to the full grammar
+                       (format "test-source ~s" test-value)
+                       (t))))
+    (parameterize ([current-namespace ns-test])
+      (eval-syntax hrms)
+      (define root (dynamic-require ''org-module 'root))
+      root)))
+(require debug/repl)
 (define (dotest-q test-value)
   (dotest test-value #:quiet #t))
 
 (define (dotest-fail test-value)
   (unless (with-handlers ([exn? (λ (exn) #t)])
-          (dotest test-value)
-          #f)
+            (dotest test-value)
+            #f)
     (error "Should have failed.")))
 
 (define (dotest-file path #:eq [eq #f])
@@ -46,11 +66,11 @@
           (parse-to-datum t)))
       #:mode 'text))
   (if eq
-    (unless (equal? eq hrm)
-      (error (format "path bar ~s" path)))
-    #;
-    (pretty-print hrm)
-    hrm))
+      (unless (equal? eq hrm)
+        (error (format "path bar ~s" path)))
+      #;
+      (pretty-print hrm)
+      hrm))
 
 (module+ test-bof
   ; fooing annoying as foo having to duplicate the whole fooing grammar
@@ -66,7 +86,7 @@
   (dotest "- descriptive list")
   (dotest "| table ")
   (dotest ":drawer:\n:end:")
-)
+  )
 
 (module+ test-list
   (define node-type 'plain-list-line)
@@ -90,14 +110,14 @@
   (dotest "1. There\n A. asdf" #:node-type node-type)
   (dotest "1. There\n A. asdf\n" #:node-type node-type)
 
-)
+  )
 
 (module+ test-npnn
   (dotest "asdf" #:node-type 'paragraph)
   (dotest ";alksdjf;l jd; j;1oj;oij10j [p0j asd;foja ;kjas.d/f a.ldfjaoiejf01923jOAJ--1!@@#$%^&*[]{}\\/" #:node-type 'paragraph)
   (dotest "\n")
   (dotest "|" #:node-type 'table)
-)
+  )
 
 (module+ test-cell
   ; from this it seems that we can't do PIPE? at the end because it will be eaten
@@ -128,7 +148,7 @@
 
   (dotest "| a | yo |")
 
-)
+  )
 
 (module+ test-row
   (dotest "|\n|" #:eq '(org-file (org-node (table (table-row (table-cell)) (table-row (table-cell))))))
@@ -140,7 +160,7 @@
   (dotest "|a|b\n|c|d")
   (dotest "|a|b|\n|c|d|")
 
-)
+  )
 
 (module+ test-table
   (dotest "|i|am|a|table")
@@ -195,7 +215,7 @@
   (dotest "* \n|a\n|b")
   (dotest "* \n|a\n|b c")
 
-)
+  )
 
 (module+ test-headline-content
   ; XXX these tests have to be run with headline-content-2 as the top node of the (a) grammar
@@ -579,7 +599,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
 (module+ test-comments
 
-  (dotest "35934" #:eq '(org-file (org-node (paragraph (parl-indent) (digits (digit-n "35934"))))))
+  (dotest "35934" #:eq '(org-file (org-node (paragraph (parl-indent) (digits "35934")))))
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -661,7 +681,7 @@ WHEEEEEEEEEE
 
   (dotest "\n#+NAME: lol\nare you fooing kidding me!")
 
-)
+  )
 
 (module+ test-drawers
   (dotest "
@@ -701,7 +721,7 @@ WHEEEEEEEEEE
 :properties:
 :oh: yeah
 :end:")
-; FIXME it seems I managed to break property drawers again
+  ; FIXME it seems I managed to break property drawers again
   (dotest "
 ******** Oops
 :properties:
@@ -802,28 +822,37 @@ random end
   (dotest #<<--
 "1 2"
 --
-)
+          )
 
   (dotest #<<--
 "1 \" 2"
 --
-)
+          )
 
   (dotest #<<--
 "1 \" 2"
 --
-)
+          )
 
   )
 
 (module+ test-switches
-  (dotest "-r -q")
-  (dotest "+r +q")
-  (dotest "-r -l")
-  (dotest "-r -l \"lol\\\"HAH \"")
-  (dotest "-r -l \"lol\\\"HAH \" -h +e")
-  (dotest "-r -l \"(ref:%s)\" +e -e")
-  )
+
+  #;
+  (testing-parse (make-rule-parser --test--switches-sane)) ; this sets for the parent module as well
+  #; ; slows the build,and most are tested in test-block-switches now
+  (parameterize* ([testing-parse
+                   ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
+                   (make-rule-parser --test--switches-sane)])
+
+    (dotest "-r -q")
+    (dotest "+r +q")
+    (dotest "-r -l")
+    (dotest "-r -l \"lol\\\"HAH \"")
+    (dotest "-r -l \"lol\\\"HAH \" -h +e")
+    (dotest "-r -l \"(ref:%s)\" +e -e") ; FIXME this is severly broken
+
+    ))
 
 (module+ test-block-switches
   (dotest "#+begin_src elisp -r -l \"(ref:%s)\" +e -e :noweb yes :tangle (some-file \"oh great\")")
@@ -939,10 +968,17 @@ drawer contents
 #+end_src
 ")
 
-)
+  )
 
 (module+ test-big-tokes
   (dotest "hrm :properties:")
+
+  )
+
+(module+ test-todo-kw
+  
+  (dotest "\n* TODO something")
+  (dotest "* TODO something") ; WHY IS THIS BROKEN !?!??!
 
   )
 
@@ -1161,7 +1197,7 @@ drawer contents
   (dotest "- [@999")
   (dotest "- [@999]")
 
-)
+  )
 
 (module+ test-word-char-vs-word-char-n
   (dotest "* Heading\n  lower case is ok")
@@ -1345,6 +1381,7 @@ you called?
    (submod ".." test-blk-dyn)
    (submod ".." test-blocks)
    (submod ".." test-big-tokes)
+   (submod ".." test-todo-kw)
    (submod ".." test-hcom)
    (submod ".." test-tags)
    (submod ".." test-keywords)

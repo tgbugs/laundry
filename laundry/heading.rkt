@@ -1,29 +1,35 @@
 #lang brag
 
-heading : stars heading-content? /wsnn* ( h-tags | NEWLINE )
+heading : stars @heading-content? /wsnn* ( h-tags | NEWLINE-END )
 
 heading-content : todo-keyword
                 |                     h-priority
                 |                                       h-comment
-                |                                                        h-title-r-p-c h-title?
+                |                                                        h-t-rpc-t
                 | todo-keyword /wsnn* h-priority
                 |                     h-priority /wsnn* h-comment
                 | todo-keyword /wsnn*                   h-comment
-                | todo-keyword /wsnn*                                    h-title-p-c   h-title?
-                |                     h-priority /wsnn*                  h-title-c     h-title?
+                | todo-keyword /wsnn*                                     h-t-pc-t
+                |                     h-priority /wsnn*                    h-t-c-t
                 |                                       h-comment /wsnn*               h-title
                 | todo-keyword /wsnn* h-priority /wsnn* h-comment
-                | todo-keyword /wsnn* h-priority /wsnn*                  h-title-c     h-title?
+                | todo-keyword /wsnn* h-priority /wsnn*                    h-t-c-t
                 |                     h-priority /wsnn* h-comment /wsnn*               h-title
-                | todo-keyword /wsnn* h-comment  /wsnn*                                h-title
+                | todo-keyword /wsnn*                   h-comment /wsnn*               h-title
                 | todo-keyword /wsnn* h-priority /wsnn* h-comment /wsnn*               h-title
 
-h-title-r-p-c : ( OTHER | OOPS | BLANK | STARS )+
-h-title-p-c : ( @h-title-r-p-c | todo-keyword )+
-h-title-c : ( @h-title-p-c | h-priority )+
-h-title : ( @h-title-c | COMMENT )+
+; convenience nodes to simplify remergin the full title
+h-t-rpc-t : h-title-r-p-c @h-title?
+h-t-pc-t :  h-title-p-c   @h-title?
+h-t-c-t :   h-title-c     @h-title?
 
-stars : STARS | ( NEWLINE ASTERISK BLANK )
+; h-title-p is not needed because if you can't have p you also can't have c
+@h-title-r-p-c : ( BLANK | OTHER | OOPS | STARS )+
+@h-title-p-c : ( h-title-r-p-c | todo-keyword )+
+@h-title-c : ( h-title-p-c | h-priority )+
+h-title : ( h-title-c | CHARS-COMMENT )+
+
+stars : STARS ; | ( NEWLINE ASTERISK BLANK )
 todo-keyword : RUNTIME-TODO-KEYWORD
 h-priority : PRIORITY ; XXX priority spacing rules are inconsistent
 h-comment : CHARS-COMMENT

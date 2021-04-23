@@ -978,7 +978,8 @@ drawer contents
 (module+ test-todo-kw
   
   (dotest "\n* TODO something")
-  (dotest "* TODO something") ; WHY IS THIS BROKEN !?!??!
+  (dotest "* TODO something")
+  (dotest "* TODO lol COMMENT broken")
 
   )
 

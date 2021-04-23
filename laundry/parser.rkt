@@ -201,7 +201,7 @@ nc-start : parl-ncln-bt-l-d
 
 ; both planning and property drawer can only have a single newline each before them
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
-headline : HEADING | newline-or-bof stars /wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wssn+ due to the fact that we are going to reparse and thus would lose srcloc
+headline : HEADING | newline-or-bof stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wssn+ due to the fact that we are going to reparse and thus would lose srcloc
 stars : ASTERISK | STARS ; ASTERISK+ destorys performance
 headline-content : @not-newline
 

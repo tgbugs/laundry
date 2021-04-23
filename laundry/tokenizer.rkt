@@ -138,6 +138,8 @@
           (sigh next-token (cons t accum)))))
   (reverse (sigh tokenizer)))
 
+(define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
+
 (define (bind-runtime-todo-keywords keywords)
   ; FIXME I swear this is as close to absolutely having to use
   ; eval as I have ever come, and it is because brag and agg
@@ -146,14 +148,16 @@
   #;
   (define-syntax runtime-todo-keyword
     (make-lex-abbrev (λ () (datum->syntax #f `(:or ,@keywords)))))
+  #;
   (eval-syntax #`(define-lex-abbrev runtime-todo-keyword (:or #,@keywords)))
   ;;(define-lex-abbrev eof (eof))
   (define heading-lexer-src
+    ; XXX this lexer should ALWAYS be given strings that start and end with a newline
     #`(lexer-srcloc
        [(:seq "\n" (:+ "*") (:+ " ")) ; eat > 1 whitespace after stars
         ; why the heck doesn't this take priority over the regular old newline??
         (token 'STARS lexeme)]
-       ["*" (token 'ASTERISK lexeme)]
+       ;;["*" (token 'ASTERISK lexeme)]
        [(:or (:seq (:+ (:or " " "\t"))
                    (:+ ":" (:+ (:or alpha "_" "@" "#" "%")))
                    ":"
@@ -175,17 +179,17 @@
        ["#" (token 'HASH lexeme)]
        ; FIXME markup is allowed here too
        [(:or " " "\t") (token 'BLANK lexeme)] ; unfortunately we still have to split on space
-       [(:seq (:+ (:~ "*" "[" "]" ":" "\n" " " "\t")))
+       [(:seq (:+ (:~ #;"*" "[" "]" ":" "\n" " " "\t")))
         (token 'OTHER lexeme)]
-       ["\n" (token 'NEWLINE)]
-       [#;any-char (:~ "*") (token 'OOPS lexeme)]
+       ["\n" (token 'NEWLINE-END)]
+       [any-char #;(:~ "*") (token 'OOPS lexeme)]
      )) 
   (define (heading-make-tokenizer port)
     ; FIXME can't run compile-syntax due to use of eval above probably?
     (define heading-lexer (eval-syntax heading-lexer-src))
     (define (next-token)
       (let ([out (heading-lexer port)])
-        ; #;
+        #;
         (pretty-print out)
         out))
     next-token)
@@ -194,17 +198,17 @@
 (module+ test-heading
   (require laundry/heading)
   (define heading-make-tokenizer (bind-runtime-todo-keywords '("TODO" "DONE" "CERT")))
-  (get-tokens (heading-make-tokenizer (open-input-string "* h :t:\n")))
-  (get-tokens (heading-make-tokenizer (open-input-string "* TODO h :t:\n")))
-  (get-tokens (heading-make-tokenizer (open-input-string "* CERT [#A] h :t:\n")))
-  (get-tokens (heading-make-tokenizer (open-input-string "** COMMENT DONE [#B] z : z :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n* h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n* TODO h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n* CERT [#A] h :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n** COMMENT DONE [#B] z : z :t:\n")))
   (define (hrm str) (heading-make-tokenizer (open-input-string str)))
-  (get-tokens (hrm "** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
-  (get-tokens (heading-make-tokenizer (open-input-string "** COMMENT DONE [#B] z [lol] : z :t:\n")))
-  (get-tokens (heading-make-tokenizer (open-input-string "* :t:ARCHIVE:\n")))
-  (parse-to-datum (hrm "** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
-  (parse-to-datum (hrm "* TODO something\n"))
-  (parse-to-datum (hrm "*** LOL ***\n"))
+  (get-tokens (hrm "\n** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n** COMMENT DONE [#B] z [lol] : z :t:\n")))
+  (get-tokens (heading-make-tokenizer (open-input-string "\n* :t:ARCHIVE:\n")))
+  (parse-to-datum (hrm "\n** COMMENT DONE [#B] z aaaaaaaaaaaa aaaaaaaaaaaaaa : aaaaaaaaaaa z :t:\n"))
+  (parse-to-datum (hrm "\n* TODO something\n"))
+  (parse-to-datum (hrm "\n*** LOL ***\n"))
 
   )
 
@@ -278,7 +282,9 @@
   (lexer-srcloc
 
    ; for testing secondary headline parser
+   #;
    ["TODO" (token 'RUNTIME-TODO-KEYWORD lexeme)]
+   #;
    ["DONE" (token 'RUNTIME-TODO-KEYWORD lexeme)]
 
    [heading (token 'HEADING lexeme)] ; brilliant! because this is parsed first the from/to works as expected (HAH)

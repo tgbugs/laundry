@@ -8,10 +8,11 @@
            )
  racket/pretty
  (only-in laundry/parser make-rule-parser)
- (only-in laundry/tokenizer paragraph-make-tokenizer bind-runtime-todo-keywords)
- (rename-in (only-in laundry/heading parse parse-to-datum)
-            [parse parse-heading]
-            [parse-to-datum parse-heading-to-datum])
+ (only-in laundry/tokenizer paragraph-make-tokenizer) ; FIXME -> syntax time
+ (for-syntax (only-in laundry/tokenizer bind-runtime-todo-keywords))
+ (for-syntax (rename-in (only-in laundry/heading parse parse-to-datum)
+                        [parse parse-heading]
+                        [parse-to-datum parse-heading-to-datum]))
  (rename-in (only-in laundry/paragraph parse parse-to-datum)
             [parse parse-paragraph]
             [parse-to-datum parse-paragraph-to-datum])
@@ -19,6 +20,7 @@
              racket/stxparam
              racket/pretty
              syntax/parse
+             (only-in racket/string string-trim string-split)
              #;
              (only-in racket/list splitf-at)
              
@@ -28,7 +30,14 @@
  (except-out (all-from-out racket/base) #%module-begin)
  (except-out (all-defined-out) org-module-begin))
 
-(define runtime-todo-keywords (make-parameter '("TODO" "DEFAULT"))) ; FIXME centralize?
+; FIXME someone let me bind this stuff at runtime and then
+; parameterize it later basically I want to be able to parse the first
+; section of the file, bind the runtime values, and then parse the
+; rest of the syntax, I probably have to do that with a syntax local
+; variable or something like that though to make the macros cooperate
+; rather than trying to pass it in
+; XXX possibly via syntax-local-value or something? so that #+todo: statements expand the syntax value?
+(define-for-syntax runtime-todo-keywords (make-parameter '("TODO" "DEFAULT"))) ; FIXME centralize?
 
 (define-syntax (org-module-begin stx)
   (syntax-parse stx
@@ -71,10 +80,18 @@
   (syntax-parse stx
     ([_ name]
      #:with elipsis (datum->syntax this-syntax '...)
+     #:with elipsis-plus (datum->syntax this-syntax '...+)
      #'(define-syntax (name stx)
          (syntax-parse stx
-           [(_ body elipsis)
-            #'(string-append body elipsis)])))))
+           [(_ body)
+            (local-expand #'body 'expression #f)]
+           [(_ body elipsis-plus)
+            #:with appended (datum->syntax
+                             #'(body elipsis)
+                             (apply string-append
+                                    (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
+                                         (syntax-e #'(body elipsis)))))
+            #'appended])))))
 
 (define-syntax (define-sa-nodes stx)
   (syntax-parse stx
@@ -96,6 +113,7 @@
      #'(begin (define-sa-keep-node name) ...)]))
 
 (define-sa-keep-nodes
+  h-title
   plain-list-line-tail
   table-cell)
 
@@ -109,6 +127,16 @@
   alpha-n
   alphas
   alphas-unmixed ; only the parser needs to know that they are unmixed
+
+  headline-content ; this is sa because we have to remerge the whole headline for the 2nd pass parser
+
+  ; put the headline titles here for now until we can figure out what
+  ; to do about the markup for titles
+  ; all spliced out now
+  ;h-title-r-p-c
+  ;h-title-p-c
+  ;h-title-c
+  ;;h-title
 
   parl-indent
   parl-wsnn
@@ -150,9 +178,17 @@
   org-node-dyn
   comment-element
   comment-line
+
   headline-node
   ;headline
-  headline-content ; should go away if we can register a prefix for streams in brag
+  ;heading ; FIXME we need to deal with the number of stars here
+  heading-content
+  todo-keyword
+  h-priority
+  h-comment
+  ;h-tags
+  archive
+
   plain-list-line
   descriptive-list-line
   ordered-list-line
@@ -241,7 +277,12 @@
   babel-call-no-colon
   )
 
+(define-syntax (newline stx) (syntax/loc stx "\n"))
+(define-syntax (space stx) (syntax/loc stx " "))
+
+#;
 (define (newline . rest) "\n")
+#;
 (define (space . rest) " ")
 (define (tab . rest) "\t")
 
@@ -253,6 +294,7 @@
 ; heading
 (begin-for-syntax
   (define-syntax-parameter newline
+    ; XXX we're going to have to switch this so that the org-node newline case can be handled?
     (lambda (stx) 'newline))
   #; ; par-nl needs to be syntax so expansion can happen at compile time
   (define (par-nl . rest)
@@ -266,43 +308,168 @@
   (define (par-end end)
     end)
 
-  #|
   (define-syntax-parameter stars
-  (lambda (stx) 'stars))
-  (define (par-stars stars)
-  stars)
-  |#
-
+    (lambda (stx) 'stars))
 
   )
 
+#;
+(define-syntax (heading-stars stx)
+  (syntax-parse stx
+    [(_ stars)
+     (datum->syntax
+      #'stars
+      (string-length
+       (string-trim
+        (syntax->datum
+         #'stars))))]))
+
+(define-syntax (headline stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #:do [(define int-ctx (syntax-local-make-definition-context))]
+     (datum->syntax
+      #'(body ...)
+      (do-headline
+       (apply string-append
+              (map (λ (e)
+                     (syntax->datum
+                      (local-expand e 'expression #f
+                                    #; ; shouldn't need because we use datum->syntax above
+                                    (internal-definition-context-track
+                                     int-ctx
+                                     #'(body ...))
+                                    )))
+                   (syntax-e #'(body ...))))))]))
+
+(define-syntax (heading stx)
+  (syntax-parse stx
+    #:literals (stars)
+    [(_ (stars sstring) pct ... tags)
+     #:with depth (datum->syntax
+                   #'sstring
+                   (string-length
+                    (string-trim
+                     (syntax->datum
+                      #'sstring))))
+     #:with (other ...)
+     ; TODO priority comment title
+     #'(pct ...)
+     #:with tags-list (let ([t (syntax->datum #'tags)])
+                        (if t
+                            (local-expand #'tags 'expression #f)
+                            #''()))
+     #'(cons 'heading (list depth other ... tags-list))])
+  #;
+  (syntax-parse stx
+    ([_ stars content tags]
+     (local-expand )
+     #'(heading depth content tag-list)
+     )))
+
+(define-for-syntax (process-tag-string tag-string)
+  (datum->syntax
+   tag-string
+   (cons 'list
+         (string-split
+          (string-trim
+           (syntax->datum tag-string)
+           #px"\\s+|:") ":"))))
+
+(define-syntax (h-tags stx)
+  (syntax-parse stx
+    [(_ tag-string:str)
+     (process-tag-string #'tag-string)]))
+
+#;
+(define-syntax (h-t-rpc-t stx)
+  (syntax-parse stx ([_ body ...] #'(h-title )))
+  )
+
+#;
+(define-syntax (h-t-pc-t stx))
+#;
+(define-syntax (h-t-c-t stx))
+
+#; ; TODO see if we need this, depending on whether we want to reuse the paragraph parser on the title
+(define-syntax (h-title stx)
+  (syntax-parse stx
+    ([_ body ...]
+     #:with appended (datum->syntax #'(body elipsis)
+                                    (apply string-append
+                                           (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
+                                                (syntax-e #'(body elipsis)))))
+     #'appended)))
+
+(define-syntax h-t-rpc-t (make-rename-transformer #'h-title))
+(define-syntax h-t-pc-t (make-rename-transformer #'h-title))
+(define-syntax h-t-c-t (make-rename-transformer #'h-title))
+
+
+#;
 (define-syntax (headline stx)
   (syntax-parse stx
     ([_ body ...]
+     #;
+     #:do
+     #;
+     [(println
+       (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
+                             [end (make-rename-transformer #'par-end)])
+         (local-expand
+          (car (syntax-e #'(body ...)))
+          'expression
+          #f)))]
+     #:with (expanded ...) (local-expand #'(body ...) 'expression #f)
+     #'(headline-internal expanded ...)
+     )
+    #;
+    ([_ body ...]
+     #:do [(println (for/list [(e (syntax-e #'(body ...)))] (eval-syntax e)))]
+     (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
+                           [end (make-rename-transformer #'par-end)])
+       #'(headline-internal body ...)))
+    #;
+    ([_ body ...]
+     #:do [(define well-formed-heading (apply string-append (syntax->datum #'(body ...))))
+           (displayln (format "wfh: ~s" well-formed-heading))]
+     #:with appended (datum->syntax
+                      #'(body ...)
+                      (apply string-append (syntax->datum #'(body ...))))
      (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
                            [end (make-rename-transformer #'par-end)]
                            #;
                            [stars (make-rename-transformer #'par-stars)]
                            )
        (let ([out
+              ; FIXME there is a problem with how this is implemented
+              ; because we want to be able to resolve all of the forms
+              ; at syntax time and not defer the secondary parsers until
+              ; runtime, which means that these all need to be macros
               #'(cons 'headline (merge-thing do-headline (list body ... "\n")))
               ])
          (pretty-write (syntax->datum out))
          out)))))
 
-(define (start-with-newline str)
-  (if (eq? (string-ref str 0) #\newline)
-      str
-      (string-append "\n" str)))
+(define-for-syntax (with-newlines str)
+  (let ([prepended (if (eq? (string-ref str 0) #\newline)
+                       str
+                       (string-append "\n" str))] )
+    (if (eq? (string-ref str (sub1 (string-length str))) #\newline)
+        prepended
+        (string-append prepended "\n"))))
 
-(define (do-headline str)
+(define-for-syntax (do-headline str)
   (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
          [out (
                #;
                (compose syntax->datum (make-rule-parser headline-content-2))
                parse-heading-to-datum
                (heading-make-tokenizer
-                (open-input-string (start-with-newline str))))])
+                (open-input-string (let ([s (with-newlines str)])
+                                     (displayln (format "AAAAAAAAAAAAAAAA: ~s" s))
+                                     s
+                                     ))))])
     out))
 
 ; paragraph

@@ -1,6 +1,6 @@
 #lang brag
 
-paragraph : ( markup | stuff )*
+paragraph-2 : ( markup | stuff )*
 
 stuff : STUFF+ ; have to have + due to ambiguous max length of the lexer match
 

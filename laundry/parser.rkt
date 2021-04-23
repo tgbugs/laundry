@@ -445,30 +445,49 @@ comment-line : newline-or-bof wsnn* HASH ( wsnn+ @not-newline? )?
 @nlbofwsnn : /newline-or-bof wsnn*
 babel-call : nlbofwsnn CALL /COLON not-newline?
 
-keyword : nlbofwsnn @keyword-line
-keyword-line : ( /HASH /PLUS keyword-key | END-DB ) /COLON keyword-value? ; elisp does longest match to colon
-             | /HASH /PLUS keyword-key-sigh keyword-value-sigh?
+keyword : todo-spec-line | nlbofwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
+keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON /wsnn+ keyword-value? ; FIXME check on the /wsnn+ here
+kw-prefix : AUTHOR | DATE | TITLE ; FIXME these should just go in not-whitespace probably
+keyword-options : LSB not-newline RSB ; FIXME this is almost certainly incorrectly specified
+
+todo-spec-line : TODO-SPEC-LINE
+
+affiliated-keyword : nlbofwsnn @affiliated-keyword-line
+affiliated-keyword-line : ak-key keyword-options? /COLON /wsnn+ keyword-value?
+; ak-key defines which keywords can affiliate
+ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
+
+-keyword-line : ( /HASH /PLUS keyword-key | END-DB | AUTHOR | DATE | TITLE ) /COLON keyword-value? ; elisp does longest match to colon
+              | /HASH /PLUS keyword-key-sigh keyword-value-sigh?
 
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
-keyword-key : not-whitespace
+keyword-key : not-whitespace ; FIXME this should include author date and title surely?
 keyword-value : not-newline
 
 keyword-key-sigh : END-D | PROPERTIES-D
 keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
                    | not-whitespace-l-d? wsnn+ not-newline? COLON not-newline?
 
+;kw-prefix : kw-author | kw-date | kw-title
+;kw-author : AUTHOR
+;kw-date : DATE
+;kw-title : TITLE
+
 ;;; affiliated keywords
 
-affiliated-keyword : /newline-or-bof wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
+-affiliated-keyword : /newline-or-bof wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
 ak-value : @not-newline
-ak-key : ak-key-opt | ak-key-attr | ak-key-no-opt
+-ak-key : ak-key-opt | ak-key-attr | ak-key-no-opt
 @ak-key-no-opt : ak-key-name-no-opt
 ; but apparently AUTHOR DATE TITLE can also have opt??
 ; caption author date title all can contain objects?
 ; what are those?
-@ak-key-name-no-opt : header | name | plot | ak-key-maybe-opt
-@ak-key-maybe-opt : AUTHOR | DATE | TITLE
+@ak-key-name-no-opt : header | name | plot ; | ak-key-maybe-opt
+;; @ak-key-maybe-opt : AUTHOR | DATE | TITLE  ; XXX the syntax document is EXTREMELY confusing here
+; these three are very much not affiliated keywords, they do not and
+; will not affiliate to anything, despite this they are listed in the
+; affiliated keywords section
 ak-key-attr : ATTR-PREFIX attr-backend
 
 header : HEADER
@@ -485,7 +504,9 @@ attr-backend : @wordhyus
 
 ak-opt : LSB not-newline RSB
 ak-key-opt : ak-key-name-opt ak-opt
-ak-key-name-opt : CAPTION | RESULT
+ak-key-name-opt : caption | result
+caption : CAPTION
+result : RESULT
 
 ;;; blocks
 

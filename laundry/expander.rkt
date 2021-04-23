@@ -8,14 +8,14 @@
            )
  racket/pretty
  (only-in laundry/parser make-rule-parser)
- (only-in laundry/tokenizer paragraph-make-tokenizer) ; FIXME -> syntax time
- (for-syntax (only-in laundry/tokenizer bind-runtime-todo-keywords))
+ ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
+ (for-syntax (only-in laundry/tokenizer paragraph-make-tokenizer bind-runtime-todo-keywords))
  (for-syntax (rename-in (only-in laundry/heading parse parse-to-datum)
                         [parse parse-heading]
-                        [parse-to-datum parse-heading-to-datum]))
- (rename-in (only-in laundry/paragraph parse parse-to-datum)
-            [parse parse-paragraph]
-            [parse-to-datum parse-paragraph-to-datum])
+                        [parse-to-datum parse-heading-to-datum])
+             (rename-in (only-in laundry/paragraph parse parse-to-datum)
+                        [parse parse-paragraph]
+                        [parse-to-datum parse-paragraph-to-datum]))
  (for-syntax racket/base
              racket/stxparam
              racket/pretty
@@ -78,11 +78,12 @@
 
 (define-syntax (define-sa-node stx)
   (syntax-parse stx
-    ([_ name]
+    [(_ name)
      #:with elipsis (datum->syntax this-syntax '...)
      #:with elipsis-plus (datum->syntax this-syntax '...+)
      #'(define-syntax (name stx)
          (syntax-parse stx
+           [(_) #'""]
            [(_ body)
             (local-expand #'body 'expression #f)]
            [(_ body elipsis-plus)
@@ -91,7 +92,7 @@
                              (apply string-append
                                     (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
                                          (syntax-e #'(body elipsis)))))
-            #'appended])))))
+            #'appended]))]))
 
 (define-syntax (define-sa-nodes stx)
   (syntax-parse stx
@@ -327,7 +328,7 @@
 (define-syntax (headline stx)
   (syntax-parse stx
     [(_ body ...)
-     #:do [(define int-ctx (syntax-local-make-definition-context))]
+     ;#:do [(define int-ctx (syntax-local-make-definition-context))]
      (datum->syntax
       #'(body ...)
       (do-headline
@@ -381,75 +382,9 @@
     [(_ tag-string:str)
      (process-tag-string #'tag-string)]))
 
-#;
-(define-syntax (h-t-rpc-t stx)
-  (syntax-parse stx ([_ body ...] #'(h-title )))
-  )
-
-#;
-(define-syntax (h-t-pc-t stx))
-#;
-(define-syntax (h-t-c-t stx))
-
-#; ; TODO see if we need this, depending on whether we want to reuse the paragraph parser on the title
-(define-syntax (h-title stx)
-  (syntax-parse stx
-    ([_ body ...]
-     #:with appended (datum->syntax #'(body elipsis)
-                                    (apply string-append
-                                           (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
-                                                (syntax-e #'(body elipsis)))))
-     #'appended)))
-
 (define-syntax h-t-rpc-t (make-rename-transformer #'h-title))
 (define-syntax h-t-pc-t (make-rename-transformer #'h-title))
 (define-syntax h-t-c-t (make-rename-transformer #'h-title))
-
-
-#;
-(define-syntax (headline stx)
-  (syntax-parse stx
-    ([_ body ...]
-     #;
-     #:do
-     #;
-     [(println
-       (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
-                             [end (make-rename-transformer #'par-end)])
-         (local-expand
-          (car (syntax-e #'(body ...)))
-          'expression
-          #f)))]
-     #:with (expanded ...) (local-expand #'(body ...) 'expression #f)
-     #'(headline-internal expanded ...)
-     )
-    #;
-    ([_ body ...]
-     #:do [(println (for/list [(e (syntax-e #'(body ...)))] (eval-syntax e)))]
-     (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
-                           [end (make-rename-transformer #'par-end)])
-       #'(headline-internal body ...)))
-    #;
-    ([_ body ...]
-     #:do [(define well-formed-heading (apply string-append (syntax->datum #'(body ...))))
-           (displayln (format "wfh: ~s" well-formed-heading))]
-     #:with appended (datum->syntax
-                      #'(body ...)
-                      (apply string-append (syntax->datum #'(body ...))))
-     (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
-                           [end (make-rename-transformer #'par-end)]
-                           #;
-                           [stars (make-rename-transformer #'par-stars)]
-                           )
-       (let ([out
-              ; FIXME there is a problem with how this is implemented
-              ; because we want to be able to resolve all of the forms
-              ; at syntax time and not defer the secondary parsers until
-              ; runtime, which means that these all need to be macros
-              #'(cons 'headline (merge-thing do-headline (list body ... "\n")))
-              ])
-         (pretty-write (syntax->datum out))
-         out)))))
 
 (define-for-syntax (with-newlines str)
   (let ([prepended (if (eq? (string-ref str 0) #\newline)
@@ -484,16 +419,35 @@
      #:with text-clean (datum->syntax #'text (substring dat-text 2 (sub1 (string-length dat-text))))
      #'(unquote-splicing (list leading (type text-clean))))))
 
+(define-syntax (paragraph-2 stx)
+  (syntax-parse stx
+    ([_ body ...]
+     #:with (wat ...)
+     (map (λ (e) (local-expand e 'expression (list #'markup))) (syntax-e #'(body ...)))
+     #'(cons 'paragraph (list wat ...))
+     )
+    )
+  )
+
 (define-syntax (paragraph stx)
   #;
   (println (list (syntax-line stx)
                  (syntax-column stx)
                  (syntax-span stx)))
   (syntax-parse stx
-    ([_ body ...]
+    [(_ body ...)
+     (datum->syntax
+      #'(body ...)
+      (do-paragraph
+       (apply string-append
+              (map (λ (e)
+                     (syntax->datum
+                      (local-expand e 'expression #f)))
+                   (syntax-e #'(body ...))))))
      ; won't work
      ;#:with processed (datum->syntax this-syntax (merge-paragraph (syntax->datum #'(body ...))))
      ;#:do [(pretty-write (cons 'aaaaaaaaaaaaa (syntax->datum #'processed)))]
+     #;
      (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
                            [end (make-rename-transformer #'par-end)] ; may need to flag this in some other way
                            #;
@@ -514,15 +468,15 @@
        (let ([thing (list body ...)])
          (for/fold [] []))
        #; ; can't just sa paragraphs because they do have markup etc
-       #'(cons 'paragraph (string-append body ...))))))
+       #'(cons 'paragraph (string-append body ...)))]))
 
-(define (do-paragraph str)
+(define-for-syntax (do-paragraph str)
   ; FIXME this is gonna be a bit of work
   ; we use -to-datum here because there are two different paragraphs
   ; FIXME this is a bit busted maybe?
-  (let ([out (cdr (parse-paragraph-to-datum
-                   (paragraph-make-tokenizer
-                    (open-input-string str))))])
+  (let ([out (parse-paragraph-to-datum
+              (paragraph-make-tokenizer
+               (open-input-string str)))])
     (pretty-write out)
     out))
 
@@ -561,3 +515,19 @@
       ("e" "f"))
     splits)
   )
+
+;; keywords
+
+(define-syntax (kw-prefix stx)
+  ; XXX temporary implementation detail to compensate for e.g. #+title being a token
+  (syntax-parse stx
+    [(_ with-prefix:str)
+     #:with without-prefix (datum->syntax #'with-prefix (substring (syntax-e #'with-prefix) 2))
+     #'(keyword-key without-prefix)]))
+
+(define-syntax (todo-spec-line stx)
+  ; XXX TODO this is where we have to bind the runtime todo keywords
+  (syntax-parse stx
+    [(_ line:str)
+     #'(cons 'todo-spec-line line) ; XXX TODO
+     ]))

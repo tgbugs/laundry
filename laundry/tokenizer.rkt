@@ -49,6 +49,17 @@
   (from/to (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":") ; FIXME this is not right, check the spec to see
            (:seq "\n" (:* " " "\t") ":end:")))
 
+(define-lex-abbrev todo-spec-line
+  ; XXX TODO FIXME BOF issues >_<
+  (from/stop-before (:seq "\n"
+                          (:* (:or " " "\t"))
+                          "#+"
+                          (:or "todo" "TODO")
+                          ":"
+                          " " ; XXX probably require this to avoid weirdness with colons inside keywords
+                          )
+                    "\n"))
+
 (define-lex-abbrev par-start (:or alpha 0-9 " " "\t"))
 (define-lex-abbrev par-rest-ok (:or par-start "-" "(" ")" "." "," "?" "!" "'" "\""
                                     ; "*" "/" "_" "+" "=" "~" ; markup markers can't be included
@@ -383,12 +394,20 @@
    [(:or "#+NAME" "#+name") (token 'NAME lexeme)]
    [(:or "#+HEADER" "#+header") (token 'HEADER lexeme)]
    [(:or "#+PLOT" "#+plot") (token 'PLOT lexeme)]
-   [(:or "#+AUTHOR" "#+author") (token 'AUTHOR lexeme)]
-   [(:or "#+DATE" "#+date") (token 'DATE lexeme)]
-   [(:or "#+TITLE" "#+title") (token 'TITLE lexeme)]
-   [(:or "#+RESULTS" "#+results") (token 'RESULT lexeme)] ; NOTE THE PLURAL
+   [(:or "#+RESULTS" "#+results") (token 'RESULTS lexeme)] ; NOTE THE PLURAL
    [(:or "#+CAPTION" "#+caption") (token 'CAPTION lexeme)]
    [(:or "#+ATTR_" "#+attr_") (token 'ATTR-PREFIX lexeme)]
+
+   [todo-spec-line (token 'TODO-SPEC-LINE lexeme)]
+
+   #;
+   [(:or "#+TODO" "#+todo") (token 'TODO lexeme)]
+   #; ; these arent' actually affilated so removing them to simplify things
+   [(:or "#+AUTHOR" "#+author") (token 'AUTHOR lexeme)]
+   #;
+   [(:or "#+DATE" "#+date") (token 'DATE lexeme)]
+   #;
+   [(:or "#+TITLE" "#+title") (token 'TITLE lexeme)] ; FIXME this is showing up as an affiliated keyword
    
    ; the call ... not actually keyword and not actually associated
    [(:or "#+CALL" "#+call") (token 'CALL lexeme)]

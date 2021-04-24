@@ -1,7 +1,12 @@
 #lang racket/base
 (require racket/pretty)
 (require brag/support
-         (for-syntax racket/base))
+         "lex-help.rkt"
+         (for-syntax racket/base
+                     #;
+                     syntax/parse
+                     (only-in racket/list combinations permutations)
+                     ))
 (provide laundry-make-tokenizer
          paragraph-make-tokenizer
          ;heading-make-tokenizer
@@ -83,23 +88,6 @@
                                              (:or (:seq (:~ "*") (:+ (:~ "\n")))
                                                   (:seq (:+ "*") (:~ "*" " " "\t" "\n")))))
                                    (:* "\n" " " "\t") "#+end_src" (:* " " "\t")))
-
-(define-lex-abbrev whitespace (:or "\n" "\t" " ")) ; pretty sure this is complete
-(define-lex-abbrev mu-pre (:or whitespace "-" "(" "{" "'" "\""))
-; FIXME mu-post can also be newline, which is a problem due to newline
-; first from/stop-before solves this
-(define-lex-abbrev mu-post (:or "\n" "\t" " " "-" "." "," ";" ":" "!" "?" "'" ")" "}" "[" "\""))
-(define-lex-abbrev mu-border (:~ whitespace))
-(define-lex-abbrev mu-marker (:or "*" "/" "_" "+" "=" "~"))
-; using from/stop-before and not worrying about the 3 line limit due to its increased complexity
-; XXX the issue is that this eats any number of other things that have higher priority, such as
-; headlines, so I'm 99% sure that this has to be done in a second pass that only applies to paragraphs
-(define-lex-abbrev markup-* (:seq (from/stop-before (:seq mu-pre "*" mu-border) (:seq mu-border "*" mu-post)) "*"))
-(define-lex-abbrev markup-/ (:seq (from/stop-before (:seq mu-pre "/" mu-border) (:seq mu-border "/" mu-post)) "/"))
-(define-lex-abbrev markup-_ (:seq (from/stop-before (:seq mu-pre "_" mu-border) (:seq mu-border "_" mu-post)) "_"))
-(define-lex-abbrev markup-+ (:seq (from/stop-before (:seq mu-pre "+" mu-border) (:seq mu-border "+" mu-post)) "+"))
-(define-lex-abbrev markup-= (:seq (from/stop-before (:seq mu-pre "=" mu-border) (:seq mu-border "=" mu-post)) "="))
-(define-lex-abbrev markup-~ (:seq (from/stop-before (:seq mu-pre "~" mu-border) (:seq mu-border "~" mu-post)) "~"))
 
 (define-lex-abbrev src-block (:seq "#+begin_src" (:+ (:~ "*")) "#+end_src"))
 (define-lex-abbrev negated-set
@@ -194,7 +182,7 @@
         (token 'OTHER lexeme)]
        ["\n" (token 'NEWLINE-END)]
        [any-char #;(:~ "*") (token 'OOPS lexeme)]
-     )) 
+       ))
   (define (heading-make-tokenizer port)
     ; FIXME can't run compile-syntax due to use of eval above probably?
     (define heading-lexer (eval-syntax heading-lexer-src))
@@ -226,10 +214,26 @@
 (define paragraph-lexer
   (lexer-srcloc
    [(:+ (:~ mu-pre mu-marker)) (token 'STUFF lexeme)]
+
+   [markup-*/_+ (token 'MU-BIUS lexeme)]
+
+   [markup-*/+ (token 'MU-BIS lexeme)]
+   [markup-*/_ (token 'MU-BIU lexeme)]
+   [markup-*_+ (token 'MU-BUS lexeme)]
+   [markup-/_+ (token 'MU-IUS lexeme)]
+
+   [markup-*/ (token 'MU-BI lexeme)]
+   [markup-*_ (token 'MU-BU lexeme)]
+   [markup-*+ (token 'MU-BS lexeme)]
+   [markup-/_ (token 'MU-IU lexeme)]
+   [markup-/+ (token 'MU-IS lexeme)]
+   [markup-_+ (token 'MU-US lexeme)]
+
    [markup-* (token 'BOLD lexeme)]
    [markup-/ (token 'ITALIC lexeme)]
    [markup-_ (token 'UNDERLINE lexeme)]
    [markup-+ (token 'STRIKE lexeme)]
+
    [markup-= (token 'VERBATIM lexeme)]
    [markup-~ (token 'CODE lexeme)]
    [(:+ (:or mu-pre mu-marker)) (token 'STUFF lexeme)])
@@ -477,14 +481,14 @@
    ;[word (token 'WORD-CHAR lexeme)] ; FIXME need punctuation here
 
    [(:+ negated-set) (token 'NEGATED-SET lexeme)] ; massively enhance parsing performance via fallthrough XXX TODO 
+   )
+  ; this is probably going to break the parser until
+  ; we adjust the fact that NETAGED-SET matches more than 1 char now?
+  ; but actually looking at this, I don't think there are any cases where this is used
+  ; that will break as a result because it will just keep going until it hits a negated
+  ; token at which point the logic for the next step will kick in which should be almost
+  ; still need to check though
   )
-   ; this is probably going to break the parser until
-   ; we adjust the fact that NETAGED-SET matches more than 1 char now?
-   ; but actually looking at this, I don't think there are any cases where this is used
-   ; that will break as a result because it will just keep going until it hits a negated
-   ; token at which point the logic for the next step will kick in which should be almost
-   ; still need to check though
-)
 
 (define (laundry-make-tokenizer port)
   (define bof (= (file-position port) 0))
@@ -495,6 +499,8 @@
                ; virtually no cost, and if we can fix the parser so that this doesn't have
                ; to branch, then even better
                (token 'NEWLINE)
+               ; TODO make sure we correctly discard the first (org-node (newline #f)),
+               ; fortunately we can distingiush files that actually start with newline
                #;
                (token 'BOF)
                #;

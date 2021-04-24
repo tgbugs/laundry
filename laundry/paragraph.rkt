@@ -25,7 +25,13 @@ stuff : STUFF+ ; have to have + due to ambiguous max length of the lexer match
 
 ;; NOTE FURTHER that MARKUP actually CANNOT BE PART OF THE GRAMMAR
 ;; because org files CAN DEFINE THEIR OWN MARKUP DELIMITERS!!!!!!!
-markup : ( bold | italic | underline | strike-through | code | verbatim ) @mu-post?
+markup : ( bold | italic | underline | strike-through | code | verbatim
+         | bold-italic | bold-underline | bold-strike-through
+         | italic-underline | italic-strike-through | underline-strike-through
+         | bold-italic-strike-through | bold-italic-underline
+         | bold-underline-strike-through | italic-underline-strike-through
+         | bold-italic-underline-strike-through) @mu-post?
+
 ; PRE MARKER CONTENTS MARKER POST
 mu-post : SPACE
         | TAB
@@ -59,3 +65,17 @@ underline : UNDERLINE
 strike-through : STRIKE
 code : CODE
 verbatim : VERBATIM
+
+bold-italic : MU-BI
+bold-underline : MU-BU
+bold-strike-through : MU-BS
+italic-underline : MU-IU
+italic-strike-through : MU-IS
+underline-strike-through : MU-US
+
+bold-italic-strike-through : MU-BIS
+bold-italic-underline : MU-BIU
+bold-underline-strike-through : MU-BUS
+italic-underline-strike-through : MU-IUS
+
+bold-italic-underline-strike-through : MU-BIUS

@@ -276,6 +276,27 @@
   planning-dissociated
   ak-key-no-colon
   babel-call-no-colon
+
+  bold
+  italic
+  underline
+  strike-through
+  verbatim
+  code
+
+  bold-italic
+  bold-underline
+  bold-strike-through
+  italic-underline
+  italic-strike-through
+  underline-strike-through
+
+  bold-italic-strike-through
+  bold-italic-underline
+  bold-underline-strike-through
+  italic-underline-strike-through
+
+  bold-italic-underline-strike-through
   )
 
 (define-syntax (newline stx) (syntax/loc stx "\n"))
@@ -417,6 +438,8 @@
            (println dat-text)]
      #:with leading (datum->syntax #'text (substring dat-text 0 1))
      #:with text-clean (datum->syntax #'text (substring dat-text 2 (sub1 (string-length dat-text))))
+     #'(list leading (type text-clean))
+     #;
      #'(unquote-splicing (list leading (type text-clean))))))
 
 (define-syntax (paragraph-2 stx)
@@ -443,32 +466,7 @@
               (map (λ (e)
                      (syntax->datum
                       (local-expand e 'expression #f)))
-                   (syntax-e #'(body ...))))))
-     ; won't work
-     ;#:with processed (datum->syntax this-syntax (merge-paragraph (syntax->datum #'(body ...))))
-     ;#:do [(pretty-write (cons 'aaaaaaaaaaaaa (syntax->datum #'processed)))]
-     #;
-     (syntax-parameterize ([newline (make-rename-transformer #'par-nl)]
-                           [end (make-rename-transformer #'par-end)] ; may need to flag this in some other way
-                           #;
-                           [stars (make-rename-transformer #'par-stars)]
-                           )
-       ; if all strings join
-       ; if node join before cons and then join after
-       ; FIXME pretty sure we need to run merge-paragraph at compile time?
-       #;
-       #'processed ; FIXME if we want to be able to run this at
-       ; compile time I think we are going to need to require a bunch
-       ; of the definitions in this file at both syntax time and at
-       ; regular time
-       #'(cons 'paragraph (merge-thing do-paragraph (list body ...)))
-       #;
-       #'(quasiquote (list paragraph ,@(merge-paragraph (list body ...))))
-       #;
-       (let ([thing (list body ...)])
-         (for/fold [] []))
-       #; ; can't just sa paragraphs because they do have markup etc
-       #'(cons 'paragraph (string-append body ...)))]))
+                   (syntax-e #'(body ...))))))]))
 
 (define-for-syntax (do-paragraph str)
   ; FIXME this is gonna be a bit of work

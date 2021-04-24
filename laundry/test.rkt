@@ -578,6 +578,10 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
 (module+ test-markup
 
+  (dotest "*")
+  (dotest "**")
+  (dotest "***")
+
   (dotest " *hello* ")
   (dotest " /hello/ ")
   (dotest " _hello_ ")
@@ -594,6 +598,13 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest " /asdf/")
   (dotest "\n/asdf/")
   (dotest "\n**oops\n* hello\nOH NO *lol*")
+
+  (dotest "*/bi/*")
+  (dotest "/*ib*/")
+  (dotest "/*_ibu_*/")
+  (dotest "_*/ubi/*_")
+
+  (dotest "*/_+bius+_/*")
 
   )
 
@@ -1306,7 +1317,7 @@ a
 
   )
 
-(module+ test-markup
+(module+ test-not-markup
   (dotest "+wat" #:node-type 'paragraph)
   (dotest " +wat" #:node-type 'paragraph)
 
@@ -1389,7 +1400,7 @@ you called?
    (submod ".." test-sentinel)
    (submod ".." test-word-char-vs-word-char-n)
    ;;(submod ".." test-files) ; XXX big boy
-   (submod ".." test-markup)
+   (submod ".." test-not-markup)
    #; ; known broken
    (submod ".." test-known-broken)
    ))

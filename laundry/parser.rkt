@@ -117,8 +117,8 @@ parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing pla
             | wsnn+
 
 ; to prevent keywords this one cannot end with not-newline? has to go all the way to the end
-@parl-se-wsnn : digits
-              | alphas
+@parl-se-wsnn : @digits
+              | @alphas
               | COLON
               | HASH PLUS COLON not-colon-newline
               | HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok
@@ -140,17 +140,17 @@ parl-ws-bt-l-s : not-whitespace1 | word-char-n | big-tokes-less-s
 parl-ncn-bt-l-d : not-colon-newline1 | big-tokes-less-d
 parl-prp-bt : not-prp-newline1 | big-tokes
 parl-pw-bt : not-plus-whitespace1 | big-tokes | word-char-n ; FIXME word-char vs word-char-n probably can be collapsed into one
-parl-wsnn : bt-chars
+parl-wsnn : @bt-chars
           ; alpha-n ; can't have alpha-n here because not-newline? will -> aa) at some point
           ; TODO I think markup has to go here?
           ; TODO don't gobble footnote-definition, the intersection of so many complements
           | ( ASTERISK | PLUS | HYPHEN ) parl-ws-bt-l-s
           | wsnn+ STARS ; have to have wsnn+ for disjointness with headings
-          | ( digits | alphas ) parl-prp-bt
-          | ( digits | alphas ) ( PERIOD | R-PAREN ) parl-ws-bt
+          | ( @digits | @alphas ) parl-prp-bt
+          | ( @digits | @alphas ) ( PERIOD | R-PAREN ) parl-ws-bt
           | HASH parl-pw-bt ; #+ and # are claimed but #anythingelse is paragraph ; this was broken due to word-char vs word-char-n issues
           ; FIXME the #+ part of this is a nightmare (not surprisingly)
-          | malformed
+          | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
           ; I think the right answer here is any whitespace before a colon
           ; or no colon, because no whitespace and ANY colon on the line -> keyword
           | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops

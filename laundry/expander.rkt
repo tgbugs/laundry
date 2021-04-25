@@ -83,15 +83,18 @@
      #:with elipsis-plus (datum->syntax this-syntax '...+)
      #'(define-syntax (name stx)
          (syntax-parse stx
-           [(_) #'""]
+           [(_) #'""] ; needed for cases like parl-indent
            [(_ body)
             (local-expand #'body 'expression #f)]
            [(_ body elipsis-plus)
             #:with appended (datum->syntax
                              #'(body elipsis)
                              (apply string-append
-                                    (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
-                                         (syntax-e #'(body elipsis)))))
+                                    (let ([sigh (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
+                                                     (syntax-e #'(body elipsis)))])
+                                      #;
+                                      (pretty-write (cons 'sighsighsigh: sigh))
+                                      sigh)))
             #'appended]))]))
 
 (define-syntax (define-sa-nodes stx)
@@ -284,6 +287,7 @@
   verbatim
   code
 
+  #|
   bold-italic
   bold-underline
   bold-strike-through
@@ -297,6 +301,7 @@
   italic-underline-strike-through
 
   bold-italic-underline-strike-through
+  |#
   )
 
 (define-syntax (newline stx) (syntax/loc stx "\n"))
@@ -430,43 +435,83 @@
 
 ; paragraph
 
+#;
+(define-syntax mu-par (make-rename-transformer #'paragraph-2))
+
 (define-syntax (markup stx)
   (syntax-parse stx
     ([_ (type text:str)]
      #:do [(define dat-text (syntax-e #'text))
+           (define leading-len
+             (caar
+              (regexp-match-positions
+               (case (syntax->datum #'type)
+                 ((bold) #rx"\\*")
+                 ((italic) #rx"/")
+                 ((underline) #rx"_")
+                 ((strike-through) #rx"\\+")
+                 ((verbatim) #rx"=")
+                 ((code) #rx"~"))
+               dat-text)))
            #;
            (println dat-text)]
-     #:with leading (datum->syntax #'text (substring dat-text 0 1))
-     #:with text-clean (datum->syntax #'text (substring dat-text 2 (sub1 (string-length dat-text))))
-     #'(list leading (type text-clean))
+     #:with leading (datum->syntax #'text (substring dat-text 0 leading-len))
+     ; #:with text-clean (datum->syntax #'text (substring dat-text 2 (sub1 (string-length dat-text))))
+     #:with (more-par ...)
+     (datum->syntax #'text
+                    (cdr (do-paragraph
+                          (substring dat-text
+                                     (add1 leading-len)
+                                     (sub1 (string-length dat-text)))))) ; FIXME base case
+
+     ;#:with (expanded ...) (map (λ (e) (local-expand e 'expression #f)) (syntax-e #'more-par))
+     ;#:do [(pretty-write (datum->syntax))]
+     (let ([out #'(list leading (type more-par ...))])
+       (pretty-write (cons 'mumumumu: (syntax->datum out)))
+       out
+       )
      #;
      #'(unquote-splicing (list leading (type text-clean))))))
 
+(define-syntax (mu-par stx)
+  (syntax-parse stx
+    [(_ body ...)
+     ;#:with (wat ...)
+     ;(map (λ (e) (local-expand e 'expression (list #'markup))) (syntax-e #'(body ...)))
+     #'(list 'mu-par body ...)
+     ]
+    )
+  )
+
 (define-syntax (paragraph-2 stx)
   (syntax-parse stx
-    ([_ body ...]
+    [(_ body ...)
      #:with (wat ...)
-     (map (λ (e) (local-expand e 'expression (list #'markup))) (syntax-e #'(body ...)))
-     #'(cons 'paragraph (list wat ...))
-     )
+     (map (λ (e) (local-expand e 'expression #f #;(list #'markup))) (syntax-e #'(body ...)))
+     ;#:do [(pretty-write (cons 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (syntax->datum #'(wat ...))))]
+     #'(wat ...)
+     ]
     )
   )
 
 (define-syntax (paragraph stx)
-  #;
-  (println (list (syntax-line stx)
-                 (syntax-column stx)
-                 (syntax-span stx)))
   (syntax-parse stx
     [(_ body ...)
-     (datum->syntax
-      #'(body ...)
-      (do-paragraph
-       (apply string-append
-              (map (λ (e)
-                     (syntax->datum
-                      (local-expand e 'expression #f)))
-                   (syntax-e #'(body ...))))))]))
+     #:with (expanded ...)
+     (local-expand (datum->syntax
+                    #'(body ...)
+                    (do-paragraph
+                     (apply string-append
+                            (map (λ (e)
+                                   (syntax->datum
+                                    (local-expand e 'expression #f)))
+                                 (syntax-e #'(body ...))))))
+                   'expression
+                   #f)
+     (let ([out #'(list 'paragraph expanded ...)])
+       (pretty-write (cons 'p1p1p1: (syntax->datum out)))
+       out)
+     ]))
 
 (define-for-syntax (do-paragraph str)
   ; FIXME this is gonna be a bit of work

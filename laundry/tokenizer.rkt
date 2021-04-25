@@ -18,12 +18,14 @@
          drawer-ish
 
          paragraph
+         #|
          markup-*
          markup-/
          markup-_
          markup-+
          markup-=
          markup-~
+         |#
          )
 (define-lex-abbrev newlines (:+ (char-set "\xA\xD")))
 (define-lex-abbrev 0-9 (char-set "0123456789"))
@@ -213,8 +215,9 @@
 
 (define paragraph-lexer
   (lexer-srcloc
-   [(:+ (:~ mu-pre mu-marker)) (token 'STUFF lexeme)]
+   [(:+ (:~ mu-pre-1 mu-marker mu-post-1)) (token 'STUFF-B lexeme)]
 
+   #|
    [markup-*/_+ (token 'MU-BIUS lexeme)]
 
    [markup-*/+ (token 'MU-BIS lexeme)]
@@ -228,6 +231,7 @@
    [markup-/_ (token 'MU-IU lexeme)]
    [markup-/+ (token 'MU-IS lexeme)]
    [markup-_+ (token 'MU-US lexeme)]
+   |#
 
    [markup-* (token 'BOLD lexeme)]
    [markup-/ (token 'ITALIC lexeme)]
@@ -236,10 +240,31 @@
 
    [markup-= (token 'VERBATIM lexeme)]
    [markup-~ (token 'CODE lexeme)]
-   [(:+ (:or mu-pre mu-marker)) (token 'STUFF lexeme)])
+
+   [markup-*-eof? (token 'BOLD-EOF lexeme)]
+   [markup-/-eof? (token 'ITALIC-EOF lexeme)]
+   [markup-_-eof? (token 'UNDERLINE-EOF lexeme)]
+   [markup-+-eof? (token 'STRIKE-EOF lexeme)]
+
+   [markup-=-eof? (token 'VERBATIM-EOF lexeme)]
+   [markup-~-eof? (token 'CODE-EOF lexeme)]
+
+   #; ; busted
+   [(:+ (:or mu-pre mu-post)) (token 'STUFF-A lexeme)]
+
+   [(:+ (:or (:& (:~ mu-pre-1) mu-post-1) mu-marker)) (token 'STUFF-A lexeme)]
+
+   [mu-pre-1 (token 'MU-PRE-1 lexeme)] ; needed to prevent accidental capture when :+ length for stuff is longer than markup
+
+   #;
+   [(:+ mu-marker) (token 'MARKER lexeme)] ; break out from the pre/post to avoid creating longer matches than eof? cases
+
+   #;
+   [(:+ (:or mu-pre-not-newline mu-post-not-newline)) (token 'STUFF-A lexeme)]
+   ["\n" (token 'NEWLINE)]
+   )
   #;
   (
-   ["\n" (token 'NEWLINE)]
    [(:>= 2 whitespace) (token 'WHITESPACE-GT2 lexeme)]
 
 

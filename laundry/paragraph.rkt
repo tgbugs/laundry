@@ -1,10 +1,12 @@
 #lang brag
 
-paragraph-2 : ( markup | stuff )*
+paragraph-2 : ( markup | stuff )* markup-eof?
 
-stuff : STUFF+ ; have to have + due to ambiguous max length of the lexer match
+stuff : ( STUFF-B | STUFF-A | MARKER | MU-PRE-1 | newline )+ ; have to have + due to ambiguous max length of the lexer match
 
-;;;; */_=~
+newline : NEWLINE
+
+;;;; */_+=~
 
 ;;; markup
 
@@ -25,15 +27,33 @@ stuff : STUFF+ ; have to have + due to ambiguous max length of the lexer match
 
 ;; NOTE FURTHER that MARKUP actually CANNOT BE PART OF THE GRAMMAR
 ;; because org files CAN DEFINE THEIR OWN MARKUP DELIMITERS!!!!!!!
-markup : ( bold | italic | underline | strike-through | code | verbatim
-         | bold-italic | bold-underline | bold-strike-through
-         | italic-underline | italic-strike-through | underline-strike-through
-         | bold-italic-strike-through | bold-italic-underline
-         | bold-underline-strike-through | italic-underline-strike-through
-         | bold-italic-underline-strike-through) @mu-post?
+markup : ( bold | italic | underline | strike-through | code | verbatim )
+         ;| bold-italic | bold-underline | bold-strike-through
+         ;| italic-underline | italic-strike-through | underline-strike-through
+         ;| bold-italic-strike-through | bold-italic-underline
+         ;| bold-underline-strike-through | italic-underline-strike-through
+         ;| bold-italic-underline-strike-through) @mu-post?
+
+bold : BOLD
+italic : ITALIC
+underline : UNDERLINE
+strike-through : STRIKE
+code : CODE
+verbatim : VERBATIM
+
+markup-eof : eof-bold | eof-italic | eof-underline | eof-strike-through | eof-code | eof-verbatim
+
+eof-bold : BOLD-EOF
+eof-italic : ITALIC-EOF
+eof-underline : UNDERLINE-EOF
+eof-strike-through : STRIKE-EOF
+eof-code : CODE-EOF
+eof-verbatim : VERBATIM-EOF
+
+;mu-post : MU-PRE-1
 
 ; PRE MARKER CONTENTS MARKER POST
-mu-post : SPACE
+mu-post-old : SPACE
         | TAB
         | DASH
         | PERIOD
@@ -47,6 +67,7 @@ mu-post : SPACE
         | LSB
         | BANG ; new
         | QM
+        | NEWLINE
 
 ;mu-pre-common : HYPHEN | L-PAREN | LCB | SQ | DQ
 ;mu-pre : HYPHEN | L-PAREN | LCB | SQ | DQ | whitespace
@@ -59,23 +80,16 @@ mu-post : SPACE
 ;mu-border : not-whitespace
 ;mu-contents-cv : not-newline ( newline not-newline )?
 
-bold : BOLD
-italic : ITALIC
-underline : UNDERLINE
-strike-through : STRIKE
-code : CODE
-verbatim : VERBATIM
+;bold-italic : MU-BI
+;bold-underline : MU-BU
+;bold-strike-through : MU-BS
+;italic-underline : MU-IU
+;italic-strike-through : MU-IS
+;underline-strike-through : MU-US
 
-bold-italic : MU-BI
-bold-underline : MU-BU
-bold-strike-through : MU-BS
-italic-underline : MU-IU
-italic-strike-through : MU-IS
-underline-strike-through : MU-US
+;bold-italic-strike-through : MU-BIS
+;bold-italic-underline : MU-BIU
+;bold-underline-strike-through : MU-BUS
+;italic-underline-strike-through : MU-IUS
 
-bold-italic-strike-through : MU-BIS
-bold-italic-underline : MU-BIU
-bold-underline-strike-through : MU-BUS
-italic-underline-strike-through : MU-IUS
-
-bold-italic-underline-strike-through : MU-BIUS
+;bold-italic-underline-strike-through : MU-BIUS

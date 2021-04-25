@@ -604,7 +604,23 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "/*_ibu_*/")
   (dotest "_*/ubi/*_")
 
-  (dotest "*/_+bius+_/*")
+  (dotest "*/_+bius+_/*") ; XXX broken
+
+  (dotest "*bold text /bi text/ bold _bu text_ bold =bold verb= bold ~bold code~ code*") ; NOOOOOOOOOOOOOO
+
+  (dotest "\n =v=")
+  (dotest "\n =v=\n")
+
+  (dotest " *b*")
+  (dotest " =v=")
+  (dotest "   =v=")
+
+  (dotest "*b*")
+  (dotest "/i/")
+  (dotest "_u_")
+  (dotest "+s+")
+  (dotest "=v=")
+  (dotest "~c~")
 
   )
 

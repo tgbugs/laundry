@@ -19,7 +19,8 @@
 
 (define-namespace-anchor anc-test)
 (define ns-test (namespace-anchor->namespace anc-test))
-(define (dotest test-value #:eq [eq #f] #:node-type [node-type #f] #:quiet [quiet #f]
+(define (dotest test-value #:eq [eq #f] #:eq-root [eq-root #f]
+                #:node-type [node-type #f] #:quiet [quiet #f]
                 #:parse-to-datum [parse-to-datum #f]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
@@ -31,20 +32,27 @@
   (when (and node-type (not (rec-cont hrm node-type)))
     (error (format "parse does not contain ~s" node-type)))
   (when (and eq (not (equal? eq hrm)))
-    (error (format "foo ~s" test-value)))
+    (error (format "foo ~s ~s" test-value hrm)))
   (when (not quiet)
     (pretty-write (cons 'dotest: hrm)))
-  (when do-expand
-    (define hrms #`(module org-module laundry/expander
-                    #,((testing-parse) ; FIXME this has GOT to be a bug
-                       #; ; NAH just a completely insane case-lambda
-                       ; that causes the call to revert to the full grammar
-                       (format "test-source ~s" test-value)
-                       (t))))
-    (parameterize ([current-namespace ns-test])
-      (eval-syntax hrms)
-      (define root (dynamic-require ''org-module 'root))
-      root)))
+  (if do-expand
+    (when do-expand ; LOL when x vs begin ...
+      (define hrms #`(module org-module laundry/expander
+                       #,((testing-parse) ; FIXME this has GOT to be a bug
+                          #; ; NAH just a completely insane case-lambda
+                          ; that causes the call to revert to the full grammar
+                          (format "test-source ~s" test-value)
+                          (t))))
+      (parameterize ([current-namespace ns-test])
+        (eval-syntax hrms)
+        (define root (dynamic-require ''org-module 'root))
+        (when (and eq-root (not (equal? eq-root root)))
+          (error (format "foo ~s ~s" test-value root)))
+        (unless (or eq-root node-type)
+          root)))
+    (unless (or eq node-type)
+      hrm)))
+
 (require debug/repl)
 (define (dotest-q test-value)
   (dotest test-value #:quiet #t))
@@ -400,7 +408,30 @@
   )
 
 (module+ test-paragraph-start
-  (dotest (make-string 999 #\*))
+
+  (dotest "  #+begin_src")
+  (dotest "  #+begin_srclol" #:node-type 'bg-type-special)
+  (dotest "  #+begin_src\n")
+  (dotest "  #+begin_")
+  (dotest "  #+begin_-") ; -> block
+  (dotest "  #+begin_:") ; -> block
+
+  (dotest "#+end:" #:node-type 'keyword) ; -> keyword
+  (dotest "  #+end:" #:node-type 'keyword)
+
+  (dotest "  #+end")
+  (dotest "#+end")
+  (dotest "  #+end_")
+  (dotest "#+end_")
+  (dotest "#+end_srclol" #:node-type 'bg-end-special) ; -> block
+
+  (dotest "#+:end::properties::end: lol" #:node-type 'keyword) ; -> keyword
+  (dotest "#+:end:" #:node-type 'keyword) ; -> keyword
+  (dotest "#+:properties:" #:node-type 'keyword) ; -> keyword
+  (dotest "#+:end::asdf" #:node-type 'paragraph) ; XXX inconsistnet org element says keyword, font locking and spec say paragraph
+
+
+  (dotest (make-string 99 #\*))
   ; now fixed and blazingly fast but
   ; but wow NAME+ has horrible performance, probably need to move more of this stuff to the lexer
   ; LOL at 99 it is bad, at 999 THIS IS A DISASTER for performnace and memory usage
@@ -421,9 +452,9 @@
   (dotest "  #+")
   (dotest "#+")
   (dotest "#+:")
-  (dotest "#+:aaaa:") ; -> keyword
+  (dotest "#+:aaaa:" #:eq-root '(org-file (org-node (keyword (keyword-key ":aaaa")))))
   (dotest "#+:aaaa")
-  (dotest "#+::") ; -> keyword
+  (dotest "#+::")
   (dotest "#+: :")
   (dotest "#+ :")
   (dotest "#+a :")
@@ -433,12 +464,10 @@
   ; ugh big tokes and drawer tokens
   (dotest "  #+call:")
   (dotest "  #+call:eeeeeeeeee")
-  (dotest "  #+calla")
+  (dotest "  #+calla") ; XXX TODO malformed case
   (dotest "#+:end")
-  (dotest "#+:end:") ; -> keyword
   (dotest "#+:end: lol: oops") ; -> keyword
   (dotest "#+:end: asdf") ; -> keyword
-  (dotest "#+:end::asdf") ; -> keyword
   (dotest "#+:end:lol: oops") ; -> keyword
   (dotest "#+:properties: lol: oops") ; -> keyword
   (dotest "#+:properties:lol: oops") ; -> keyword
@@ -477,15 +506,6 @@
   (dotest "  9999999.a")
   (dotest "9999999.a")
 
-  (dotest "  #+end:")
-  (dotest "#+end:" #:node-type 'keyword) ; -> keyword
-
-  (dotest "  #+end")
-  (dotest "#+end")
-  (dotest "  #+end_")
-  (dotest "#+end_")
-  (dotest "#+end_srclol" #:node-type 'bg-end-special) ; -> block
-
   (dotest "  COMMENT")
   (dotest "COMMENT")
   (dotest "  ARCHIVE")
@@ -494,12 +514,6 @@
   (dotest "  :ARCHIVE")
   (dotest ":ARCHIVE")
   (dotest ":ARCHIVE more")
-  (dotest "  #+begin_src")
-  (dotest "  #+begin_srclol" #:node-type 'bg-type-special)
-  (dotest "  #+begin_src\n")
-  (dotest "  #+begin_")
-  (dotest "  #+begin_-") ; -> block
-  (dotest "  #+begin_:") ; -> block
 
   (dotest " (a)" #:node-type 'paragraph)
   (dotest " (" #:node-type 'paragraph)
@@ -1175,7 +1189,7 @@ drawer contents
 
 (define h-l1
   '(org-file
-    (org-node (headline-node (headline (stars "*"))))))
+    (org-node (headline-node (heading 1 ())))))
 (define h-l1-c 
   '(org-file
     (org-node
@@ -1201,6 +1215,7 @@ drawer contents
 (module+ test-sentinel
   ; things that work and should continue to work
 
+  (dotest "* ")
   (dotest "* " #:eq h-l1)
   (dotest "*  " #:eq h-l1)
   (dotest "* COMMENT")

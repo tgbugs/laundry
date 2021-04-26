@@ -101,7 +101,7 @@ org-node : headline-node | org-node-basic
 
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 paragraph-line : newline-or-bof ( parl-lines | end )
-paragraph-line-d : newline ( parl-lines ) ; XXX unused ??
+paragraph-line-d : newline ( parl-lines ) ; used in drawers
 hyperlink : LINK
 
 paragraph-f-in : @paragraph-line-f-in+
@@ -111,7 +111,8 @@ misplaced-footnote-definition : footnote-definition-line
 
 parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing plain lists ; FIXME does this needs to be * not + so that zero indent is straight forward?
 @parl-lines : parl-start not-newline?
-            | parl-indent parl-se-wsnn
+            | parl-indent parl-se-wsnn ; FIXME this has got to be wrong ...
+            | parl-indent malformed not-newline?
             | stars ; just stars with nothing else is a paragraph
             | wsnn* STARS wsnn*
             | wsnn+
@@ -120,6 +121,7 @@ parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing pla
 @parl-se-wsnn : @digits
               | @alphas
               | COLON
+              | HASH PLUS not-whitespace? not-colon-whitespace ( @wsnn+ not-newline )? ; #+a:b:c case
               | HASH PLUS COLON not-colon-newline
               | HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok
               | HASH PLUS not-colon-newline
@@ -150,7 +152,7 @@ parl-wsnn : @bt-chars
           | ( @digits | @alphas ) ( PERIOD | R-PAREN ) parl-ws-bt
           | HASH parl-pw-bt ; #+ and # are claimed but #anythingelse is paragraph ; this was broken due to word-char vs word-char-n issues
           ; FIXME the #+ part of this is a nightmare (not surprisingly)
-          | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
+          ; | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
           ; I think the right answer here is any whitespace before a colon
           ; or no colon, because no whitespace and ANY colon on the line -> keyword
           | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops
@@ -201,7 +203,7 @@ nc-start : parl-ncln-bt-l-d
 
 ; both planning and property drawer can only have a single newline each before them
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
-headline : HEADING | newline-or-bof stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wssn+ due to the fact that we are going to reparse and thus would lose srcloc
+headline : HEADING | newline-or-bof stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wsnn+ due to the fact that we are going to reparse and thus would lose srcloc
 stars : ASTERISK | STARS ; ASTERISK+ destorys performance
 headline-content : @not-newline
 
@@ -443,17 +445,19 @@ comment-line : newline-or-bof wsnn* HASH ( wsnn+ @not-newline? )?
 ;;; keywords
 
 @nlbofwsnn : /newline-or-bof wsnn*
-babel-call : nlbofwsnn CALL /COLON not-newline?
+babel-call : nlbofwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
 
 keyword : todo-spec-line | nlbofwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON /wsnn+ keyword-value? ; FIXME check on the /wsnn+ here
-kw-prefix : AUTHOR | DATE | TITLE ; FIXME these should just go in not-whitespace probably
+keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
+             | /HASH /PLUS keyword-key-sigh ( /wsnn+ keyword-value )? /wsnn*
+
+kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably
 keyword-options : LSB not-newline RSB ; FIXME this is almost certainly incorrectly specified
 
 todo-spec-line : TODO-SPEC-LINE
 
 affiliated-keyword : nlbofwsnn @affiliated-keyword-line
-affiliated-keyword-line : ak-key keyword-options? /COLON /wsnn+ keyword-value?
+affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
 ; ak-key defines which keywords can affiliate
 ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
 
@@ -465,9 +469,10 @@ ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
 keyword-key : not-whitespace ; FIXME this should include author date and title surely?
 keyword-value : not-newline
 
-keyword-key-sigh : END-D | PROPERTIES-D
+;keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D ) | END-D | PROPERTIES-D
+keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
 keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
-                   | not-whitespace-l-d? wsnn+ not-newline? COLON not-newline?
+                   | not-whitespace-l-d? wsnn+ not-newline? COLON not-newline? ; FIXME this seems wrong
 
 ;kw-prefix : kw-author | kw-date | kw-title
 ;kw-author : AUTHOR
@@ -975,15 +980,15 @@ big-tokes-less-p : bt-asterisk
 big-tokes-less-d-s : bt-chars-plan
                    | big-tokes-less-d-s-p
 
-big-tokes : bt-asterisk
-          | bt-colon
-          | big-tokes-less-d-s
-
 big-tokes-less-d : bt-asterisk
                  | big-tokes-less-d-s
 
 big-tokes-less-s : bt-colon
                  | big-tokes-less-d-s
+
+big-tokes : bt-asterisk
+          | bt-colon
+          | big-tokes-less-d-s
 
 ;;; individuals
 
@@ -1135,6 +1140,7 @@ not-pl-start-newline1 : ns-nwt-less-negated | wsnn | unsyms-less-pl-start
 not-prp-newline1 :      ns-nwt-less-negated | wsnn | unsyms-less-prp
 
 not-colon-whitespace1 : ns-nwt-less-negated | unsyms-less-colon
+not-colon-whitespace : ( @not-colon-whitespace1 | @big-tokes-less-d | word-char-n )+
 not-colon-newline1 :  not-colon-whitespace1 | wsnn
 not-colon-newline :    ( @not-colon-newline1 | @big-tokes-less-d | word-char-n )+
 

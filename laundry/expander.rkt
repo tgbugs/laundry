@@ -1,5 +1,6 @@
 #lang racket/base
 (require
+ racket/stxparam
  (only-in racket/function identity)
  (only-in racket/list splitf-at)
  (for-meta 2
@@ -17,6 +18,7 @@
                         [parse parse-paragraph]
                         [parse-to-datum parse-paragraph-to-datum]))
  (for-syntax racket/base
+             racket/syntax
              racket/stxparam
              racket/pretty
              syntax/parse
@@ -76,8 +78,16 @@
 
 (define-syntax (define-nodes stx)
   (syntax-parse stx
-    [(_ name ...)
-     #'(begin (define-node name) ...)]))
+    #:datum-literals (sa)
+    [(_ (~alt name (sa sa-name)) ...)
+     (if (attribute name)
+         #'(begin (define-node name) ...)
+         #'(begin
+             (~@ ; FIXME pretty sure this is not working as desired
+              (define-node sa-name)
+              (define-rename-transformer-parameter sa-name (make-rename-transformer #'sa-name))) ...
+             ))
+     ]))
 
 (define-syntax (define-sa-node stx)
   (syntax-parse stx
@@ -90,20 +100,91 @@
            [(_ body)
             (local-expand #'body 'expression #f)]
            [(_ body elipsis-plus)
-            #:with appended (datum->syntax
-                             #'(body elipsis)
-                             (apply string-append
-                                    (let ([sigh (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
-                                                     (syntax-e #'(body elipsis)))])
-                                      #;
-                                      (pretty-write (cons 'sighsighsigh: sigh))
-                                      sigh)))
+            #:with appended
+            (datum->syntax
+             #'(body elipsis)
+             (apply string-append
+                    (let ([sigh (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
+                                     (syntax-e #'(body elipsis)))])
+                      #;
+                      (pretty-write (cons 'sighsighsigh: sigh))
+                      sigh)))
             #'appended]))]))
 
 (define-syntax (define-sa-nodes stx)
   (syntax-parse stx
     [(_ name ...)
      #'(begin (define-sa-node name) ...)]))
+
+(define-syntax (define-sa-alt-node stx)
+  (syntax-parse stx
+    ([_ name]
+     #:with node-name
+     (datum->syntax
+      #'name
+      (string->symbol
+       (format "node-~a" (syntax-e #'name))))
+     #:with elipsis (datum->syntax this-syntax '...)
+     #'(begin
+         (define-syntax (node-name stx)
+          (syntax-parse stx
+            [(_ body elipsis)
+             #'(cons 'name (list body elipsis))]))
+         (define-rename-transformer-parameter name (make-rename-transformer #'node-name))
+         ))))
+
+(define-syntax (define-sa-alt-nodes stx)
+  ; FIXME this macro is broken
+  (syntax-parse stx
+    [(_ name ...)
+     #'(begin (define-sa-alt-node name) ...)]
+    #;
+    [(_ prefix name ...)
+     #:with elipsis (datum->syntax this-syntax '...)
+     #:with ((node-name sa-name) ...)
+     (datum->syntax
+      #'(name ...)
+      (map
+       (λ (n)
+         (list
+          (datum->syntax
+           n
+           (string->symbol
+            (format "node-~a" (syntax-e n))))
+          (datum->syntax
+           n
+           (string->symbol
+            (format "~a-~a"
+                    (syntax-e #'prefix) (syntax-e n))))))
+       (syntax-e #'(name ...))))
+
+     #'(begin
+         (define-sa-alt-node name) ...
+        )
+     #;
+     #'(begin
+         (define-sa-node sa-name) ...
+         (define-node node-name) ...
+         (define-rename-transformer-parameter name (make-rename-transformer #'node-name)) ...
+         #;
+         (begin-for-syntax
+           (define-syntax-parameter name
+             (λ (stx) (error 'aaaaaaaaaaaaaaaaaaaa))
+             #;
+             (make-rename-transformer #'name))) ;...
+         #;
+         (define-node name) ;...
+         #;
+         (begin-for-syntax
+           (define-syntax-parameter name
+             (λ (stx)
+               ; XXX should always be aligned with define-node
+               (syntax-parse stx
+                 [(_ body-inner elipsis)
+                  ;#:do [(println #'(body-inner elipsis))]
+                  #'(cons 'name (list body-inner elipsis))])))
+           ; ...
+           ))]))
 
 (define-syntax (define-sa-keep-node stx)
   (syntax-parse stx
@@ -119,20 +200,88 @@
     [(_ name ...)
      #'(begin (define-sa-keep-node name) ...)]))
 
+(module+ test-sa-alt
+
+  (require racket/stxparam)
+  #;
+  (define-syntax node (make-rename-transformer #'node-node))
+
+  (define-rename-transformer-parameter node (make-rename-transformer #'node-node))
+  #;
+  (begin-for-syntax
+    ; somehow this has to come before any useage !?
+    (define-rename-transformer-parameter node (make-rename-transformer #'node-node))
+    #;
+    (define-syntax-parameter node (λ (stx) 'poofoo)))
+
+  (define-syntax (outer stx)
+    (syntax-parse stx
+      [(_ body ...)
+       (local-expand
+        ; HAHA ! all it required was to invert the calling order DUH
+        ; XXX excep that it doesn't work if the value is passed to another
+        ; macro that expects the value to have been resolved because it includes
+        ; values that are not macros
+        #'(syntax-parameterize ([node (make-rename-transformer #'sa-node)])
+            (node body ...))
+        'expression
+        #f)
+       #; ; the parameterization must be at the surface level
+       ; there might be a way to rewrite the whole syntax so that it
+       ; is itself wrapped in the parameterizeation and then re-expanded though ...
+       ; HRM
+       (syntax-parameterize ([node (make-rename-transformer #'sa-node)])
+         #;
+         #'(cons 'outer (list body ...))
+         (local-expand #'(node body ...) 'expression #f)
+         )
+       #;
+       (local-expand #'(node body ...) 'expression #f)
+       ]))
+
+  (define-syntax (node-node stx)
+    (syntax-parse stx
+      [(_ body ...)
+       #;
+       #'(cons 'node (list body ...))
+       #'"node"
+       ]))
+
+  (define-syntax (sa-node stx)
+    (syntax-parse stx
+      [(_ body ...)
+       #;
+       (datum->syntax
+             #'(body ...)
+             (apply string-append
+                    (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
+                         (syntax-e #'(body ...)))))
+
+       #'"sa-node"
+       ]))
+
+  (define out (outer (node "hello")))
+  (define in
+    (syntax-parameterize ([node (make-rename-transformer #'sa-node)])
+      (outer (node "hello"))))
+  out
+  in
+
+  )
+
 (define-sa-keep-nodes
   h-title
   plain-list-line-tail
   table-cell)
 
 (define-sa-nodes ; XXX things in this list should probably be spliced out
-  parl-start
-  not-pl-start-whitespace1
-  ns-nwt-less-negated
   not-newline
   not-whitespace
+  ns-nwt-less-negated
+  not-pl-start-whitespace1
   stars
-  alpha-n
   alphas
+  alpha-n
   alphas-unmixed ; only the parser needs to know that they are unmixed
 
   headline-content ; this is sa because we have to remerge the whole headline for the 2nd pass parser
@@ -145,6 +294,7 @@
   ;h-title-c
   ;;h-title
 
+  parl-start
   parl-indent
   parl-wsnn
   parl-prp-bt
@@ -160,8 +310,9 @@
   blank-line
   not-alpha-newline1
   not-colon-newline
-  not-colon-whitespace1
   not-colon-newline1
+  not-colon-whitespace
+  not-colon-whitespace1
   not-plus-whitespace1
   not-whitespace-l-d
   not-whitespace1
@@ -179,6 +330,33 @@
   bt-hash
   )
 
+(define-sa-nodes ; malformed case
+  ; FIXME I'm not entirely sure what to do about the malformed bits
+  ; we should be able to stash that information in the syntax object
+  ; when we roll these up to be strings again for reparsing as a paragraph
+
+  sa-malformed
+  sa-blk-src-begin
+
+  malformed-wsnn
+  detached-block-node
+  blk-greater-malformed
+  det-blk-ex-begin
+  det-blk-ex-end
+  det-blk-src-begin
+  det-blk-src-end
+  ; blk-src-begin sa variant
+  planning-dissociated
+  ak-key-no-colon
+  babel-call-no-colon
+  )
+
+(define-sa-alt-nodes
+  blk-src-begin
+  )
+#;
+(begin-for-syntax
+  (define-rename-transformer-parameter blk-src-begin (make-rename-transformer #'node-blk-src-begin)))
 (define-nodes
   org-file
   org-node
@@ -217,7 +395,6 @@
   pdrawer-unparsed ; FIXME naming ??
 
   keyword
-  keyword-line
   keyword-key
   keyword-value
   keyword-key-sigh
@@ -244,7 +421,8 @@
   fn-def
 
   blk-src
-  blk-src-begin
+  #;
+  (sa blk-src-begin) ; somehow the syntax parameter overrides these?
   blk-src-line-contents
   language
   blk-src-line-rest-alt
@@ -259,6 +437,9 @@
   block-begin-line
   block-end-line
 
+  blk-ex-begin
+  blk-ex-end
+
   blk-greater-begin
   blk-greater-type
   block-type-name
@@ -272,16 +453,6 @@
   blk-line-contents
   blk-dyn-contents
   blk-dyn-end
-
-  malformed
-  malformed-wsnn
-  detached-block-node
-  blk-greater-malformed
-  det-blk-src-begin
-  det-blk-src-end
-  planning-dissociated
-  ak-key-no-colon
-  babel-call-no-colon
 
   macro
 
@@ -311,12 +482,7 @@
 
 (define-syntax (newline stx) (syntax/loc stx "\n"))
 (define-syntax (space stx) (syntax/loc stx " "))
-
-#;
-(define (newline . rest) "\n")
-#;
-(define (space . rest) " ")
-(define (tab . rest) "\t")
+(define-syntax (tab stx) (syntax/loc stx "\t"))
 
 (define-syntax (blank stx)
   (syntax-parse stx
@@ -493,6 +659,37 @@
      #;
      #'(unquote-splicing (list leading (type text-clean))))))
 
+(define-syntax (malformed stx)
+  (syntax-parse stx
+    #; ;sigh
+    [(_ body ...)
+     (local-expand
+      #'(syntax-parameterize ([blk-src-begin (make-rename-transformer #'sa-blk-src-begin)])
+          (sa-malformed body ...))
+      'top-level #f
+      )
+     ]
+    [(_ body ...)
+     (define-values (transparent opaque)
+       (syntax-local-expand-expression ; this gets us closer ...
+        #'(syntax-parameterize ([blk-src-begin (make-rename-transformer #'sa-blk-src-begin)])
+            (sa-malformed body ...))
+        ))
+     (println transparent)
+     (datum->syntax
+      #'(body ...)
+      ; eval-syntax fails in a way similar to ther alternaives I have tried
+      (eval (syntax->datum transparent)))
+     ;transparent ; doesn't work at top level scope
+     ]))
+
+(module+ test-mal
+  ;#; ; somehow this works at the top level but not in module scope !?
+  ; WAIT !? somehow this is working now !??!?
+  ; argh, it works here but not in a requiring module !?
+  (paragraph-node (malformed (blk-src-begin "oops")))
+  )
+
 (define-syntax (paragraph stx)
   (syntax-parse stx
     [(_ body ...)
@@ -509,16 +706,20 @@
   (syntax-parse stx
     [(_ body ...)
      #:with (expanded ...)
-     (local-expand (datum->syntax
-                    #'(body ...)
-                    (do-paragraph
-                     (apply string-append
-                            (map (λ (e)
-                                   (syntax->datum
-                                    (local-expand e 'expression #f)))
-                                 (syntax-e #'(body ...))))))
-                   'expression
-                   #f)
+     ; FIXME for malformed patterns we will need to flag that they are
+     ; malformed, record their locations, and add them to syntax warn
+     ; or something like that
+     (local-expand
+      (datum->syntax
+       #'(body ...)
+       (do-paragraph
+        (apply string-append
+               (map (λ (e)
+                      (syntax->datum
+                       (local-expand e 'expression #f)))
+                    (syntax-e #'(body ...))))))
+      'expression
+      #f)
      (let ([out #'(list 'paragraph expanded ...)])
        #;
        (pretty-write (cons 'p1p1p1: (syntax->datum out)))

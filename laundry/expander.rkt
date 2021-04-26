@@ -26,9 +26,9 @@
              
              ))
 (provide
- (rename-out [org-module-begin #%module-begin])
+ (rename-out [laundry-module-begin #%module-begin])
  (except-out (all-from-out racket/base) #%module-begin)
- (except-out (all-defined-out) org-module-begin))
+ (except-out (all-defined-out) laundry-module-begin))
 
 ; FIXME someone let me bind this stuff at runtime and then
 ; parameterize it later basically I want to be able to parse the first
@@ -39,10 +39,12 @@
 ; XXX possibly via syntax-local-value or something? so that #+todo: statements expand the syntax value?
 (define-for-syntax runtime-todo-keywords (make-parameter '("TODO" "DEFAULT"))) ; FIXME centralize?
 
-(define-syntax (org-module-begin stx)
+(define-syntax (laundry-module-begin stx)
   (syntax-parse stx
     ([_ ast]
-     #:do [(pretty-write `(org-module-begin: ,(syntax->datum #'ast)))]
+     #:do [
+           #;
+           (pretty-write `(laundry-module-begin: ,(syntax->datum #'ast)))]
      #'(#%module-begin
         (provide root)
         (define root ast)
@@ -50,6 +52,7 @@
         ; but not if the module is executed directly? not sure if this
         ; is a racket-mode issue or what?
         (require racket/pretty)
+        #;
         (pretty-write root)
         (module+ main
           root)))))
@@ -280,6 +283,8 @@
   ak-key-no-colon
   babel-call-no-colon
 
+  macro
+
   bold
   italic
   underline
@@ -428,6 +433,7 @@
                parse-heading-to-datum
                (heading-make-tokenizer
                 (open-input-string (let ([s (with-newlines str)])
+                                     #;
                                      (displayln (format "AAAAAAAAAAAAAAAA: ~s" s))
                                      s
                                      ))))])
@@ -435,27 +441,40 @@
 
 ; paragraph
 
-#;
-(define-syntax mu-par (make-rename-transformer #'paragraph-2))
-
-(define-syntax (markup stx)
+(define-syntax (markup-terminal stx)
   (syntax-parse stx
-    ([_ (type text:str)]
+    [(_ (type text:str))
+     #:with trimmed
+     (let* ([dat-text (syntax-e #'text)]
+            [lt (string-length dat-text)])
+       (datum->syntax #'text (substring dat-text 1 (sub1 lt))))
+     #'(type trimmed)
+     ])
+  )
+(define-syntax (markup-rec stx)
+  ; FIXME we may need a markup lexer which has slighly different
+  ; properties for inner markup, specifically wrt starting with a
+  ; marker
+  (syntax-parse stx
+    ((_ (type text:str))
      #:do [(define dat-text (syntax-e #'text))
+           (define dat-type (syntax->datum #'type))
            (define leading-len
              (caar
               (regexp-match-positions
-               (case (syntax->datum #'type)
+               (case dat-type
                  ((bold) #rx"\\*")
                  ((italic) #rx"/")
                  ((underline) #rx"_")
                  ((strike-through) #rx"\\+")
+                 #;
                  ((verbatim) #rx"=")
+                 #;
                  ((code) #rx"~"))
                dat-text)))
            #;
            (println dat-text)]
-     #:with leading (datum->syntax #'text (substring dat-text 0 leading-len))
+     ;#:with leading (datum->syntax #'text (substring dat-text 0 leading-len))
      ; #:with text-clean (datum->syntax #'text (substring dat-text 2 (sub1 (string-length dat-text))))
      #:with (more-par ...)
      (datum->syntax #'text
@@ -466,35 +485,27 @@
 
      ;#:with (expanded ...) (map (λ (e) (local-expand e 'expression #f)) (syntax-e #'more-par))
      ;#:do [(pretty-write (datum->syntax))]
-     (let ([out #'(list leading (type more-par ...))])
+     (let ([out #'(type more-par ...)])
+       #;
        (pretty-write (cons 'mumumumu: (syntax->datum out)))
        out
        )
      #;
      #'(unquote-splicing (list leading (type text-clean))))))
 
-(define-syntax (mu-par stx)
-  (syntax-parse stx
-    [(_ body ...)
-     ;#:with (wat ...)
-     ;(map (λ (e) (local-expand e 'expression (list #'markup))) (syntax-e #'(body ...)))
-     #'(list 'mu-par body ...)
-     ]
-    )
-  )
-
-(define-syntax (paragraph-2 stx)
-  (syntax-parse stx
-    [(_ body ...)
-     #:with (wat ...)
-     (map (λ (e) (local-expand e 'expression #f #;(list #'markup))) (syntax-e #'(body ...)))
-     ;#:do [(pretty-write (cons 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (syntax->datum #'(wat ...))))]
-     #'(wat ...)
-     ]
-    )
-  )
-
 (define-syntax (paragraph stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #:with (expanded ...)
+     (map (λ (e) (local-expand e 'expression #f #;(list #'verbatim #'code #;#'markup)))
+          (syntax-e #'(body ...)))
+     ;#:do [(pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...))))]
+     #'(expanded ...)
+     ]
+    )
+  )
+
+(define-syntax (paragraph-node stx)
   (syntax-parse stx
     [(_ body ...)
      #:with (expanded ...)
@@ -509,6 +520,7 @@
                    'expression
                    #f)
      (let ([out #'(list 'paragraph expanded ...)])
+       #;
        (pretty-write (cons 'p1p1p1: (syntax->datum out)))
        out)
      ]))
@@ -520,7 +532,8 @@
   (let ([out (parse-paragraph-to-datum
               (paragraph-make-tokenizer
                (open-input-string str)))])
-    (pretty-write out)
+    #;
+    (pretty-write (cons 'do-paragraph: out))
     out))
 
 (define (merge-thing do-fun l)

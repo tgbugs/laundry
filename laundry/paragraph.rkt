@@ -1,15 +1,20 @@
 #lang brag
 
-paragraph-2 : ( markup | stuff )* markup-eof?
+paragraph : markup? ( mu-pre markup | stuff | macro )* markup-eof?
 
-stuff : ( STUFF-B | STUFF-A | MARKER | MU-PRE-1 | newline )+ ; have to have + due to ambiguous max length of the lexer match
+stuff : ( STUFF-B | STUFF-A | MARKER | mu-pre | newline )+ ; have to have + due to ambiguous max length of the lexer match
 
 newline : NEWLINE
 
 ;;;; */_+=~
 
+;;; macros
+
+macro : MACRO
+
 ;;; markup
 
+@mu-pre : ( MU-PRE-N-NOT-LCB | MU-PRE-1 )+
 ; XXX I think it is overall simpler to understand and implement parsing of markup
 ; in a second pass over blocks that have already been determined to be paragraphs
 ; trying to parse markup at the top level leads to a number of issues since it is
@@ -27,12 +32,15 @@ newline : NEWLINE
 
 ;; NOTE FURTHER that MARKUP actually CANNOT BE PART OF THE GRAMMAR
 ;; because org files CAN DEFINE THEIR OWN MARKUP DELIMITERS!!!!!!!
-markup : ( bold | italic | underline | strike-through | code | verbatim )
+@markup : markup-rec | markup-terminal
+markup-rec : bold | italic | underline | strike-through
          ;| bold-italic | bold-underline | bold-strike-through
          ;| italic-underline | italic-strike-through | underline-strike-through
          ;| bold-italic-strike-through | bold-italic-underline
          ;| bold-underline-strike-through | italic-underline-strike-through
          ;| bold-italic-underline-strike-through) @mu-post?
+
+markup-terminal : code | verbatim
 
 bold : BOLD
 italic : ITALIC

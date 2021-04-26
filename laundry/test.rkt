@@ -604,12 +604,16 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "/*_ibu_*/")
   (dotest "_*/ubi/*_")
 
-  (dotest "*/_+bius+_/*") ; XXX broken
+  (dotest "*/_+bius+_/*")
 
   (dotest "*bold text /bi text/ bold _bu text_ bold =bold verb= bold ~bold code~ code*") ; NOOOOOOOOOOOOOO
 
+  (dotest "*b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*")
+
   (dotest "\n =v=")
   (dotest "\n =v=\n")
+  (dotest "*b*\n =v=")
+  (dotest "*b*\n =/v/=")
 
   (dotest " *b*")
   (dotest " =v=")
@@ -623,10 +627,17 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "~c~")
 
   )
+(module+ test-macros
+
+  (dotest "{{{macro}}}")
+  (dotest "{{{macro(a,b,c)}}}")
+
+  )
 
 (module+ test-comments
 
-  (dotest "35934" #:eq '(org-file (org-node (paragraph (parl-indent) (digits "35934")))))
+  (dotest "35934")
+  (dotest "35934" #:eq '(org-file (org-node (paragraph "35934"))))
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -1400,6 +1411,7 @@ you called?
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
    (submod ".." test-markup)
+   (submod ".." test-macros)
    (submod ".." test-comments)
    (submod ".." test-rando)
    (submod ".." test-drawers)

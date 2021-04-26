@@ -6,12 +6,14 @@
                   drawer-ish
                   heading
                   hyperlink
+                  #|
                   markup-*
                   markup-/
                   markup-_
                   markup-+
                   markup-=
                   markup-~
+                  |#
                   paragraph))
 
 (provide colorer)
@@ -68,6 +70,10 @@
 
 ; https://docs.racket-lang.org/framework/Color.html see start-colorer get-token
 (define (colorer input-port offset dont-stop-thing)
+  ; TODO a more complex colorer is required to even get close to org highlighting
+  ; best case it searches backward to the previous heading in reasonably
+  ; sized chunks, and then once found it parses that section to the next
+  ; heading, and probably uses a cache of the parse tree to keep it fast
   (let ([lexeme 'lol]
         [category 'other]
         [paren? #f]

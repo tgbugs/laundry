@@ -215,6 +215,9 @@
 
 (define paragraph-lexer
   (lexer-srcloc
+   [(from/to (:seq "{{{" alpha) "}}}") (token 'MACRO lexeme)]
+   #; ; the spec for macro reads like it can be multi-line
+   [(:seq "{{{" alpha (:+ (:or alpha 0-9 "-" "_")) (:? (:seq "(" ")")) "}}}") (token 'MACRO lexeme)]
    [(:+ (:~ mu-pre-1 mu-marker mu-post-1)) (token 'STUFF-B lexeme)]
 
    #|
@@ -254,6 +257,7 @@
 
    [(:+ (:or (:& (:~ mu-pre-1) mu-post-1) mu-marker)) (token 'STUFF-A lexeme)]
 
+   [mu-pre-n-not-lcb (token 'MU-PRE-N-NOT-LCB lexeme)] ; LCB cannot be in mu-pre-n because it would block macro
    [mu-pre-1 (token 'MU-PRE-1 lexeme)] ; needed to prevent accidental capture when :+ length for stuff is longer than markup
 
    #;

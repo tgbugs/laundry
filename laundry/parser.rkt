@@ -65,7 +65,7 @@ org-node : headline-node | org-node-basic
 @org-node-basic-element : drawer
                         | blk-dyn
                         | org-nbe-less-d
-                        | paragraph ;paragraph-line
+                        | paragraph-node ;paragraph-line
                         ; | detached-block-node ; still causing too many issues for well formed blocks
 
 @org-nbe-less-df : block-less-dyn
@@ -81,7 +81,7 @@ org-node : headline-node | org-node-basic
                 | footnote-definition
 
 @org-nbe-less-f : @org-nbe-less-df
-                | paragraph ; FIXME paragraph-line doesn't know about footnotes yet
+                | paragraph-node ; FIXME paragraph-line doesn't know about footnotes yet
 
 @org-nbe-f-in : @org-nbe-less-df
               | paragraph-f-in ; FIXME I'm pretty sure we need org-node-footnote just like org-node-dyn
@@ -99,7 +99,7 @@ org-node : headline-node | org-node-basic
 ; through we can only fall through for a single line, then we stitch
 ; it back together in post
 
-paragraph : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
+paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 paragraph-line : newline-or-bof ( parl-lines | end )
 paragraph-line-d : newline ( parl-lines ) ; XXX unused ??
 hyperlink : LINK

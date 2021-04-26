@@ -253,7 +253,7 @@
 
   )
 
-(module+ test-planning
+(module+ test-planning ; FIXME very broken now
   (dotest "* H\nDEADLINE:")
   (dotest "* H\nSCHEDULED:")
   (dotest "* H\nCLOSED:")
@@ -626,7 +626,11 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "=v=")
   (dotest "~c~")
 
+  (dotest "d/f \\/")
+  (dotest "d*f \\*")
+
   )
+
 (module+ test-macros
 
   (dotest "{{{macro}}}")

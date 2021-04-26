@@ -2,7 +2,7 @@
 
 paragraph : markup? ( mu-pre markup | stuff | macro )* markup-eof?
 
-stuff : ( STUFF-B | STUFF-A | MARKER | mu-pre | newline )+ ; have to have + due to ambiguous max length of the lexer match
+stuff : ( STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline )+
 
 newline : NEWLINE
 
@@ -48,6 +48,8 @@ underline : UNDERLINE
 strike-through : STRIKE
 code : CODE
 verbatim : VERBATIM
+
+@mu-free : BOLD | ITALIC | UNDERLINE | STRIKE | VERBATIM ; x/a b/ like cases
 
 markup-eof : eof-bold | eof-italic | eof-underline | eof-strike-through | eof-code | eof-verbatim
 

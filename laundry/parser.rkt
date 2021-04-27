@@ -100,12 +100,12 @@ org-node : headline-node | org-node-basic
 ; it back together in post
 
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
-paragraph-line : newline-or-bof ( parl-lines | end )
+paragraph-line : newline-or-bof parl-lines
 paragraph-line-d : newline ( parl-lines ) ; used in drawers
 hyperlink : LINK
 
 paragraph-f-in : @paragraph-line-f-in+
-paragraph-line-f-in : newline ( parl-lines | misplaced-footnote-definition | end )
+paragraph-line-f-in : newline ( parl-lines | misplaced-footnote-definition )
 
 misplaced-footnote-definition : footnote-definition-line
 
@@ -171,6 +171,7 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/
           | planning-dissociated
           | ak-key-no-colon
           | babel-call-no-colon
+          | end-drawer
 
 malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
 
@@ -405,11 +406,11 @@ h-ctt-start : ( h-comment | @headline-chars-complex ) @not-newline? not-tags
 ; to parse a property drawer correctly if it hits a point where it
 ; must backtrack because the regular drawer will take precednece
 ; this is EXTREMELY annoying and there is no way around it
-property-drawer : pdrawer-unparsed | newline wsnn* properties node-property* /nlws end
+property-drawer : pdrawer-unparsed | newline wsnn* properties node-property* /nlws end-drawer
 ; NOTE when this fails to parse, it WILL parse as a regular drawer
 pdrawer-unparsed : DRAWER-PROPS
 properties : PROPERTIES-D ; COLON "properties" COLON
-end : END-D ; COLON "end" COLON
+end-drawer : END-D ; COLON "end" COLON
 plus : PLUS
 node-property : /newline wsnn* /COLON property-name plus? /COLON [ property-value ] ; the spec does not say it but the implementation allows value to be empty
 ; the spec for node-property and the implementation are different
@@ -427,7 +428,7 @@ property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newli
 ; this means that we have to fully specify how drawers and property drawers because the ambiguity
 ; in the grammar is exploited by the parser to increase performance
 drawer : DRAWER | drawer-spec | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
-@drawer-spec : newline-or-bof wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end ; XXX the second wsnn* is undocumented
+@drawer-spec : newline-or-bof wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end-drawer ; XXX the second wsnn* is undocumented
 drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ; FIXME word constituent ???
 ;drawer-contents : ( newline @not-newline )* ; FIXME big issue with headlines
 
@@ -647,14 +648,14 @@ blk-src-parameters : COLON not-newline ; TODO
                    | wsnn+ COLON not-newline ; TODO
 
 @blk-src-args-after-switches-sane : blk-src-parameters
-                                  | not-dq-ph-newline not-newline? ; TODO not-dq-ph-colon-newline for params
+                                  | @not-dq-ph-newline not-newline? ; TODO not-dq-ph-colon-newline for params
                                   | switch-sign not-alpha-newline1 not-newline?
                                   | switch-sign ( @alpha @not-whitespace | @word-char-n ) @not-newline?
                                   | blk-src-args-broken ; XXX user done goofed
 
 ; you may have a dq there but then no more dq at all on the line
 ; this will be extremely weird, but could happen
-blk-src-args-broken : DQ not-dq-newline?
+blk-src-args-broken : DQ @not-dq-newline?
 
 format-string : /DQ format-string-contents /DQ
 ; TODO other escape sequences

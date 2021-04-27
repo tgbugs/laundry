@@ -141,7 +141,7 @@
 
 (define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
 
-(define (bind-runtime-todo-keywords keywords)
+(define (bind-runtime-todo-keywords [keywords #f])
   ; FIXME I swear this is as close to absolutely having to use
   ; eval as I have ever come, and it is because brag and agg
   ; are completely static macros with regard to specifying the tokenizer
@@ -155,18 +155,21 @@
   (define heading-lexer-src
     ; XXX this lexer should ALWAYS be given strings that start and end with a newline
     #`(lexer-srcloc
-       [(:seq "\n" (:+ "*") (:+ " ")) ; eat > 1 whitespace after stars
-        ; why the heck doesn't this take priority over the regular old newline??
+       [(from/stop-before (:seq "\n" (:+ "*")) (:or " " "\t"))
+        ; XXX stars eating the space is a design flaw, the tokenizer must peek
         (token 'STARS lexeme)]
-       ;;["*" (token 'ASTERISK lexeme)]
-       [(:or (:seq (:+ (:or " " "\t"))
-                   (:+ ":" (:+ (:or alpha "_" "@" "#" "%")))
-                   ":"
-                   ; FIXME SIGH we can't include eof here because ... reasons ??
-                   (:* (:or " " "\t"))
-                   "\n"))
+       [(:seq (:+ (:or " " "\t"))
+              (:+ ":" (:+ (:or alpha 0-9 "_" "@" "#" "%"))) ; XXX unicode dialect and ascii dialect?
+              ":"
+              ; FIXME SIGH we can't include eof here because ... reasons ??
+              (:* (:or " " "\t"))
+              "\n")
         (token 'TAGS lexeme)]
        ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; this must come befor RTK
+       #; ; we don't need this anymore it complicates the grammar signiciantly
+       ; it was originally retained to deal with divergent behavior between org-element and the archive
+       ; functionality itself, but since we have fixed the issue and are using stop-before, we don't need
+       ; this anymore
        [":ARCHIVE:" (token 'ARCHIVE lexeme)] ; we keep this so we can catch lone archive tags more easily
        [runtime-todo-keyword (token 'RUNTIME-TODO-KEYWORD lexeme)]
        [(:seq "[#" upper-case "]") (token 'PRIORITY lexeme)]

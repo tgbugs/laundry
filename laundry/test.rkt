@@ -6,10 +6,16 @@
          racket/pretty
          racket/string
          laundry/parser
-         laundry/tokenizer)
+         laundry/tokenizer
+         (rename-in (only-in laundry/heading make-rule-parser)
+                    [make-rule-parser heading-rule-parser]))
 
-(provide dotest dotest-q dotest-file)
+(provide dotest dotest-q dotest-file dotest-quiet)
 (define testing-parse (make-parameter parse))
+(define testing-token (make-parameter laundry-make-tokenizer))
+(define dotest-prefix (make-parameter #f))
+(define dotest-suffix (make-parameter #f))
+(define dotest-quiet (make-parameter #t)) ; parameters across require ... ?
 #;
 (define testing-parse-to-datum (make-parameter parse-to-datum))
 (define (rec-cont tree atom)
@@ -24,7 +30,12 @@
                 #:parse-to-datum [parse-to-datum #f]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
-  (define (t) (laundry-make-tokenizer (open-input-string test-value)))
+  (define test-value-inner
+    (let ([p (dotest-prefix)]
+          [s (dotest-suffix)])
+      (let ([prepended (if p (string-append p test-value) test-value)])
+        (if s (string-append prepended s) prepended))))
+  (define (t) ((testing-token) (open-input-string test-value-inner)))
   (define hrm ((if parse-to-datum
                    parse-to-datum
                    (compose syntax->datum (testing-parse)))
@@ -32,22 +43,24 @@
   (when (and node-type (not (rec-cont hrm node-type)))
     (error (format "parse does not contain ~s" node-type)))
   (when (and eq (not (equal? eq hrm)))
-    (error (format "foo ~s ~s" test-value hrm)))
-  (when (not quiet)
-    (pretty-write (cons 'dotest: hrm)))
+    (error (format "foo ~s ~s" test-value-inner hrm)))
+  ; WAIT!? setting a parameter modifies the parent in module+ but not
+  ; if you actually require the module !? ARGH!
+  (unless (or quiet (dotest-quiet))
+    (pretty-write (list 'dotest: hrm)))
   (if do-expand
     (when do-expand ; LOL when x vs begin ...
       (define hrms #`(module org-module laundry/expander
-                       #,((testing-parse) ; FIXME this has GOT to be a bug
+                       #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
                           #; ; NAH just a completely insane case-lambda
                           ; that causes the call to revert to the full grammar
-                          (format "test-source ~s" test-value)
+                          (format "test-source ~s" test-value-inner)
                           (t))))
       (parameterize ([current-namespace ns-test])
         (eval-syntax hrms)
         (define root (dynamic-require ''org-module 'root))
         (when (and eq-root (not (equal? eq-root root)))
-          (error (format "foo ~s ~s" test-value root)))
+          (error (format "foo ~s ~s" test-value-inner root)))
         (unless (or eq-root node-type)
           root)))
     (unless (or eq node-type)
@@ -226,40 +239,46 @@
   )
 
 (module+ test-headline-content
-  ; XXX these tests have to be run with headline-content-2 as the top node of the (a) grammar
-  (dotest "")
-  (dotest ":")
-  (dotest ": ")
-  (dotest ":t:")
-  (dotest ":n: :t:") ;
-  (dotest "TODO")
-  (dotest "DONE")
 
-  (dotest "DONE :t:")
-  (dotest "DONE:t:") ;
-  (dotest "DONE :n: :t:") ;
+  (parameterize ([testing-parse
+                  ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
+                  (heading-rule-parser --test--heading-rest)]
+                 [testing-token (bind-runtime-todo-keywords)]
+                 [dotest-prefix " "]
+                 [dotest-suffix "\n"])
+    (dotest "")
+    (dotest ":")
+    (dotest ": ")
+    (dotest ":t:")
+    (dotest ":n: :t:") ;
+    (dotest "TODO")
+    (dotest "DONE")
 
-  (dotest "DONE T")
-  (dotest "DONE COMMENT T")
-  (dotest "DONE [#P] COMMENT T")
-  (dotest "DONE [#P] COMMENT T :n: :t:") ;
-  (dotest "DONE [#P] COMMENT Title")
-  (dotest "DONE [#P] COMMENT Title :n: :t:") ;
+    (dotest "DONE :t:")
+    (dotest "DONE:t:") ;
+    (dotest "DONE :n: :t:") ;
 
-  (dotest "DONE[#P] COMMENT Title")
-  (dotest "DONE[#P] COMMENT Title :tag:")
+    (dotest "DONE T")
+    (dotest "DONE COMMENT T")
+    (dotest "DONE [#P] COMMENT T")
+    (dotest "DONE [#P] COMMENT T :n: :t:") ;
+    (dotest "DONE [#P] COMMENT Title")
+    (dotest "DONE [#P] COMMENT Title :n: :t:") ;
 
-  (dotest "DONE[#P] COMMENT T :t:")
-  (dotest "DONE[#P] COMMENT T :t:")
+    (dotest "DONE[#P] COMMENT Title")
+    (dotest "DONE[#P] COMMENT Title :tag:")
 
-  (dotest "DONE Title")
-  (dotest "DONE Title :t:")
+    (dotest "DONE[#P] COMMENT T :t:")
+    (dotest "DONE[#P] COMMENT T :t:")
 
-  (dotest "T :n: :t:")
-  (dotest "T :t:")
-  (dotest "T n:t:")
+    (dotest "DONE Title")
+    (dotest "DONE Title :t:")
 
-  )
+    (dotest "T :n: :t:")
+    (dotest "T :t:")
+    (dotest "T n:t:")
+
+  ))
 
 (module+ test-planning ; FIXME very broken now
   (dotest "* H\nDEADLINE:")
@@ -286,6 +305,8 @@
   ; FIXME not sure what COMMENT breaks things ?!
   ;(define test-value "this is ORG MODE\n* headline\n YEAH\n** COMMENT comment headline\nstuff\n* hl2 :tag:\n")
   ; ok, so BOF and EOF are causing annoying edge cases
+  #;
+  (dotest-quiet #f)
 
   (dotest "* " #:node-type 'headline)
   (dotest (string-append (make-string 99 #\*) " "))
@@ -315,16 +336,29 @@
   (dotest "* [#P]COMMENTT :ARCHIVE:") ; ok !?
 
   (dotest "* Headline [#P]COMMENT Title")
-  (dotest "* H [#P]COMMENT T") ; broken
-  (dotest "* H [#P]COMMENT Ti") ; working ah the one and the many >_<
-  (dotest "* H [#P]COMMENT Ti :t:") ; working
-  (dotest "* H [#P]COMMENT T :t:") ; working
+
+  (dotest "* H [#P]COMMENT T")
+  (dotest "* H [#P]COMMENT Ti")
+  (dotest "* H [#P]COMMENT Ti :t:")
+  (dotest "* H [#P]COMMENT T :t:")
   (dotest "* H [#P]COMMENT :t:")
-  ; the brokeness here seems to be related to htn vs ht0 vs h-tags /wsnn*
-  (dotest "* H [#P]COMMENT:t:") ; broken 
-  (dotest "* H [#P]COMMENT:ta:") ; working WAT
-  (dotest "* H [#P]COMMENT:t: ") ; working ... wtf
-  (dotest "* H [#P]COMMENT:ARCHIVE:") ; urg
+  (dotest "* H [#P]COMMENT:t:")
+  (dotest "* H [#P]COMMENT:ta:")
+  (dotest "* H [#P]COMMENT:t: ")
+  (dotest "* H [#P]COMMENT:ARCHIVE:")
+
+  ; the behavior of org-export is clear here
+  (dotest "* TODO[#P]COMMENT T")
+  (dotest "* TODO[#P]COMMENT Ti")
+  (dotest "* TODO[#P]COMMENT Ti :t:")
+  (dotest "* TODO[#P]COMMENT T :t:")
+  (dotest "* TODO[#P]COMMENT :t:")
+  (dotest "* TODO[#P]COMMENT:t:")
+  (dotest "* TODO[#P]COMMENT:ta:")
+  (dotest "* TODO[#P]COMMENT:t: ")
+  (dotest "* TODO[#P]COMMENT:ARCHIVE:")
+
+  (dotest "* COMMENTARY") ; the poor sods
 
   ; wow wtf these are max spook
   (dotest "* H [#P]COMMENTT")
@@ -334,6 +368,7 @@
   (dotest "*   [#P]COMMENT Sigh")
   (dotest "* H [#P]COMMENT Sigh :tag:")
   (dotest "*   [#P] COMMENT Sigh")
+  (dotest "*   [#P]  COMMENT Sigh")
   (dotest "* H [#P]  COMMENT Sigh :tag:")
 
   (dotest "* H [#P]\n") ; broken again
@@ -655,7 +690,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
 (module+ test-comments
 
   (dotest "35934")
-  (dotest "35934" #:eq '(org-file (org-node (paragraph "35934"))))
+  (dotest "35934" #:eq-root '(org-file (org-node (paragraph "\n35934")))) ; FIXME bof newline ...
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -871,6 +906,7 @@ random end
   (dotest ":d:\n* \n:end:") ; foo yeah it works ; FIXME malformed ?
 
   (dotest ":ARCHIVE:\n:end:")
+
   )
 
 (module+ test-string
@@ -892,14 +928,15 @@ random end
 
   )
 
+#; ; slows the build, and most are tested in test-block-switches now
 (module+ test-switches
 
-  #;
-  (testing-parse (make-rule-parser --test--switches-sane)) ; this sets for the parent module as well
-  #; ; slows the build,and most are tested in test-block-switches now
-  (parameterize* ([testing-parse
-                   ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
-                   (make-rule-parser --test--switches-sane)])
+  #; ; this sets for the parent module as well but not on require?
+  (testing-parse (make-rule-parser --test--switches-sane))
+
+  (parameterize ([testing-parse
+                  ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
+                  (make-rule-parser --test--switches-sane)])
 
     (dotest "-r -q")
     (dotest "+r +q")
@@ -911,52 +948,56 @@ random end
     ))
 
 (module+ test-block-switches
-  (dotest "#+begin_src elisp -r -l \"(ref:%s)\" +e -e :noweb yes :tangle (some-file \"oh great\")")
-  (dotest "#+begin_src elisp -r -l \"(ref:%s)\" +e -e")
-  (dotest "#+begin_src elisp -r -l \"(ref\\\":%s)\" +e -e")
-  (dotest "#+begin_src elisp -r")
-  (dotest "#+begin_src elisp -r ")
-  (dotest "#+begin_src elisp -r -e")
-  (dotest "#+begin_src elisp -r +e")
-  (dotest "#+begin_src elisp -r +e         \" aa a wat")
-  (dotest "#+begin_src elisp -r +e \"")
+  (define strings
+    '("#+begin_src elisp -r -l \"(ref:%s)\" +e -e :noweb yes :tangle (some-file \"oh great\")"
+      "#+begin_src elisp -r -l \"(ref:%s)\" +e -e"
+      "#+begin_src elisp -r -l \"(ref\\\":%s)\" +e -e"
+      "#+begin_src elisp -r"
+      "#+begin_src elisp -r "
+      "#+begin_src elisp -r -e"
+      "#+begin_src elisp -r +e"
+      "#+begin_src elisp -r +e         \" aa a wat"
+      "#+begin_src elisp -r +e \""
 
-  (dotest "#+begin_src elisp -r +e \"broken line ")
-  (dotest "#+begin_src elisp -r +1 \"this is still weird but not completely broken\"")
+      "#+begin_src elisp -r +e \"broken line "
+      "#+begin_src elisp -r +1 \"this is still weird but not completely broken\""
 
-  (dotest "#+begin_src elisp -l \"foo\"")
-  (dotest "#+begin_src elisp -l \"foo\" -s ")
-  (dotest "#+begin_src elisp -s -l \"foo\"")
-  (dotest "#+begin_src elisp -s -l \"foo\" -s ")
+      "#+begin_src elisp -l \"foo\""
+      "#+begin_src elisp -l \"foo\" -s "
+      "#+begin_src elisp -s -l \"foo\""
+      "#+begin_src elisp -s -l \"foo\" -s "
 
-  (dotest "#+begin_src elisp -l \"foo\" aaaaaaaaaaaaaaaaaa")
-  (dotest "#+begin_src elisp -l \"foo\" -s aaaaaaaaaaaaaaaaaa")
-  (dotest "#+begin_src elisp -s -l \"foo\" aaaaaaaaaaaaaaaaaa")
-  (dotest "#+begin_src elisp -s -l \"foo\" -s aaaaaaaaaaaaaaaaaa")
+      "#+begin_src elisp -l \"foo\" aaaaaaaaaaaaaaaaaa"
+      "#+begin_src elisp -l \"foo\" -s aaaaaaaaaaaaaaaaaa"
+      "#+begin_src elisp -s -l \"foo\" aaaaaaaaaaaaaaaaaa"
+      "#+begin_src elisp -s -l \"foo\" -s aaaaaaaaaaaaaaaaaa"
 
-  (dotest "#+begin_src elisp -l \"foo\" -lol")
-  (dotest "#+begin_src elisp -l \"foo\" +lol")
+      "#+begin_src elisp -l \"foo\" -lol"
+      "#+begin_src elisp -l \"foo\" +lol"
 
-  (dotest "#+begin_src elisp -1")
-  (dotest "#+begin_src elisp -s -w \"wat\" -11111111111 eeeeeeeeeeeeeee")
-  (dotest "#+begin_src elisp -s -w \"wat\" -s")
-  (dotest "#+begin_src elisp -s -w \"wat\" -sa")
-  (dotest "#+begin_src elisp -s -w \"wat\" -s-") ; x
-  (dotest "#+begin_src elisp -s -w \"wat\" -s+") ; x
+      "#+begin_src elisp -1"
+      "#+begin_src elisp -s -w \"wat\" -11111111111 eeeeeeeeeeeeeee"
+      "#+begin_src elisp -s -w \"wat\" -s"
+      "#+begin_src elisp -s -w \"wat\" -sa"
+      "#+begin_src elisp -s -w \"wat\" -s-" ; x
+      "#+begin_src elisp -s -w \"wat\" -s+" ; x
 
-  (dotest "#+begin_src elisp -l \"foo\" -1")
-  (dotest "#+begin_src elisp -l \"foo\" +1")
-  (dotest "#+begin_src elisp -l \"foo\" + ")
-  (dotest "#+begin_src elisp -l \"foo\" - ")
+      "#+begin_src elisp -l \"foo\" -1"
+      "#+begin_src elisp -l \"foo\" +1"
+      "#+begin_src elisp -l \"foo\" + "
+      "#+begin_src elisp -l \"foo\" - "
 
-  (dotest "#+begin_src elisp -l \"foo\" -e - ")
+      "#+begin_src elisp -l \"foo\" -e - "
 
-  ; just because I'm evil and we can
-  (dotest "#+begin_src elisp -l \"foo\" -l \"you\"")
-  (dotest "#+begin_src elisp -s -l \"foo\" -l \"you\"")
-  (dotest "#+begin_src elisp -s -l \"foo\" -s -l \"you\"")
-  (dotest "#+begin_src elisp -s -l \"foo\" -s -l \"you\" -s")
-
+      ; just because I'm evil and we can
+      "#+begin_src elisp -l \"foo\" -l \"you\""
+      "#+begin_src elisp -s -l \"foo\" -l \"you\""
+      "#+begin_src elisp -s -l \"foo\" -s -l \"you\""
+      "#+begin_src elisp -s -l \"foo\" -s -l \"you\" -s"))
+  (for/list ([s strings])
+    (dotest s))
+  (for/list ([s strings])
+    (dotest (string-append s "\n#+end_src")))
   )
 
 (module+ test-blk-dyn
@@ -1216,8 +1257,9 @@ drawer contents
   ; things that work and should continue to work
 
   (dotest "* ")
-  (dotest "* " #:eq h-l1)
-  (dotest "*  " #:eq h-l1)
+  (dotest "* " #:eq-root h-l1)
+  (dotest "*  " #:eq-root h-l1)
+  (dotest "*                                     ")
   (dotest "* COMMENT")
   (dotest "* COMMENT ")
   (dotest "* ::" ); #:eq h-l1-t)
@@ -1229,16 +1271,27 @@ drawer contents
   (dotest "* [#P]" );#:eq h-l1-p) ; foo
   (dotest "* [#P] " ); #:eq h-l1-p) ; foo
 
+  #;
   (dotest "" #:eq     '(org-file (org-node (bof))))
+  (dotest "" #:eq-root '(org-file (org-node "\n")))
+  #;
   (dotest "\n" #:eq   '(org-file (org-node (bof)) (org-node (newline #f))))
+  (dotest "\n" #:eq-root '(org-file (org-node "\n") (org-node "\n")))
+  #;
   (dotest "  " #:eq   '(org-file (org-node (paragraph (space #f) (space #f)))))
-  (dotest "  ")
-  (dotest "  \n" #:eq '(org-file (org-node (paragraph (space #f) (space #f))) (org-node (newline #f))))
+  (dotest "  " #:eq-root   '(org-file (org-node (paragraph "\n  "))))
+  (dotest "  \n" #:eq-root '(org-file (org-node (paragraph "\n  "))
+                                      (org-node "\n")))
 
+  (dotest "* :tag:")
   (dotest "*   :ARCHIVE:")
   (dotest "*   :ARCHIVE:t:")
   (dotest "* :t:ARCHIVE:")
   (dotest "* :t:ARCHIVE:1:")
+
+  (dotest "* this is an example of :ARCHIVE: being used inline and :in:a:ARCHIVE:tag:")
+
+  (dotest "* :t:ARCHIVE:!:") ; BANG not tags
 
   (dotest "* :t:1:@:#:_:%:")
   (dotest "*   :!asdft1@#_%:       ")
@@ -1250,6 +1303,7 @@ drawer contents
   (dotest "* :a:!b:cd:")
   (dotest "* :a:-b:cd:")
 
+  ; TODO iirc plain list lines probably also need their own subgrammar
   (dotest "- [@9")
   (dotest "- [@9]")
   (dotest "- [@999")
@@ -1419,7 +1473,7 @@ you called?
 
 (module+ test
   (require
-   ;(submod ".." test-headline-content)
+   (submod ".." test-headline-content)
    (submod ".." test-bof)
    (submod ".." test-list)
    (submod ".." test-npnn)
@@ -1435,6 +1489,7 @@ you called?
    (submod ".." test-rando)
    (submod ".." test-drawers)
    (submod ".." test-string)
+   #; ; see note at module
    (submod ".." test-switches)
    (submod ".." test-block-switches)
    (submod ".." test-blk-dyn)
@@ -1446,8 +1501,9 @@ you called?
    (submod ".." test-keywords)
    (submod ".." test-sentinel)
    (submod ".." test-word-char-vs-word-char-n)
-   ;;(submod ".." test-files) ; XXX big boy
    (submod ".." test-not-markup)
+   #; ; XXX big boy
+   (submod ".." test-files)
    #; ; known broken
    (submod ".." test-known-broken)
    ))

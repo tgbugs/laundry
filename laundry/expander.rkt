@@ -89,6 +89,7 @@
              ))
      ]))
 
+#; ; not needed because name is factored out unlike for define-node
 (define-syntax (define-sa-node stx)
   (syntax-parse stx
     [(_ name)
@@ -111,10 +112,24 @@
                       sigh)))
             #'appended]))]))
 
+(define-syntax (sa-node stx)
+  (syntax-parse stx
+    [(_) #'""] ; needed for cases like parl-indent
+    [(_ body)
+     (local-expand #'body 'expression #f)]
+    [(_ body ...+)
+     (datum->syntax
+      #'(body ...)
+      (apply string-append
+             (map (λ (e)
+                    ; FIXME we need to collect malformed properties here I think
+                    (syntax->datum (local-expand e 'expression #f)))
+                  (syntax->list #'(body ...)))))]))
+
 (define-syntax (define-sa-nodes stx)
   (syntax-parse stx
     [(_ name ...)
-     #'(begin (define-sa-node name) ...)]))
+     #'(begin (define-syntax name (make-rename-transformer #'sa-node)) ...)]))
 
 (define-syntax (define-sa-alt-node stx)
   (syntax-parse stx
@@ -124,8 +139,15 @@
       #'name
       (string->symbol
        (format "node-~a" (syntax-e #'name))))
+     #:with sa-name
+     (datum->syntax
+      #'name
+      (string->symbol
+       (format "sa-~a" (syntax-e #'name))))
      #:with elipsis (datum->syntax this-syntax '...)
      #'(begin
+         #; ; we don't actually need this because sa-node can be used directly as a syntax parameter
+         (define-rename-transformer-parameter sa-name (make-rename-transformer #'sa-node))
          (define-syntax (node-name stx)
           (syntax-parse stx
             [(_ body elipsis)
@@ -200,76 +222,8 @@
     [(_ name ...)
      #'(begin (define-sa-keep-node name) ...)]))
 
-(module+ test-sa-alt
-
-  (require racket/stxparam)
-  #;
-  (define-syntax node (make-rename-transformer #'node-node))
-
-  (define-rename-transformer-parameter node (make-rename-transformer #'node-node))
-  #;
-  (begin-for-syntax
-    ; somehow this has to come before any useage !?
-    (define-rename-transformer-parameter node (make-rename-transformer #'node-node))
-    #;
-    (define-syntax-parameter node (λ (stx) 'poofoo)))
-
-  (define-syntax (outer stx)
-    (syntax-parse stx
-      [(_ body ...)
-       (local-expand
-        ; HAHA ! all it required was to invert the calling order DUH
-        ; XXX excep that it doesn't work if the value is passed to another
-        ; macro that expects the value to have been resolved because it includes
-        ; values that are not macros
-        #'(syntax-parameterize ([node (make-rename-transformer #'sa-node)])
-            (node body ...))
-        'expression
-        #f)
-       #; ; the parameterization must be at the surface level
-       ; there might be a way to rewrite the whole syntax so that it
-       ; is itself wrapped in the parameterizeation and then re-expanded though ...
-       ; HRM
-       (syntax-parameterize ([node (make-rename-transformer #'sa-node)])
-         #;
-         #'(cons 'outer (list body ...))
-         (local-expand #'(node body ...) 'expression #f)
-         )
-       #;
-       (local-expand #'(node body ...) 'expression #f)
-       ]))
-
-  (define-syntax (node-node stx)
-    (syntax-parse stx
-      [(_ body ...)
-       #;
-       #'(cons 'node (list body ...))
-       #'"node"
-       ]))
-
-  (define-syntax (sa-node stx)
-    (syntax-parse stx
-      [(_ body ...)
-       #;
-       (datum->syntax
-             #'(body ...)
-             (apply string-append
-                    (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
-                         (syntax-e #'(body ...)))))
-
-       #'"sa-node"
-       ]))
-
-  (define out (outer (node "hello")))
-  (define in
-    (syntax-parameterize ([node (make-rename-transformer #'sa-node)])
-      (outer (node "hello"))))
-  out
-  in
-
-  )
-
 (define-sa-keep-nodes
+  #; ; FIXME h-title must use the paragraph parser internally
   h-title
   plain-list-line-tail
   table-cell)
@@ -336,7 +290,11 @@
   ; when we roll these up to be strings again for reparsing as a paragraph
 
   sa-malformed
+  #|
   sa-blk-src-begin
+  sa-blk-src-line-contents
+  sa-end-drawer
+  |#
 
   malformed-wsnn
   detached-block-node
@@ -353,6 +311,19 @@
 
 (define-sa-alt-nodes
   blk-src-begin
+  blk-src-line-contents
+
+  language
+  blk-src-line-rest-alt
+  switches-sane
+  switch-sane
+  format-string
+  format-string-contents
+  blk-src-parameters
+  blk-src-args-broken
+  blk-src-end
+
+  end-drawer
   )
 #;
 (begin-for-syntax
@@ -382,7 +353,8 @@
   bullet-plain
   drawer
   drawer-name
-  end ; end is tricky because we do want to warn on it
+  #;
+  end-drawer ; end is tricky because we do want to warn on it
   table
   table-row
   hyperlink
@@ -399,6 +371,7 @@
   keyword-value
   keyword-key-sigh
   keyword-value-sigh
+  keyword-options
 
   affiliated-keyword
   un-affiliated-keyword
@@ -421,19 +394,9 @@
   fn-def
 
   blk-src
-  #;
-  (sa blk-src-begin) ; somehow the syntax parameter overrides these?
-  blk-src-line-contents
-  language
-  blk-src-line-rest-alt
-  switches-sane          --test--switches-sane
-  switch-sane
-  format-string
-  format-string-contents
-  blk-src-args-broken
-  blk-src-parameters
+
   blk-src-contents
-  blk-src-end
+
   block-begin-line
   block-end-line
 
@@ -478,6 +441,11 @@
 
   bold-italic-underline-strike-through
   |#
+  )
+
+(define-nodes ; test parsers
+  --test--switches-sane
+  --test--heading-rest
   )
 
 (define-syntax (newline stx) (syntax/loc stx "\n"))
@@ -528,17 +496,13 @@
      ;#:do [(define int-ctx (syntax-local-make-definition-context))]
      (datum->syntax
       #'(body ...)
-      (do-headline
-       (apply string-append
-              (map (λ (e)
-                     (syntax->datum
-                      (local-expand e 'expression #f
-                                    #; ; shouldn't need because we use datum->syntax above
-                                    (internal-definition-context-track
-                                     int-ctx
-                                     #'(body ...))
-                                    )))
-                   (syntax-e #'(body ...))))))]))
+      (let ([heading-input-raw
+             (apply string-append
+                    (map (λ (e)
+                           (syntax->datum
+                            (local-expand e 'expression #f)))
+                         (syntax->list #'(body ...))))])
+        (do-headline heading-input-raw)))]))
 
 (define-syntax (heading stx)
   (syntax-parse stx
@@ -579,6 +543,22 @@
     [(_ tag-string:str)
      (process-tag-string #'tag-string)]))
 
+(define-syntax (h-title stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #:do [(define title-input
+             (apply string-append
+                    (map (λ (e)
+                           (syntax->datum
+                            (local-expand e 'expression #f)))
+                         (syntax->list #'(body ...)))))]
+     #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
+                            (datum->syntax
+                             #'(body ...)
+                             (do-paragraph title-input))
+                            'expression #f)
+     #'(list 'h-title expanded ...)]))
+
 (define-syntax h-t-rpc-t (make-rename-transformer #'h-title))
 (define-syntax h-t-pc-t (make-rename-transformer #'h-title))
 (define-syntax h-t-c-t (make-rename-transformer #'h-title))
@@ -593,16 +573,14 @@
 
 (define-for-syntax (do-headline str)
   (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
-         [out (
-               #;
-               (compose syntax->datum (make-rule-parser headline-content-2))
-               parse-heading-to-datum
+         [heading-input (with-newlines str)]
+         #;
+         [__ (displayln (format "heading-input: ~s" heading-input))]
+         [out (parse-heading-to-datum
                (heading-make-tokenizer
-                (open-input-string (let ([s (with-newlines str)])
-                                     #;
-                                     (displayln (format "AAAAAAAAAAAAAAAA: ~s" s))
-                                     s
-                                     ))))])
+                (open-input-string heading-input)))])
+    #;
+    (pretty-write (list 'do-heading-out: out))
     out))
 
 ; paragraph
@@ -659,29 +637,35 @@
      #;
      #'(unquote-splicing (list leading (type text-clean))))))
 
+(begin-for-syntax
+  (define-namespace-anchor anc-mal)
+  (define ns-mal (namespace-anchor->namespace anc-mal)))
 (define-syntax (malformed stx)
   (syntax-parse stx
-    #; ;sigh
-    [(_ body ...)
-     (local-expand
-      #'(syntax-parameterize ([blk-src-begin (make-rename-transformer #'sa-blk-src-begin)])
-          (sa-malformed body ...))
-      'top-level #f
-      )
-     ]
     [(_ body ...)
      (define-values (transparent opaque)
-       (syntax-local-expand-expression ; this gets us closer ...
-        #'(syntax-parameterize ([blk-src-begin (make-rename-transformer #'sa-blk-src-begin)])
-            (sa-malformed body ...))
-        ))
-     (println transparent)
-     (datum->syntax
-      #'(body ...)
-      ; eval-syntax fails in a way similar to ther alternaives I have tried
-      (eval (syntax->datum transparent)))
-     ;transparent ; doesn't work at top level scope
-     ]))
+       (syntax-local-expand-expression
+        ; we can't bind the mrt part as a variable?
+        #'(syntax-parameterize ([blk-src-begin (make-rename-transformer #'sa-node)]
+                                [blk-src-line-contents (make-rename-transformer #'sa-node)]
+                                [language (make-rename-transformer #'sa-node)]
+                                [blk-src-line-rest-alt (make-rename-transformer #'sa-node)]
+                                [switches-sane (make-rename-transformer #'sa-node)]
+                                [switch-sane (make-rename-transformer #'sa-node)]
+                                [format-string (make-rename-transformer #'sa-node)]
+                                [format-string-contents (make-rename-transformer #'sa-node)]
+                                [blk-src-parameters (make-rename-transformer #'sa-node)]
+                                [blk-src-args-broken (make-rename-transformer #'sa-node)]
+                                [blk-src-end (make-rename-transformer #'sa-node)]
+                                [end-drawer (make-rename-transformer #'sa-node)]
+                                )
+            (sa-malformed body ...))))
+     (syntax-property
+      (datum->syntax
+       #'(body ...)
+       (parameterize ([current-namespace ns-mal])
+         (eval transparent)))
+      'malformed this-syntax)]))
 
 (module+ test-mal
   ;#; ; somehow this works at the top level but not in module scope !?
@@ -694,13 +678,15 @@
   (syntax-parse stx
     [(_ body ...)
      #:with (expanded ...)
-     (map (λ (e) (local-expand e 'expression #f #;(list #'verbatim #'code #;#'markup)))
-          (syntax-e #'(body ...)))
+     (map (λ (e)
+            (when (syntax-property e 'malformed)
+              ; TODO syntax warn probably? also this doesn't seem to work?
+              ; maybe the malformed annotation is getting lost during an sa?
+              (println (format "Found malformed structure! ~s" e)))
+            (local-expand e 'expression #f))
+          (syntax->list #'(body ...)))
      ;#:do [(pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...))))]
-     #'(expanded ...)
-     ]
-    )
-  )
+     #'(expanded ...)]))
 
 (define-syntax (paragraph-node stx)
   (syntax-parse stx

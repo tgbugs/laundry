@@ -296,7 +296,6 @@
   sa-end-drawer
   |#
 
-  malformed-wsnn
   detached-block-node
   blk-greater-malformed
   det-blk-ex-begin

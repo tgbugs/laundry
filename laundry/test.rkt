@@ -1228,6 +1228,43 @@ drawer contents
 
   )
 
+(module+ test-afkw
+
+  ; bug in the malformed-wsnn grammar incorrectly matching #+name:
+  ; not clear why removing anyone of the 3 preceeding lines restores
+  ; the behavior though ... the only difference I can see is that
+  ; an (org-node (newline #f)) is missing in the incorrect case
+  ; ...
+  ; the reason is because affiliated-keyword starts with a newline now
+  ; and the malformed has another preceeding newline so it eats two
+  ; newlines incorrectly
+  (dotest "
+#+todo: TODO | DONE
+#+TODO: HELLO | THERE
+the above are not affiliated
+
+#+name: wat-paragraph
+wat")
+
+  ; so, according to org-element and font locking, unaffiliated
+  ; keywords are just keywords which is actually good, because it
+  ; means the keyword options specifying keywords could work
+  (dotest "
+#+name: thing
+
+oops not affiliated
+")
+
+(dotest "
+#+caption: oh no
+#+name: thing
+
+don't affilaite to other unaff keyword
+")
+
+  (dotest-quiet #f)
+  )
+
 (define h-l1
   '(org-file
     (org-node (headline-node (heading 1 ())))))

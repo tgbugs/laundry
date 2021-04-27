@@ -58,9 +58,9 @@ org-file : org-node*
 org-node : headline-node | org-node-basic
 
 @org-node-basic : affiliated-keyword* ( org-node-basic-element
-                                      | double-blank-line
-                                      | newline
-                                      | bof )
+                                      | double-blank-line )
+                | un-affiliated-keyword
+                | newline
 
 @org-node-basic-element : drawer
                         | blk-dyn
@@ -101,7 +101,8 @@ org-node : headline-node | org-node-basic
 
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 paragraph-line : newline-or-bof parl-lines
-paragraph-line-d : newline ( parl-lines ) ; used in drawers
+; paragraph-line-d is used in drawers
+paragraph-line-d : newline ( parl-lines )
 hyperlink : LINK
 
 paragraph-f-in : @paragraph-line-f-in+
@@ -127,7 +128,7 @@ parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing pla
               | HASH PLUS not-colon-newline
               | HASH PLUS ; by itself
               | big-tokes-less-d-s-blk ; TODO the not-colon bits eg ak-key parl-ncn-bt-l-d
-              | malformed-wsnn
+              ;| malformed-wsnn ; the only member here is un-affiliated keyword, which is not a paragraph, but a keyword
 
 parl-start : not-pl-start-whitespace1 ; no wsnn char and we're ok
            ; | alpha ; pretty sure this is wrong due to parl-start not-newline? above !? elisp impl doesn't match spec
@@ -173,9 +174,7 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/
           | babel-call-no-colon
           | end-drawer
 
-malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
-
-un-affiliated-keyword : affiliated-keyword ; FIXME not quite working as desired
+;malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
 
 ;; TODO need to complete the negation of additional forms that can
 ;; appear at the start of paragraphs
@@ -434,7 +433,9 @@ drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ;
 
 ; drawer-contents : no-headlines ;( newline @not-newline? )+ ; the simple version
 drawer-contents : org-node-d* ; FIXME I'm kind of expecting fallthrough due to ambiguity here? also big issue with the fact that paragraph-lines inside of drawer need to not match :end:
-org-node-d : affiliated-keyword* ( org-nbe-less-d | paragraph-line-d | newline )
+org-node-d : affiliated-keyword* ( org-nbe-less-d | paragraph-line-d )
+           | un-affiliated-keyword
+           | newline
 
 ;;;; #
 
@@ -457,30 +458,27 @@ keyword-options : LSB not-newline RSB ; FIXME this is almost certainly incorrect
 
 todo-spec-line : TODO-SPEC-LINE
 
-affiliated-keyword : nlbofwsnn @affiliated-keyword-line
-affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
-; ak-key defines which keywords can affiliate
-ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
-
--keyword-line : ( /HASH /PLUS keyword-key | END-DB | AUTHOR | DATE | TITLE ) /COLON keyword-value? ; elisp does longest match to colon
-              | /HASH /PLUS keyword-key-sigh keyword-value-sigh?
-
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
 keyword-key : not-whitespace ; FIXME this should include author date and title surely?
 keyword-value : not-newline
 
-;keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D ) | END-D | PROPERTIES-D
 keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
 keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
                    | not-whitespace-l-d? wsnn+ not-newline? COLON not-newline? ; FIXME this seems wrong
 
-;kw-prefix : kw-author | kw-date | kw-title
-;kw-author : AUTHOR
-;kw-date : DATE
-;kw-title : TITLE
-
 ;;; affiliated keywords
+
+affiliated-keyword : nlbofwsnn @affiliated-keyword-line
+affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
+; ak-key defines which keywords can affiliate
+ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
+
+; unaff keywords are keywords, excep that they cannot affiliate to other un-affiliated keywords
+; the logic is a bit convoluted, org element types them as keywords, but it is more complicated than that
+un-affiliated-keyword : affiliated-keyword
+
+;;; affiliated keywords (old)
 
 -affiliated-keyword : /newline-or-bof wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
 ak-value : @not-newline
@@ -752,7 +750,9 @@ pl-tag-end : COLON COLON
 footnote-definition : footnote-definition-line org-node-f*
 
 @org-node-f : affiliated-keyword* ( org-nbe-less-f | blank-line )
+            | un-affiliated-keyword
 @org-node-f-in : affiliated-keyword* ( org-nbe-f-in  | blank-line )
+               | un-affiliated-keyword
 
 footnote-definition-line : newline-or-bof FOOTNOTE-START fn-label RSB fn-def
 

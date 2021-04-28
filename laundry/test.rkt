@@ -26,7 +26,7 @@
 (define-namespace-anchor anc-test)
 (define ns-test (namespace-anchor->namespace anc-test))
 (define (dotest test-value #:eq [eq #f] #:eq-root [eq-root #f]
-                #:node-type [node-type #f] #:quiet [quiet #f]
+                #:node-type [node-type #f] #:nt [nt node-type] #:quiet [quiet #f]
                 #:parse-to-datum [parse-to-datum #f]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
@@ -451,10 +451,11 @@
   (dotest "  #+begin_-") ; -> block
   (dotest "  #+begin_:") ; -> block
 
+  ; FIXME dynamic block weirdness
   (dotest "#+end:" #:node-type 'keyword) ; -> keyword
   (dotest "  #+end:" #:node-type 'keyword)
 
-  (dotest "  #+end")
+  (dotest "  #+end") ; FIXME dynamic block end, possibly a bug in the dynamic bock spec
   (dotest "#+end")
   (dotest "  #+end_")
   (dotest "#+end_")
@@ -1222,19 +1223,22 @@ drawer contents
   (dotest "#+] ")
   (dotest "#+] :")
 
-  (dotest "#+ :")
-  (dotest "#+ x:")
-  (dotest "#+x x:")
-  (dotest "#+x x:]")
-  (dotest "#+k [:]:")
-
-  (dotest "#+x[ :]") ; XXX
-  (dotest "#+[ :]") ; XXX
-  (dotest "#+[ :")
-  (dotest "#+k[] :")
-  (dotest "#+[ :]:") ; kw
+  (dotest "#+ :" #:nt p)
+  (dotest "#+ x:" #:nt p)
+  (dotest "#+x x:" #:nt p)
+  (dotest "#+x x:]" #:nt p)
+  (dotest "#+k [:]:" #:nt p)
+  (dotest "#+x[ : ]" #:nt p)
+  (dotest "#+[ :" #:nt p)
+  (dotest "#+x[ :" #:nt p)
+  (dotest "#+k[] :" #:nt p)
   (dotest "#+key[options] : value" #:node-type p) ; XXX paragraph missing
-  (dotest "#+key[ : b] oops") ; XXX paragraph missing
+  (dotest "#+key[ : b] oops" #:nt p) ; XXX paragraph missing
+  (dotest "#+x[ :] :" #:nt p)
+  (dotest "#+x[ :]" #:nt p)
+  (dotest "#+[ :]" #:nt p)
+
+  (dotest "#+[ :]:" #:nt nt-2) ; kw
 
   ;HASH PLUS not-sb-colon-whitespace wsnn+ not-sb-colon-whitespace? COLON not-newline?
   ;HASH PLUS ( not-sb-colon-whitespace | RSB )+ wsnn+ not-sb-colon-whitespace? COLON not-newline?
@@ -1381,7 +1385,7 @@ wat")
 oops not affiliated
 ")
 
-(dotest "
+  (dotest "
 #+caption: oh no
 #+name: thing
 

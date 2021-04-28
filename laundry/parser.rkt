@@ -132,6 +132,9 @@ parl-se-wsnn : @digits
               ;| HASH PLUS COLON not-colon-newline ; XXX now a keyword
               ;| HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok XXX changing the behavior so this is a keyword now
               | HASH PLUS not-colon-newline
+              ;                                             #+x[ : ] style case
+              | HASH PLUS not-colon-whitespace? wsnn+ COLON ( not-rsb-newline not-colon-newline? )? ; XXX I think we may still be missing some possible cases
+              | HASH PLUS not-colon-whitespace? wsnn+ COLON RSB not-colon-newline? ( wsnn+ not-newline )?
               | HASH PLUS ; by itself
               | big-tokes-less-d-s-blk ; TODO the not-colon bits eg ak-key parl-ncn-bt-l-d
               ;| malformed-wsnn ; the only member here is un-affiliated keyword, which is not a paragraph, but a keyword
@@ -155,6 +158,7 @@ parl-sigh : HASH PLUS not-colon-lsb-whitespace? wsnn+ not-colon-lsb-whitespace? 
           ;           LSB not tech req            only a colon in options if space first  if space           anything after rsb except rsb is paragraph even another LSB RSB pair
           | HASH PLUS not-colon-whitespace? LSB ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? RSB not-colon-rsb-newline COLON ; not-newline?
           | HASH PLUS not-colon-whitespace? ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? not-colon-rsb-newline COLON ; implicit LSB RSB variants
+          | HASH PLUS not-colon-lsb-whitespace? wsnn+ COLON
 
 parl-wsnn : @bt-chars ; XXX this branch is very rarely hit
           | parl-sigh

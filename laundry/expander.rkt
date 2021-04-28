@@ -274,6 +274,7 @@
   not-colon-lsb-whitespace1
   not-colon-rsb-newline
   not-colon-rsb-newline1
+  not-rsb-newline
 
   not-plus-whitespace1
   not-whitespace-l-d
@@ -364,7 +365,7 @@
   end-drawer ; end is tricky because we do want to warn on it
   table
   table-row
-  hyperlink
+  hyperlink ; FIXME needs to be an sa alt probably
 
   bof
   digits

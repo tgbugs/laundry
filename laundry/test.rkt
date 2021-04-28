@@ -1201,6 +1201,91 @@ drawer contents
   (define node-type 'keyword)
   (define nt-2 'keyword-node)
   (define p 'paragraph)
+  (dotest-prefix #f)
+  (dotest-prefix "\n")
+  #;
+  (dotest-quiet #f)
+
+  (dotest "(" #:node-type p)
+  (dotest "_" #:node-type p)
+  (dotest "#+" #:node-type p)
+  (dotest ":lolololol" #:node-type p)
+  (dotest ":lolololol:" #:node-type p)
+
+  (dotest "#+x[ ]x:" #:node-type p)
+  (dotest "#+[ ]x:")
+  (dotest "#+[ ] :")
+  (dotest "#+x :")
+  (dotest "#+k :")
+
+  (dotest "#+]")
+  (dotest "#+] ")
+  (dotest "#+] :")
+
+  (dotest "#+ :")
+  (dotest "#+ x:")
+  (dotest "#+x x:")
+  (dotest "#+x x:]")
+  (dotest "#+k [:]:")
+
+  (dotest "#+x[ :]") ; XXX
+  (dotest "#+[ :]") ; XXX
+  (dotest "#+[ :")
+  (dotest "#+k[] :")
+  (dotest "#+[ :]:") ; kw
+  (dotest "#+key[options] : value" #:node-type p) ; XXX paragraph missing
+  (dotest "#+key[ : b] oops") ; XXX paragraph missing
+
+  ;HASH PLUS not-sb-colon-whitespace wsnn+ not-sb-colon-whitespace? COLON not-newline?
+  ;HASH PLUS ( not-sb-colon-whitespace | RSB )+ wsnn+ not-sb-colon-whitespace? COLON not-newline?
+  ;          [:                            [:
+  ;HASH PLUS not-lsb-colon-whitespace wsnn+ not-lsb-colon-whitespace COLON not-newline?
+
+  ;HASH PLUS not-colon-whitespace? LSB not-newline? wsnn+ not-newline? RSB not-colon-rsb-newline COLON not-newline? ; this is close
+  (dotest "#+x[:oh :no]: OOOOOOOHHHH NOOOOOOOOOOOOOOOOOOOOOOOOOO") ; XXX ambig kw opts could be x[ or x[:oh :no]
+  (dotest "#+[[[ ]x:" #:node-type p)
+  ; the not-newline is the problem because it could contain another LSB? no not actually a problem at all, the LSB is actually just
+  ; there for accounting purposes
+  ;#+[ under what circumstances can I close this?
+  ; I can close it if there is anything except for RSB before the colon IF there is a space somewhere before the close
+  (dotest "#+x[[[:" #:node-type nt-2)
+  (dotest "#+x[[: case]" #:node-type nt-2)
+  ; if there is NOT a space before the close the what is required?
+  ; t
+  ;#+[]x[:
+  ;#+[]x]:
+  ;#+[]x[ :
+  ;#+[]x] :
+  (dotest "#+[]x[ ]: oof" #:node-type nt-2)
+
+  ;#+]
+
+
+  ;HASH PLUS not-lsb-colon-whitespace
+
+  ;HASH PLUS not-colon-whitespace wsnn+ not-sb-colon-whitespace COLON
+  ; #+[
+  ; #+[ :]a b: and then as long as there is a whitespace before any colon we are ok
+
+  ;HASH PLUS not-colon-whitespace wsnn+ not-sb-colon-whitespace? COLON not-newline? ; XXX wrong
+  ; #+[ :]:
+
+  ;HASH PLUS not-colon-whitespace wsnn+ not-colon-whitespace? COLON not-newline? ; XXX wrong
+  ; #+[ ]:asdf
+  ; but #+] :asdf
+
+  (dotest "#+k: : :]" #:node-type nt-2)
+  (dotest "#+k:k : :]" #:node-type nt-2)
+
+
+  (dotest "#+[:") ; kw
+  (dotest "#+k[ :]:") ; kw
+  (dotest "#+k[ [:]:") ; kw
+
+  (dotest "#+k")
+  (dotest "#+k[]")
+
+  (dotest "#+::::::::::::::::::::::::[::::::: [ ]::::::::::::]: lol")
   (dotest "#+key" #:node-type p)
   (dotest "#+key:" #:node-type nt-2)
   (dotest "#+key: value" #:node-type nt-2)
@@ -1223,6 +1308,11 @@ drawer contents
   #;
   (dotest "#+k[:o :o]:v :") ; broken
   (dotest "wat\n#+k[    [   [  [ []]]]]:")
+  ; as an extension do we allow the empty keyword?
+  (dotest "#+k[:o[nested ] :ut :oh]: big trouble") ; this one parses incorrectly an unexpctedly
+
+  (dotest "#+[]:") ; XXX divergence this is a keyword with the empty key and empty options NOT keyword key []
+  (dotest "#+:") ; XXX divergence this is a keyword with an empty key
 
   (dotest "#+key[" #:node-type p)
   (dotest "#+key[:")
@@ -1236,27 +1326,29 @@ drawer contents
 
   (dotest "#+key[asdf: ]:")
   (dotest "#+key[asdf: I am a keyword look at me ] oops")
-  (dotest "#+key[asdf: I am a keyword look at me ]: value") ; FIXME should be keyword
+  (dotest "#+key[asdf: I am a keyword look at me ]: value")
   (dotest "#+key]")
   (dotest "#+key]:")
 
   (dotest "#+k[ :a b ]: c") ; ok
   (dotest "#+k[asdf]:") ; ok
   (dotest "#+k[ab]:") ; ok
-  (dotest "#+k[a]:") ; ambig
+
+  ; examples of why a reparse is necessary
+  (dotest "#+k[a]:") ; ambig XXX but shouldn't be
+  (dotest "\n#+k[a]:") ; ambig XXX but shouldn't be
   (dotest "#+k[:]:") ; grammar is ambiguous
-  (dotest "#+k[: ]:") ; ok
+  (dotest "#+k[: ]:") ; broken
   (dotest "#+k[:  ]:") ; broken
+  (dotest "#+k[:  ]: argh") ; broken
 
   (dotest "#+key[]:" #:node-type 'keyword-node)
-  (dotest "#+key[]")
+  (dotest "#+key[]" #:node-type p)
   (dotest "#+key[options]: value")
-  (dotest "#+key[options] : value")
   (dotest "#+key[options]: value")
   ; FIXME lots of unintuitive behavior around here
   (dotest "#+key[: a] oops")
   (dotest "#+key[: a]: oops")
-  (dotest "#+key[ : b] oops")
   (dotest "#+key[ : b]: value")
 
   (dotest-quiet #f)

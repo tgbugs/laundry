@@ -52,6 +52,24 @@
 (define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:* (:seq (:or " " "\t") (:* (:~ "\n")))))))
 (define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
 
+(define-lex-abbrev keyword-element
+  (from/stop-before
+   (:seq "\n"
+         (:* " " "\t")
+         "#+"
+         (:or
+          (:seq
+           (:* (:~ whitespace "["))
+           "["
+           (:* (:~ "\n"))
+           "]")
+          (:* (:~ whitespace)))
+         ":"
+         ; XXX BUT there must be a space before the first colon can appear in the value
+         ; otherwise the :~ whitespace will continue to match, but I think it will do that
+         ; anyway? so we are ok?
+         (:* (:~ "\n")))
+   "\n"))
 (define-lex-abbrev drawer-ish
   (from/to (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":") ; FIXME this is not right, check the spec to see
            (:seq "\n" (:* " " "\t") ":end:")))
@@ -345,6 +363,7 @@
     (token 'SRC-BLOCK lexeme)]
    ;[src-block (token 'SRC-BLOCK lexeme)]
 
+   [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
    ; in theory it should be possible to scan for headlines and then parse all the sections
    ; in parallel
@@ -422,6 +441,7 @@
    [(:or "#+begin" "#+BEGIN") (token 'BEGIN-DB lexeme)]
    [(:or "#+end" "#+END") (token 'END-DB lexeme)]
 
+   #; ; this does not work as desired
    [
     ; XXX fortunately this does not capture #+begin_src style lines due to sligh differences in syntax
     ; this captures the essence of the keyword line
@@ -430,17 +450,23 @@
     ; FIXME this won't work because whitespace IS allowed inside [] so we can't defer
     ; resolving cases like #+k[[[]:v ]]
     (:or
-     (from/stop-before (:seq "\n" (:+ " " "\t") "#+"
-                            (:+ (:~ whitespace)) ":"
-                            (:* (:~ ":" "\n")))
-                      "\n")
      (from/stop-before (:seq "\n"
-                             (:+ (:~ whitespace))
+                             (:+ " " "\t")
+                             "#+"
+                             (:+ (:~ whitespace)) ; pretty sure this gobbles the []
                              ; this is ambiguous and it is not obvious what the rigution
                              "["
-                             (:~ "\n")
+                             (:~ "]" "\n") ; FIXME nesting issues
                              "]:"
-                             (:+ (:~ ":" "\n")))
+                             (:* (:~ ":" "\n")))
+                       "\n")
+
+     (from/stop-before (:seq "\n"
+                             (:+ " " "\t")
+                             "#+"
+                             (:+ (:~ whitespace))
+                             ":"
+                             (:* (:~ ":" "\n")))
                        "\n"))
     (token 'KEYWORD-LINE lexeme)]
    ; FIXME 99% these should not be in the tokenizer maybe with #+NAME: #+name:

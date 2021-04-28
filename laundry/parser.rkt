@@ -117,6 +117,7 @@ misplaced-footnote-definition : footnote-definition-line
 
 parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing plain lists ; FIXME does this needs to be * not + so that zero indent is straight forward?
 @parl-lines : parl-start not-newline?
+            ;| parl-indent parl-wsnn
             | parl-indent parl-se-wsnn ; FIXME this has got to be wrong ...
             | parl-indent malformed not-newline?
             | stars ; just stars with nothing else is a paragraph
@@ -124,31 +125,39 @@ parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing pla
             | wsnn+
 
 ; to prevent keywords this one cannot end with not-newline? has to go all the way to the end
-@parl-se-wsnn : @digits
+parl-se-wsnn : @digits
               | @alphas
               | COLON
               ;| HASH PLUS not-whitespace? not-colon-whitespace ( @wsnn+ not-newline )? ; #+a:b:c case ; XXX insanely these are actually keywords
-              | HASH PLUS COLON not-colon-newline
-              | HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok
+              ;| HASH PLUS COLON not-colon-newline ; XXX now a keyword
+              ;| HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok XXX changing the behavior so this is a keyword now
               | HASH PLUS not-colon-newline
               | HASH PLUS ; by itself
               | big-tokes-less-d-s-blk ; TODO the not-colon bits eg ak-key parl-ncn-bt-l-d
               ;| malformed-wsnn ; the only member here is un-affiliated keyword, which is not a paragraph, but a keyword
 
-parl-start : not-pl-start-whitespace1 ; no wsnn char and we're ok
+parl-start : not-pl-start-whitespace1 ; no wsnn char and we're ok XXX surely this is overly broad?
+           | stars ( not-asterisk-whitespace1 | word-char-n ) ; not-whitespace1 would match another asterisk >_< ; XXX NOTE word-char-n is not word char it is alpha numeric (duh)
+           | parl-indent parl-wsnn
            ; | alpha ; pretty sure this is wrong due to parl-start not-newline? above !? elisp impl doesn't match spec
            ; | alpha-n ; is this ok due to the lists being broken or what?
            ; not-pl-start-newline1 wsnn* not-pl-start-newline1 ; I'm forgetting why we needed to duplicate here?
            ; I think this was just some incorrect late night thinking
-           | stars ( not-asterisk-whitespace1 | word-char-n ) ; not-whitespace1 would match another asterisk >_< ; XXX NOTE word-char-n is not word char it is alpha numeric (duh)
-           | parl-indent parl-wsnn
 
 parl-ws-bt : not-whitespace1 | big-tokes ; XXX big-tokes-stars ...
 parl-ws-bt-l-s : not-whitespace1 | word-char-n | big-tokes-less-s
 parl-ncn-bt-l-d : not-colon-newline1 | big-tokes-less-d
 parl-prp-bt : not-prp-newline1 | big-tokes
 parl-pw-bt : not-plus-whitespace1 | big-tokes | word-char-n ; FIXME word-char vs word-char-n probably can be collapsed into one
-parl-wsnn : @bt-chars
+
+;                     [:                             [:
+parl-sigh : HASH PLUS not-colon-lsb-whitespace? wsnn+ not-colon-lsb-whitespace? COLON ; not-newline?
+          ;           LSB not tech req            only a colon in options if space first  if space           anything after rsb except rsb is paragraph even another LSB RSB pair
+          | HASH PLUS not-colon-whitespace? LSB ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? RSB not-colon-rsb-newline COLON ; not-newline?
+          | HASH PLUS not-colon-whitespace? ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? not-colon-rsb-newline COLON ; implicit LSB RSB variants
+
+parl-wsnn : @bt-chars ; XXX this branch is very rarely hit
+          | parl-sigh
           ; alpha-n ; can't have alpha-n here because not-newline? will -> aa) at some point
           ; TODO I think markup has to go here?
           ; TODO don't gobble footnote-definition, the intersection of so many complements
@@ -161,11 +170,10 @@ parl-wsnn : @bt-chars
           ; | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
           ; I think the right answer here is any whitespace before a colon
           ; or no colon, because no whitespace and ANY colon on the line -> keyword
-
           ; badly broken for a variety of reason
           ; | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops XXX also broken for #+k[: ]: c
-
           ; | not-colon-newline COLON not-colon-newline ; FIXME quite broken
+          ; the explicit LSB is not required in this line, but it is included for clarity since it is the only addition at the start
           | COLON not-colon-newline
           | NEGATED-SET ; FIXME not sure why these are not being picked up in some other way ...
           | UNDERSCORE ; FIXME WAT WAT WAT
@@ -462,17 +470,25 @@ babel-call : nlbofwsnn CALL /COLON not-newline? ; FIXME indentation should NOT b
 todo-spec-line : TODO-SPEC-LINE
 
 ; there is no requirement that there be a space between the key and the value according to org-element
-keyword-node : keyword-whole-line | /HASH /PLUS kw-key keyword-options? /COLON /wsnn* kw-value?
-keyword-whole-line : KEYWORD-LINE
-kw-key : not-whitespace
-kw-value : not-colon-newline
+; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
+keyword-node : /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
+             | keyword-whole-line
+keyword-whole-line : KEYWORD-ELEMENT
+;keyword-whole-line : KEYWORD-LINE ; XXX this isn't quite working for some reason but that may be ok
+; XXX in order to get consistent behavior the keyword grammar needs to be a subparser
+; kw-options here is required to handle cases with whitespace, it needs a post-processing pass
+kw-key-options : @kw-key @keyword-options? ; splice out because we have to reparse
+
+kw-key : not-whitespace ; XXX there is a tradeoff here between implementation complexity and ambiguity
+;kw-value : not-colon-whitespace not-colon-newline* ; ensure that the value does not gobble leading whitespace
+kw-value : not-newline ; but ambiguity ...
 
 keyword : todo-spec-line | nlbofwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
 keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
              | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
 
-kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably
-keyword-options : /LSB not-newline? /RSB ; FIXME this is almost certainly incorrectly specified
+kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably FIXME END-DB and BEGIN-DB are only keywords if there is no trailing whitespace ?! this is a messy bit
+keyword-options : LSB not-newline? RSB ; FIXME this is almost certainly incorrectly specified
 
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
@@ -1021,7 +1037,7 @@ alphas : ( alpha | alpha-n )+ ; need the + here due to mixed case
 alphas-unmixed : alpha | alpha-n ; needed for cases where case mixing is not allowed
 @word-char : DIGIT | alpha
 word-char-less-X : DIGIT | ALPHA
-word-char-n : @digit-n | @alpha-n
+word-char-n : @digit-n | @alpha-n ; FIXME rename to alnum-n
 wordhyus : ( word-char | HYPHEN | UNDERSCORE | word-char-n )+
 wordhy : ( word-char | HYPHEN )+
 
@@ -1074,11 +1090,13 @@ non-whitespace-token : @nwt-less-negated | @unsyms
 @unsyms-less-pipe-bs :      AT      | DQ | LSB | RSB | LAB | RAB        | PLUS | HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
 @unsyms-less-alpha :        AT | BS | DQ | LSB | RSB | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | DIGIT
 @unsyms-less-sb-colon :     AT | BS | DQ             | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN         | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
+@unsyms-less-sb :           AT | BS | DQ             | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
 @unsyms-less-pl-start :     AT | BS | DQ | LSB | RSB | LAB | RAB                      | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE                     ; alpha ; spec says alpha bullets too but impl says nah?
 @unsyms-less-prp :          AT | BS | DQ | LSB | RSB | LAB | RAB | PIPE | PLUS | HASH                    | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
 @unsyms-less-tag :               BS | DQ | LSB | RSB | LAB | RAB | PIPE | PLUS        | PERIOD | R-PAREN                                | HYPHEN | ASTERISK 
 @unsyms-less-dq-ph :        AT | BS      | LSB | RSB | LAB | RAB | PIPE          HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE          | ASTERISK | word-char
 @unsyms-less-colon-lsb :    AT | BS | DQ       | RSB | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN         | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
+@unsyms-less-colon-rsb :    AT | BS | DQ | LSB       | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN         | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | word-char
 @unsyms-less-lsb-tag :           BS | DQ       | RSB | LAB | RAB | PIPE | PLUS        | PERIOD | R-PAREN                                | HYPHEN | ASTERISK 
 @unsyms-less-digit :        AT | BS | DQ | LSB | RSB | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | alpha
 @unsyms-less-lsb-at-digit :      BS | DQ       | RSB | LAB | RAB | PIPE | PLUS | HASH | PERIOD | R-PAREN | COLON | PERCENT | UNDERSCORE | HYPHEN | ASTERISK | alpha
@@ -1152,7 +1170,11 @@ not-rsb-newline1 : ns-nwt-less-negated | wsnn | unsyms-less-rsb
 not-rsb-newline : ( @not-rsb-newline1 | @big-tokes | word-char-n )+
 
 not-colon-lsb-whitespace1 : ns-nwt-less-negated | unsyms-less-colon-lsb
+not-colon-lsb-whitespace : ( not-colon-lsb-whitespace1 | @big-tokes-less-d | word-char-n )+
 not-colon-lsb-newline1 : not-colon-lsb-whitespace1 | wsnn
+
+not-colon-rsb-newline1 : ns-nwt-less-negated | wsnn | unsyms-less-colon-rsb
+not-colon-rsb-newline : ( not-colon-rsb-newline1 | @big-tokes-less-d | word-char-n )+
 
 not-bullet-pipe1 : ns-nwt-less-negated | @whitespace | unsyms-less-pipe-bullet
 not-plus-hyphen1 : ns-nwt-less-negated | @whitespace | unsyms-less-plus-hyphen
@@ -1198,3 +1220,5 @@ not-pipe-bullet-not-whitespace1 : ns-nwt-less-negated | unsyms-less-pipe-bullet
 ;not-pipe-bullet-not-newline : ( @not-pipe-bullet-not-newline1+ | @big-tokes )+ ; unused
 not-sb-colon-whitespace1 : ns-nwt-less-negated | unsyms-less-sb-colon
 not-sb-colon-whitespace : @not-sb-colon-whitespace1+
+not-sb-whitespace1 : ns-nwt-less-negated | unsyms-less-sb
+not-sb-whitespace : ( @not-sb-whitespace1 | @big-tokes | @word-char-n )+

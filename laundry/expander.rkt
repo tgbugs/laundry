@@ -257,6 +257,8 @@
   parl-ws-bt-l-s
   parl-ws-bt
   parl-pw-bt
+  parl-se-wsnn
+  parl-sigh
 
   stuff
   wordhyus
@@ -267,6 +269,12 @@
   not-colon-newline1
   not-colon-whitespace
   not-colon-whitespace1
+
+  not-colon-lsb-whitespace
+  not-colon-lsb-whitespace1
+  not-colon-rsb-newline
+  not-colon-rsb-newline1
+
   not-plus-whitespace1
   not-whitespace-l-d
   not-whitespace1
@@ -374,6 +382,7 @@
 
   ; TODO -> new keyword approach
   keyword-node
+  kw-key-options
   kw-key
   kw-value
 

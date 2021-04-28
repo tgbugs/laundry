@@ -57,7 +57,11 @@ org-file : org-node*
 
 org-node : headline-node | org-node-basic
 
-@org-node-basic : affiliated-keyword* ( org-node-basic-element
+@org-node-basic : org-node-basic-element
+                | double-blank-line
+                | newline
+
+-org-node-basic : affiliated-keyword* ( org-node-basic-element ; old version where aff keywords were implemented in the grammar
                                       | double-blank-line )
                 | un-affiliated-keyword
                 | newline
@@ -72,7 +76,8 @@ org-node : headline-node | org-node-basic
                  | block-begin-line
                  | block-end-line
                  | babel-call
-                 | keyword ; lol yep you can affiliate keywords to keywords
+                 ;| keyword ; lol yep you can affiliate keywords to keywords
+                 | keyword-node
                  | comment-element
                  | table
                  | plain-list-line
@@ -122,7 +127,7 @@ parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing pla
 @parl-se-wsnn : @digits
               | @alphas
               | COLON
-              | HASH PLUS not-whitespace? not-colon-whitespace ( @wsnn+ not-newline )? ; #+a:b:c case
+              ;| HASH PLUS not-whitespace? not-colon-whitespace ( @wsnn+ not-newline )? ; #+a:b:c case ; XXX insanely these are actually keywords
               | HASH PLUS COLON not-colon-newline
               | HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok
               | HASH PLUS not-colon-newline
@@ -156,7 +161,10 @@ parl-wsnn : @bt-chars
           ; | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
           ; I think the right answer here is any whitespace before a colon
           ; or no colon, because no whitespace and ANY colon on the line -> keyword
-          | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops
+
+          ; badly broken for a variety of reason
+          ; | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops XXX also broken for #+k[: ]: c
+
           ; | not-colon-newline COLON not-colon-newline ; FIXME quite broken
           | COLON not-colon-newline
           | NEGATED-SET ; FIXME not sure why these are not being picked up in some other way ...
@@ -433,7 +441,10 @@ drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ;
 
 ; drawer-contents : no-headlines ;( newline @not-newline? )+ ; the simple version
 drawer-contents : org-node-d* ; FIXME I'm kind of expecting fallthrough due to ambiguity here? also big issue with the fact that paragraph-lines inside of drawer need to not match :end:
-org-node-d : affiliated-keyword* ( org-nbe-less-d | paragraph-line-d )
+
+org-node-d : org-nbe-less-d | paragraph-line-d | newline
+
+-org-node-d : affiliated-keyword* ( org-nbe-less-d | paragraph-line-d )
            | un-affiliated-keyword
            | newline
 
@@ -448,26 +459,32 @@ comment-line : newline-or-bof wsnn* HASH ( wsnn+ @not-newline? )?
 
 @nlbofwsnn : /newline-or-bof wsnn*
 babel-call : nlbofwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
+todo-spec-line : TODO-SPEC-LINE
+
+; there is no requirement that there be a space between the key and the value according to org-element
+keyword-node : keyword-whole-line | /HASH /PLUS kw-key keyword-options? /COLON /wsnn* kw-value?
+keyword-whole-line : KEYWORD-LINE
+kw-key : not-whitespace
+kw-value : not-colon-newline
 
 keyword : todo-spec-line | nlbofwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
-             | /HASH /PLUS keyword-key-sigh ( /wsnn+ keyword-value )? /wsnn*
+keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
+             | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
 
 kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably
-keyword-options : LSB not-newline RSB ; FIXME this is almost certainly incorrectly specified
-
-todo-spec-line : TODO-SPEC-LINE
+keyword-options : /LSB not-newline? /RSB ; FIXME this is almost certainly incorrectly specified
 
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
-keyword-key : not-whitespace ; FIXME this should include author date and title surely?
-keyword-value : not-newline
+;keyword-key : not-sb-colon-whitespace ; XXX paragraph is not set up to handle this, and they need to be keywords
+keyword-key : not-whitespace ; FIXME this should include author date and title surely? ; XXX will match #+k[x]:
+keyword-value : not-colon-newline
 
 keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
 keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
-                   | not-whitespace-l-d? wsnn+ not-newline? COLON not-newline? ; FIXME this seems wrong
+                   | not-whitespace-l-d? /wsnn* not-newline? COLON not-newline? ; FIXME this seems wrong
 
-;;; affiliated keywords
+;;; affiliated keywords (do not implement as part of the grammar)
 
 affiliated-keyword : nlbofwsnn @affiliated-keyword-line
 affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
@@ -749,9 +766,12 @@ pl-tag-end : COLON COLON
 ; a double blank line
 footnote-definition : footnote-definition-line org-node-f*
 
-@org-node-f : affiliated-keyword* ( org-nbe-less-f | blank-line )
+@org-node-f : org-nbe-less-f | blank-line
+@org-node-f-in : org-nbe-f-in  | blank-line
+
+-org-node-f : affiliated-keyword* ( org-nbe-less-f | blank-line )
             | un-affiliated-keyword
-@org-node-f-in : affiliated-keyword* ( org-nbe-f-in  | blank-line )
+-org-node-f-in : affiliated-keyword* ( org-nbe-f-in  | blank-line )
                | un-affiliated-keyword
 
 footnote-definition-line : newline-or-bof FOOTNOTE-START fn-label RSB fn-def

@@ -422,17 +422,40 @@
    [(:or "#+begin" "#+BEGIN") (token 'BEGIN-DB lexeme)]
    [(:or "#+end" "#+END") (token 'END-DB lexeme)]
 
+   [
+    ; XXX fortunately this does not capture #+begin_src style lines due to sligh differences in syntax
+    ; this captures the essence of the keyword line
+    ; dealing with the ambiguity of the current specification is
+    ; more problematic
+    ; FIXME this won't work because whitespace IS allowed inside [] so we can't defer
+    ; resolving cases like #+k[[[]:v ]]
+    (:or
+     (from/stop-before (:seq "\n" (:+ " " "\t") "#+"
+                            (:+ (:~ whitespace)) ":"
+                            (:* (:~ ":" "\n")))
+                      "\n")
+     (from/stop-before (:seq "\n"
+                             (:+ (:~ whitespace))
+                             ; this is ambiguous and it is not obvious what the rigution
+                             "["
+                             (:~ "\n")
+                             "]:"
+                             (:+ (:~ ":" "\n")))
+                       "\n"))
+    (token 'KEYWORD-LINE lexeme)]
    ; FIXME 99% these should not be in the tokenizer maybe with #+NAME: #+name:
    ; the issue is that if these appear at other places in the file we will be
    ; in trouble ; NOTE have to add the colons ourselves where needed
    ; XXX eh, we've more or less gotten it all worked out here
    ; affiliated keywords
+   #|
    [(:or "#+NAME" "#+name") (token 'NAME lexeme)]
    [(:or "#+HEADER" "#+header") (token 'HEADER lexeme)]
    [(:or "#+PLOT" "#+plot") (token 'PLOT lexeme)]
    [(:or "#+RESULTS" "#+results") (token 'RESULTS lexeme)] ; NOTE THE PLURAL
    [(:or "#+CAPTION" "#+caption") (token 'CAPTION lexeme)]
    [(:or "#+ATTR_" "#+attr_") (token 'ATTR-PREFIX lexeme)]
+   |#
 
    [todo-spec-line (token 'TODO-SPEC-LINE lexeme)]
 
@@ -446,6 +469,7 @@
    [(:or "#+TITLE" "#+title") (token 'TITLE lexeme)] ; FIXME this is showing up as an affiliated keyword
    
    ; the call ... not actually keyword and not actually associated
+   ; XXX TODO but should be
    [(:or "#+CALL" "#+call") (token 'CALL lexeme)]
 
    ;[(from/to "@@" "@@" (token 'EXPORT-SNIPPET lexeme))] ;; TODO this might actually work ... except for nested blocks

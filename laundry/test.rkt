@@ -1199,23 +1199,56 @@ drawer contents
 
 (module+ test-keywords
   (define node-type 'keyword)
-  (dotest "#+key")
-  (dotest "#+key:")
-  (dotest "#+key: value")
+  (define nt-2 'keyword-node)
+  (define p 'paragraph)
+  (dotest "#+key" #:node-type p)
+  (dotest "#+key:" #:node-type nt-2)
+  (dotest "#+key: value" #:node-type nt-2)
+  (dotest "#+key:value" #:node-type nt-2)
+  (dotest "#+ke:v" #:node-type nt-2)
+  (dotest "#+k:v" #:node-type nt-2)
+  (dotest "#+k:va" #:node-type nt-2)
+  (dotest "#+k:va " #:node-type nt-2)
+  (dotest "#+k:" #:node-type nt-2)
+  (dotest "#+k: " #:node-type nt-2)
+  (dotest "#+k: v" #:node-type nt-2)
+  (dotest "#+k:value" #:node-type nt-2)
 
-  (dotest "#+key[")
+  (dotest "#+k[[[]:v ] ]") ; for a fun time >_< XXX FIXME SUPER ambiguous whare are empty options?
+  (dotest "#+k[ [[ ]:v ] ]")
+  (dotest "#+k[a[ [ ]:v ] ]") ; this could parse options as "a[ [ " OR as " [ "
+  ; and I don't know if there is some underlying rule that would force one or the other
+  ; because technically both are correct
+  (dotest "#+k[:o :o]:v")
+  #;
+  (dotest "#+k[:o :o]:v :") ; broken
+  (dotest "wat\n#+k[    [   [  [ []]]]]:")
+
+  (dotest "#+key[" #:node-type p)
   (dotest "#+key[:")
-  (dotest "#+key[asdf")
+  (dotest "#+key[asdf" #:node-type p)
   (dotest "#+key[asdf:")
+
+  (dotest "#+key][[asdf: ]:") ; OOF now THIS is ambiguous
+  #;
+  (dotest "#+k[[[[lol]]]]:") ; double oof -> hyperlink ouch
+  ; strongly reccomend tokenizing keyword lines independently
 
   (dotest "#+key[asdf: ]:")
   (dotest "#+key[asdf: I am a keyword look at me ] oops")
-  (dotest "#+key[asdf: I am a keyword look at me ]: value")
-
+  (dotest "#+key[asdf: I am a keyword look at me ]: value") ; FIXME should be keyword
   (dotest "#+key]")
   (dotest "#+key]:")
 
-  (dotest "#+key[]:" #:node-type node-type)
+  (dotest "#+k[ :a b ]: c") ; ok
+  (dotest "#+k[asdf]:") ; ok
+  (dotest "#+k[ab]:") ; ok
+  (dotest "#+k[a]:") ; ambig
+  (dotest "#+k[:]:") ; grammar is ambiguous
+  (dotest "#+k[: ]:") ; ok
+  (dotest "#+k[:  ]:") ; broken
+
+  (dotest "#+key[]:" #:node-type 'keyword-node)
   (dotest "#+key[]")
   (dotest "#+key[options]: value")
   (dotest "#+key[options] : value")
@@ -1226,6 +1259,7 @@ drawer contents
   (dotest "#+key[ : b] oops")
   (dotest "#+key[ : b]: value")
 
+  (dotest-quiet #f)
   )
 
 (module+ test-afkw

@@ -372,6 +372,11 @@
   keyword-value-sigh
   keyword-options
 
+  ; TODO -> new keyword approach
+  keyword-node
+  kw-key
+  kw-value
+
   affiliated-keyword
   un-affiliated-keyword
   name
@@ -759,6 +764,13 @@
   )
 
 ;; keywords
+
+(define-syntax (keyword-whole-line stx)
+  ; process keyword line
+  (syntax-parse stx
+    [(_ line:str)
+     ; TODO
+     #'(list 'keyword-line line)]))
 
 (define-syntax (kw-prefix stx)
   ; XXX temporary implementation detail to compensate for e.g. #+title being a token

@@ -187,7 +187,7 @@ parl-wsnn : @bt-chars ; XXX this branch is very rarely hit
           | L-PAREN
           | R-PAREN ; FIXME maybe also need some others of not-pl-start-whitespace1 ??
 
-malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/
+malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XXX indeed, it introduces ambiguity so that source blocks fail to match
           | blk-greater-malformed
           | planning-dissociated
           | ak-key-no-colon
@@ -623,17 +623,20 @@ org-node-dyn : affiliated-keyword* ( drawer | org-nbe-less-d | paragraph-line | 
 blk-line-contents : @not-newline
 blk-line-rest : @not-newline
 
-detached-block-node : det-blk-src-begin
+detached-block-node : det-blk-src-begin ; FIXME this definition is wrong, and ideally we would be able to peek and see that it is wrong e.g. because there is a headline before an endblock is encountered
                     | det-blk-src-end
                     | det-blk-ex-begin
                     | det-blk-ex-end
+                    | blk-src-malformed
 
+blk-src-malformed : SRC-BLOCK-MALFORMED
 det-blk-src-begin : blk-src-begin
-det-blk-src-end : blk-src-end
+det-blk-src-end : blk-src-end ; basically all of these now that the tokenizer is behaving
 det-blk-ex-begin : blk-ex-begin
 det-blk-ex-end : blk-ex-end
 
-blk-src : SRC-BLOCK | /newline-or-bof blk-src-begin blk-src-contents? nlpws blk-src-end
+blk-src : blk-src-whole | /newline-or-bof blk-src-begin blk-src-contents? nlpws blk-src-end
+blk-src-whole : SRC-BLOCK ; XXX requires a nested parser OR chaining the positions of input port in the lexer to produce more than one token i.e. checking in next-token for a list
 ;blk-src : blk-src-begin newline blk-src-contents? wsnn* blk-src-end
 blk-src-begin : ( BEGIN-SRC wsnn blk-src-line-contents | BEGIN-SRC ) /wsnn*
 ;blk-src-begin-malformed : BEGIN-SRC /wsnn* newline ; FIXME newline first grammar issues :/

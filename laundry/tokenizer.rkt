@@ -2,6 +2,8 @@
 (require racket/pretty)
 (require brag/support
          "lex-help.rkt"
+         (only-in racket/string string-suffix?)
+         (only-in racket/port input-port-append)
          (for-syntax racket/base
                      #;
                      syntax/parse
@@ -70,9 +72,13 @@
          ; anyway? so we are ok?
          (:* (:~ "\n")))
    "\n"))
+(define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") (:or " " "\t")))
 (define-lex-abbrev drawer-ish
-  (from/to (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":") ; FIXME this is not right, check the spec to see
-           (:seq "\n" (:* " " "\t") ":end:")))
+  ; FIXME this is not right, check the spec to see
+  (from/stop-before
+   (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":")
+   (:or stop-before-heading
+        (:seq "\n" (:* " " "\t") ":end:"))))
 
 (define-lex-abbrev todo-spec-line
   ; XXX TODO FIXME BOF issues >_<
@@ -94,10 +100,48 @@
 #;
 (define-lex-abbrev paragraph (:+ (:seq "\n" par-start (:* (:or par-start par-rest-ok)) (:+ (:or par-start par-rest-ok)))))
 (define-lex-abbrev paragraph
+  ; things we cannot start with
+  ; *+[ \t]
+  ; [ \t]+[+-*][ \t]
+  ; [ \t]+[A-Za-z0-9][.)]
+  ; |
+  ; #[ \t]
+  ; #\+
+  ; :[A-Za-z]+:
+  (:+ (from/stop-before
+       (:seq "\n"
+             ;(:~ "*" "")
+             (:* " " "\t")
+             (:or
+              (:or
+               "'"
+               "\""
+               "("
+               ")"
+               ","
+               "!"
+               "?"
+               "%"
+               "$"
+               "^"
+               "&"
+               ".")
+              (:seq (:or "+" "-" "*") (:~ whitespace))
+              (:seq
+               (:or 
+                (:+ lower-case)
+                (:+ upper-case)
+                (:+ 0-9))
+               (:or (:~ "." ")")
+                    (:seq (:or "." ")") (:~ whitespace))))))
+       "\n"))
+  #;
   (:+ (:seq "\n" (:seq (:* " " "\t")
-                       (:or (:+ lower-case)
-                            (:+ upper-case)
-                            (:+ 0-9))
+                       (:+ (:or
+                            lower-case
+                            upper-case
+                            0-9
+                             ))
                        (:& (:~ "." ")") par-rest-ok)
                        (:+ par-rest-ok)))))
 #;
@@ -148,6 +192,43 @@
 #;
 (begin-for-syntax
   (define-struct lex-abbrev (get-abbrev))) ; will this well be a doozy
+
+(define (find-last char str)
+  ; we don't want to do string reverse because it is slow we just want
+  ; to find the first char going backward, string-ref backward seems
+  ; like it is ok if we really want this to go fast maybe could chunk
+  ; bytes into cacheline size and search for a sub-offset within that?
+  (letrec ([search (λ (look-at)
+                     (println (string-ref str look-at))
+                     (if (eq? (string-ref str look-at) char)
+                         (values (substring str 0 look-at) (sub1 look-at))
+                         (search (sub1 look-at))))])
+    (search (sub1 (string-length str)))))
+
+(define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos)
+  "Encapsulates the machinery needed to correctly reset the location of input-port when
+using from/stop-before where the stop-before pattern contains multiple charachters."
+  (if (eq? (peek-char input-port) eof)
+      (token TOKEN-EOF lexeme)
+      (let*-values ([(lexeme-correct offset) (find-last char lexeme)]
+                    [(token-correct position-correct)
+                     (values (token TOKEN lexeme-correct)
+                             (+ (position-offset start-pos) offset))])
+        (if (or (file-stream-port? input-port)
+                (string-port? input-port)) ; cooperate with laundry lexer first-port
+            (begin
+              (file-position input-port position-correct)
+              token-correct)
+            ; FIXME we will have to come up with a better solution where we can set the
+            ; file position on the appended ports for the first token so that everything
+            ; will compose correctly for chaining input ports
+            (cons token-correct position-correct)))))
+
+(define (token-stop-before-heading TOKEN lexeme input-port start-pos)
+  (if (string-suffix? lexeme "*")
+      (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
+        (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
+      (token TOKEN lexeme)))
 
 (define (get-tokens tokenizer)
   (define (sigh next-token [accum '()])
@@ -352,15 +433,35 @@
    #;
    ["DONE" (token 'RUNTIME-TODO-KEYWORD lexeme)]
 
-   [heading (token 'HEADING lexeme)] ; brilliant! because this is parsed first the from/to works as expected (HAH)
+   [heading (token 'HEADING lexeme)]
 
    ; FIXME there is a question of whether to use the lexer like this
    ; to slurp code blocks in the first pass and then run code block
    ; specific parser in a later pass, or whether we want to try to
    ; get certain information in the first pass
-   [(from/to (:seq "\n" (:* " " "\t") "#+begin_src")
-             (:seq "\n" (:* " " "\t") "#+end_src" (:* " " "\t")))
-    (token 'SRC-BLOCK lexeme)]
+   #; ; XXX doesn't work the match is too short
+   [(from/stop-before (:seq "\n" (:* " " "\t") "#+begin_src")
+                      (:seq "\n" (:+ "*") (:or " " "\t")))
+    (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
+   ; XXX we can't do start-after on a heading to find a random end_src
+   [(:seq (from/stop-before (:seq "\n" (:* " " "\t") (:or "#+begin_src" "#+BEGIN_SRC"))
+                            ; XXX this gobbles headings, my previous comment on headings was
+                            ; wrong, if we create a phased parser that identifies all headings
+                            ; first, then we could use this, but as it stands this will not work
+                            (:or
+                             stop-before-heading
+                             ; XXX YES BUT NO from/stop-before doesn't actually work correctly!
+                             ; and it eats the stars!
+                             (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))
+          #; ; we have to match the end separately but that is OK
+          (:or (:seq "\n" (:+ "*") (:or " " "\t"))
+               (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))
+    (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)
+    #;
+    (if (string-suffix? lexeme "*")
+        (token-stop-before 'SRC-BLOCK-MALFORMED 'SRC-BLOCK-MALFORMED
+                           lexeme #\newline input-port start-pos)
+        (token 'SRC-BLOCK lexeme))]
    ;[src-block (token 'SRC-BLOCK lexeme)]
 
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
@@ -370,7 +471,7 @@
 
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
 
-   [(from/to (:seq "\n" (:* " " "\t") ":properties:")
+   [(from/stop-before (:seq "\n" (:* " " "\t") ":properties:")
              ; FIXME NOTE there are cases where the pattern in the
              ; names of the property values for a draw cause it to NO
              ; LONGER BE a property drawer, this is almost certainly a
@@ -379,14 +480,20 @@
              ; this way, the other possibility is to accept the more
              ; complex grammar that we already wrote which more or
              ; less works as expected at the expense of performance
-             (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t")))
+             (:or stop-before-heading
+                  (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
+    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)
+    #;
     (token 'DRAWER-PROPS lexeme)]
    ; sigh legacy support for this
-   [(from/to (:seq "\n" (:* " " "\t") ":PROPERTIES:")
-             (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t")))
+   [(from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:") ; FIXME does the case have to match?
+                      (:or stop-before-heading
+                           (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))
+    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)
+    #;
     (token 'DRAWER-PROPS lexeme)]
 
-   [drawer-ish (token 'DRAWER lexeme)]
+   [drawer-ish (token-stop-before-heading 'DRAWER lexeme input-port start-pos)]
 
    [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
 
@@ -573,31 +680,67 @@
   )
 
 (define (laundry-make-tokenizer port)
-  (define bof (= (file-position port) 0))
+  (define bof (= (file-position port) 0)) ; XXX outside no monkey w/ port
+  ; TODO figure out how to chain lexers essentially: if something other than a token is
+  ; returned or rather, if a specific token is returned that is in the set of tokens that
+  ; have been defined to have sub-lexers then current-sublexer should be set and called
+  ; until it hits eof, and in those cases we probably want to parse the the lexeme
+  ; directly because it is already in memory, once we do this we can get rid of the stupid
+  ; inverted expander behavior where we have to reassemble everything I think that this is
+  ; likely to be the right design tradeoff because then if we want to split the grammars
+  ; we can, and do the parsing in parallel, or we can use the grammars merged, and do the
+  ; parsing sequentially, the only case where we really have nested grammars is with the
+  ; paragraph parser for dealing with the markup the heading parser and the source block
+  ; parser are then seen to be modular subgrammars rather than nested subgrammars
+
+  ; in theory, with this approach we can also decide what the correct behavior is for
+  ; reparsing malformed blocks, my inclination would be to treat them as plain text and
+  ; export them in red or something like that but this would need some consideration,
+  ; though most of the control sequences rarely if ever appear in plain text
+
   (define (next-token)
     (if bof ; sigh branches instead of rewriting
-        (let ([token-BOF
-               ; making the input-prefix a newline massively ; simplifies the grammer at
-               ; virtually no cost, and if we can fix the parser so that this doesn't have
-               ; to branch, then even better
-               (token 'NEWLINE)
-               ; TODO make sure we correctly discard the first (org-node (newline #f)),
-               ; fortunately we can distingiush files that actually start with newline
-               #;
-               (token 'BOF)
-               #;
-               (srcloc-token (token-struct 'BOF #f #f #f #f #f #f)
-                             ; srcloc will not accept 0 for column
-                             (srcloc 'string #f #f #f 1))]) 
-          (set! bof #f)
-          #;
-          (pretty-print token-BOF)
-          token-BOF)
-        (let ([out (laundry-lexer port)])
-          #;
-          (pretty-print out)
-          out)))
+        (let ([first-port (input-port-append #f (open-input-string "\n") port)])
+          ; this works because the position of the original port is
+          ; correctly shifted so its coordinates should not be disturbed
+          (let* ([-first-out (laundry-lexer first-port)]
+                 [shift (- (file-position first-port) (file-position port))]
+                 [first-out (if (list? -first-out)
+                                (begin
+                                  ; FIXME this is a hack, we need to have a variant of
+                                  ; input-port-append that seeks the second stream
+                                  (file-position port (- (cdr -first-out) shift))
+                                  (car -first-out))
+                                -first-out)]
+                 [out (if (srcloc-token? first-out)
+                          (make-srcloc-token
+                           (srcloc-token-token first-out)
+                           (let* ([sl (srcloc-token-srcloc first-out)]
+                                  [line (srcloc-line sl)])
+                             (make-srcloc
+                              (srcloc-source sl)
+                              (if line (sub1 line) line) ; FIXME careful with -> 0
+                              (srcloc-column sl)
+                              (srcloc-position sl) ; should always be 1
+                              (- (srcloc-span sl) shift))))
+                          first-out)])
+            (set! bof #f)
+            #;
+            (pretty-print out)
+            out))
+    (let ([out (laundry-lexer port)])
+      #;
+      (pretty-print out)
+      out)))
   next-token)
+
+(module+ test-port
+  (define port (open-input-string "sigh\nhello\n* there"))
+  (define prefix-port (open-input-string "\n"))
+  (define first-time-port (input-port-append #f prefix-port prefix-port port))
+  (define tport (open-input-string "* Hello world\nand now for"))
+  (define ll (laundry-make-tokenizer #;make-laundry-lexer tport))
+  )
 
 (define-lex-abbrev section (from/stop-before heading heading)) ; FIXME BOF EOF issues
 

@@ -1066,6 +1066,53 @@ drawer contents
 #+end_src
 ")
 
+  ; ok
+  (dotest "\n#+begin_src l
+
+a a:
+ \"
+#+end_src
+")
+
+  ; ok due to missing blank line it seems
+  (dotest "#+begin_src l
+b b:
+ \"
+#+end_src
+")
+
+  ; these are broken because blk-src doesn't match them and something in the piece-wise grammar is broken
+
+  (dotest "#+begin_src l
+
+c c:
+ \"
+#+end_src
+")
+
+  (dotest "\n#+begin_src l
+
+d d:
+ \"
+#+END_SRC
+")
+
+  (dotest "\n#+BEGIN_SRC l
+
+y y:
+ \"
+#+end_src
+")
+
+  (dotest " \"") ; broken
+  (dotest "\n \"")
+
+  (dotest "
+#+begin_src
+* oops
+#+end_src
+")
+
   )
 
 (module+ test-big-tokes
@@ -1516,6 +1563,10 @@ don't affilaite to other unaff keyword
 (module+ test-files
   #; ; #+CAPTION: Value bug ...
   (define setup (dotest-file "~/git/sparc-curation/docs/setup.org"))
+  ; yeah ... for big files scanning to heading offsets and parsing
+  ; headings in parallel to avoid the quadratic behavior is likely to
+  ; be a reasonable workaround for big files as we develop the
+  ; implementation, because the slowdown is extremely debilitating
 
   ; this takes WAY too long to parse it is _abysmally_ slow !??!?!
   ; it is just plain text wat wat wat !??!?!
@@ -1526,7 +1577,7 @@ don't affilaite to other unaff keyword
   ; nasty quadratic behavior when parsing paragraphs with normal prose due to short token quadratic issues
   ;; XXX a workaround for the quadraticness has been acomplished by parsing the 80% case for paragraphs
   ;; via the tokenizer
-  (define notes (dotest-file "~git/sparc-curation/docs/notes.org"))
+  (define notes (dotest-file "~/git/sparc-curation/docs/notes.org"))
 
   ; OOF this one still hits the quatratic behavior very hard
   ; WOW it actually parses ...
@@ -1536,7 +1587,7 @@ don't affilaite to other unaff keyword
 
   (define rel (dotest-file "~/git/pyontutils/docs/release.org")) ; x
 
-  (define scig (dotest-file "~/git/pyontutils/nifstd/scigraph/README.org")) ; x
+  (define scig (dotest-file "~/git/pyontutils/nifstd/scigraph/README.org")) ; works, but slow, possibly due to big src blocks
 
   (dotest "
 wat

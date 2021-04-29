@@ -410,6 +410,8 @@
   blk-src
 
   blk-src-contents
+  blk-src-whole
+  blk-src-malformed
 
   block-begin-line
   block-end-line

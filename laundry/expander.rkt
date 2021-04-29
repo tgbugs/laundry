@@ -365,6 +365,8 @@
   end-drawer ; end is tricky because we do want to warn on it
   table
   table-row
+  table-row-rule
+  table-node
   hyperlink ; FIXME needs to be an sa alt probably
 
   bof

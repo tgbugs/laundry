@@ -210,7 +210,8 @@
   (dotest "||")
   (dotest "||\n||")
   (dotest "\n| the foo")
-  ; FIXME the bug here is that these should all be one table but show up as multiple tables
+  ; FIXME the bug here is that these should all be one table but show
+  ; up as multiple tables possibly due to ambiguity in the grammar
   (dotest "|ah poop| wut\n|is going| on here| oh hai mark") ;x
   (dotest "|ah-poop|-wut\n|is-going|-on-here|-oh-hai-mark") ;x
   (dotest "* \n|a|b  | c | d \n|e f g | hi|j|k\n|l\n|m|n\n|o\n|p") ;x
@@ -235,6 +236,11 @@
   (dotest "* \n|a\n")
   (dotest "* \n|a\n|b")
   (dotest "* \n|a\n|b c")
+  (dotest "|tables\n|-\n|rule!")
+
+  (dotest "|a\n|b\n|c\n\n|d\n|e") ; FIXME this should be two nodes
+  (dotest "|\n\n|")
+  (dotest "|\n\n\n|")
 
   )
 

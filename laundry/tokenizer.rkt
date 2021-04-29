@@ -72,6 +72,11 @@
          ; anyway? so we are ok?
          (:* (:~ "\n")))
    "\n"))
+(define-lex-abbrev table-element
+  (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:+ (:~ "\n"))))
+                    (:or
+                     "\n\n"
+                     (:seq "\n" (:* (:or " " "\t")) (:~ " " "\t" "\n" "|") (:+ (:~ "\n")) "\n"))))
 (define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") (:or " " "\t")))
 (define-lex-abbrev drawer-ish
   ; FIXME this is not right, check the spec to see
@@ -464,6 +469,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (token 'SRC-BLOCK lexeme))]
    ;[src-block (token 'SRC-BLOCK lexeme)]
 
+   [table-element (token 'TABLE-ELEMENT lexeme)] ; FIXME stop before corrections
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
    ; in theory it should be possible to scan for headlines and then parse all the sections
@@ -714,7 +720,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                                 -first-out)]
                  [out (if (srcloc-token? first-out)
                           (make-srcloc-token
-                           (srcloc-token-token first-out)
+                           (srcloc-token-token first-out) ; FIXME must strip the leading newline
                            (let* ([sl (srcloc-token-srcloc first-out)]
                                   [line (srcloc-line sl)])
                              (make-srcloc

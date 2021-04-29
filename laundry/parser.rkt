@@ -1,9 +1,6 @@
 ;; it is easier to navigate this file if you use `outline-minor-mode'
 #lang brag
 
-;test: /BOF no-headlines-hungry-no-src-end
-;test : /BOF headline-content-2
-
 ;;; this grammar is newline first NOT newline last
 
 ;; even with this limitation you can implement a
@@ -61,10 +58,10 @@ org-node : headline-node | org-node-basic
                 | double-blank-line
                 | newline
 
--org-node-basic : affiliated-keyword* ( org-node-basic-element ; old version where aff keywords were implemented in the grammar
-                                      | double-blank-line )
-                | un-affiliated-keyword
-                | newline
+;-org-node-basic : affiliated-keyword* ( org-node-basic-element ; old version where aff keywords were implemented in the grammar
+;                                      | double-blank-line )
+;                | un-affiliated-keyword
+;                | newline
 
 @org-node-basic-element : drawer
                         | blk-dyn
@@ -105,7 +102,7 @@ org-node : headline-node | org-node-basic
 ; it back together in post
 
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
-paragraph-line : newline-or-bof parl-lines
+paragraph-line : newline parl-lines
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
 hyperlink : LINK
@@ -223,7 +220,7 @@ nc-start : parl-ncln-bt-l-d
 
 ; both planning and property drawer can only have a single newline each before them
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
-headline : HEADING | newline-or-bof stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wsnn+ due to the fact that we are going to reparse and thus would lose srcloc
+headline : HEADING | newline stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wsnn+ due to the fact that we are going to reparse and thus would lose srcloc
 stars : ASTERISK | STARS ; ASTERISK+ destorys performance
 headline-content : @not-newline
 
@@ -447,7 +444,7 @@ property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newli
 ; this means that we have to fully specify how drawers and property drawers because the ambiguity
 ; in the grammar is exploited by the parser to increase performance
 drawer : DRAWER | drawer-spec | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
-@drawer-spec : newline-or-bof wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end-drawer ; XXX the second wsnn* is undocumented
+@drawer-spec : newline wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end-drawer ; XXX the second wsnn* is undocumented
 drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ; FIXME word constituent ???
 ;drawer-contents : ( newline @not-newline )* ; FIXME big issue with headlines
 
@@ -465,12 +462,12 @@ org-node-d : org-nbe-less-d | paragraph-line-d | newline
 ;;; comments
 
 comment-element : ( COMMENT-ELEMENT | comment-line)+ ; remember kids one-or-more != one-and-maybe-more?
-comment-line : newline-or-bof wsnn* HASH ( wsnn+ @not-newline? )?
+comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
 
 ;;; keywords
 
-@nlbofwsnn : /newline-or-bof wsnn*
-babel-call : nlbofwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
+@nlwsnn : /newline wsnn*
+babel-call : nlwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
 todo-spec-line : TODO-SPEC-LINE
 
 ; there is no requirement that there be a space between the key and the value according to org-element
@@ -487,7 +484,7 @@ kw-key : not-whitespace ; XXX there is a tradeoff here between implementation co
 ;kw-value : not-colon-whitespace not-colon-newline* ; ensure that the value does not gobble leading whitespace
 kw-value : not-newline ; but ambiguity ...
 
-keyword : todo-spec-line | nlbofwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
+keyword : todo-spec-line | nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
 keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
              | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
 
@@ -506,7 +503,7 @@ keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend a
 
 ;;; affiliated keywords (do not implement as part of the grammar)
 
-affiliated-keyword : nlbofwsnn @affiliated-keyword-line
+affiliated-keyword : nlwsnn @affiliated-keyword-line
 affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
 ; ak-key defines which keywords can affiliate
 ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
@@ -517,7 +514,7 @@ un-affiliated-keyword : affiliated-keyword
 
 ;;; affiliated keywords (old)
 
--affiliated-keyword : /newline-or-bof wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
+-affiliated-keyword : /newline wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
 ak-value : @not-newline
 -ak-key : ak-key-opt | ak-key-attr | ak-key-no-opt
 @ak-key-no-opt : ak-key-name-no-opt
@@ -561,12 +558,12 @@ result : RESULT
 ; of an org-file from just its syntax because you need
 ; a stack to keep track of which block you are in
 
-@block-less-dyn : ( blk-src | /newline-or-bof blk-ex ) ; FIXME do we really / the newline here? I guess?
+@block-less-dyn : ( blk-src | /newline blk-ex ) ; FIXME do we really / the newline here? I guess?
 
 ; NOTE greater blocks that do not have a special status e.g. src blocks for babel
 ; can only be determined to be malformed during a later pass, not by the grammar alone
-block-begin-line : /newline-or-bof wsnn* blk-greater-begin
-block-end-line : /newline-or-bof wsnn* blk-greater-end ; FIXME paragraph vs out of place end line
+block-begin-line : /newline wsnn* blk-greater-begin
+block-end-line : /newline wsnn* blk-greater-end ; FIXME paragraph vs out of place end line
 
 blk-ex : blk-ex-begin blk-ex-contents nlpws blk-ex-end
 blk-ex-begin : BEGIN-EX wsnn blk-line-contents | BEGIN-EX
@@ -592,7 +589,7 @@ block-type-name : @not-whitespace ;| CHARS-COMMENT | CHARS-ARCHIVE ; CHARS- are 
 block-type-rest : @not-whitespace
 
 
-blk-dyn : /newline-or-bof blk-dyn-begin blk-dyn-contents newline blk-dyn-end
+blk-dyn : /newline blk-dyn-begin blk-dyn-contents newline blk-dyn-end
 ; XXX elisp impl requires at least wsnn after #+begin: to work
 ; FIXME NOTE #+begin: asdf is just a keyword if there is no #+end found
 blk-dyn-begin : BEGIN-DB /COLON wsnn blk-line-contents? | BEGIN-DB /COLON ; XXX suggested improvement
@@ -635,7 +632,7 @@ det-blk-src-end : blk-src-end ; basically all of these now that the tokenizer is
 det-blk-ex-begin : blk-ex-begin
 det-blk-ex-end : blk-ex-end
 
-blk-src : blk-src-whole | /newline-or-bof blk-src-begin blk-src-contents? nlpws blk-src-end
+blk-src : blk-src-whole | /newline blk-src-begin blk-src-contents? nlpws blk-src-end
 blk-src-whole : SRC-BLOCK ; XXX requires a nested parser OR chaining the positions of input port in the lexer to produce more than one token i.e. checking in next-token for a list
 ;blk-src : blk-src-begin newline blk-src-contents? wsnn* blk-src-end
 blk-src-begin : ( BEGIN-SRC wsnn blk-src-line-contents | BEGIN-SRC ) /wsnn*
@@ -667,7 +664,7 @@ blk-src-line-rest-alt : switches-sane /wsnn blk-src-args-after-switches-sane
                       | switches-sane
                       | @not-switch @not-newline?
 
-@--test--switches-sane : /BOF? switches-sane
+@--test--switches-sane : switches-sane
 switches-sane : ( switch-sane ( /wsnn format-string )? /wsnn )* switch-sane ( /wsnn format-string )?
 switch-sane : switch-sign alpha
 last-switch-string : wsnn format-string
@@ -708,18 +705,19 @@ string-contents : ( @not-bs-dq | /BS DQ | BS )+
 ;;; tables
 
 ;table : ( table-row | table-row-rule )+
-table : table-row+
-table-dumb : /newline-or-bof /PIPE @not-newline ; as a matter of last resort
-table-row : /newline-or-bof /wsnn* table-cell+ /PIPE?
+table : ( /newline /wsnn* ( table-row | table-row-rule ) )+ | table-node
+table-node : TABLE-ELEMENT
+;table-dumb : /newline /PIPE @not-newline ; as a matter of last resort
+table-row : table-cell+ /PIPE?
 ;table-cell : /PIPE @not-pipe-not-newline? ; this is NOT ambiguous the minimal match is /PIPE+ PIPE? !??!?!
 table-cell : /PIPE /space? ( @not-pipe-bs-newline | /BS PIPE | BS )* /space? ; XXX divergence
-table-row-rule : /newline-or-bof /wsnn* /PIPE /HYPHEN /not-newline? ; everything else gets wiped
+table-row-rule : /PIPE /HYPHEN /not-newline? ; everything else gets wiped
 
 ;;;;
 
 ;;; plain lists
 
-plain-list-line : /newline-or-bof pl-indent ( ordered-list-line | descriptive-list-line )
+plain-list-line : /newline pl-indent ( ordered-list-line | descriptive-list-line )
 pl-indent : @wsnn*
 ordered-list-line : bullet-counter plain-list-line-tail?
 bullet-counter : ( digits | alphas-unmixed ) ( PERIOD | R-PAREN )
@@ -797,7 +795,7 @@ footnote-definition : footnote-definition-line org-node-f*
 -org-node-f-in : affiliated-keyword* ( org-nbe-f-in  | blank-line )
                | un-affiliated-keyword
 
-footnote-definition-line : newline-or-bof FOOTNOTE-START fn-label RSB fn-def
+footnote-definition-line : newline FOOTNOTE-START fn-label RSB fn-def
 
 fn-def : @not-newline? org-node-f
 
@@ -928,7 +926,6 @@ not-at-at : ( @not-at1 | ( AT @not-at1 ) )+
 ;; the elisp org parser parses whitespace as significant
 ;; XXX suggestion: disallow all leading whitespace or invoke undefined behavior
 
-@newline-or-bof : newline | /BOF
 @newline-or-eof : newline? ; XXXXXXXXXXXXXXXXX this might might might work if no major structure starts with a newline, we will be able to test that once the newline first form is working
 nlws : newline ( tab | space )* ; TODO FIXME this has to be parsed as significant whitespace
 nlpws : newline+ ( tab | space )* ; variant to handle cases like #+end_src ; TODO FIXME this has to be parsed as significant whitespace
@@ -939,13 +936,11 @@ whitespace : newline | space | tab
 blank-line : newline /newline ; please tell me that cutting backtracks, that would be beyond wonderful
 double-blank-line : newline newline /newline
 
-bof : /BOF
-newline : NEWLINE ; FIXME in many cases we also need to accept BOF here
+newline : NEWLINE
 
 space : SPACE ; TODO SPACE-N needs to be a lexeme which will cause a branch in here
 tab : TAB
 ; FIXME missing a bunch of other things that count as whitespace
-;bof : BOF ; FIXME this doesn't work
 
 ;;; big
 

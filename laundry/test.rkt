@@ -26,7 +26,8 @@
 (define-namespace-anchor anc-test)
 (define ns-test (namespace-anchor->namespace anc-test))
 (define (dotest test-value #:eq [eq #f] #:eq-root [eq-root #f]
-                #:node-type [node-type #f] #:nt [nt node-type] #:quiet [quiet #f]
+                #:nt [nt #f]
+                #:node-type [node-type nt] #:quiet [quiet #f]
                 #:parse-to-datum [parse-to-datum #f]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
@@ -41,7 +42,7 @@
                    (compose syntax->datum (testing-parse)))
                (t)))
   (when (and node-type (not (rec-cont hrm node-type)))
-    (error (format "parse does not contain ~s" node-type)))
+    (error (format "parse of ~s does not contain ~s" test-value node-type)))
   (when (and eq (not (equal? eq hrm)))
     (error (format "foo ~s ~s" test-value-inner hrm)))
   ; WAIT!? setting a parameter modifies the parent in module+ but not
@@ -788,11 +789,12 @@ WHEEEEEEEEEE
 :olo: lol
 :end:" #:node-type 'property-drawer)
 
-  #; ; correctly broken
   (dotest "
 * asdf
 :properties:
-:hrm: oops :end:")
+:hrm: oops :end:" #:nt 'paragraph)
+
+  ; FIXME TODO perfect example of why we will also need a way to chain a newline when we peek the eof
   (dotest "
 * Headline 1
 :properties:
@@ -909,10 +911,10 @@ random end
 
   (dotest "\n:drawer:\n:end:")
 
-  (dotest ":d:\n:end:")
+  (dotest ":d:\n:end:") ; incorrect parse
   (dotest ":d:\n* \n:end:") ; foo yeah it works ; FIXME malformed ?
 
-  (dotest ":ARCHIVE:\n:end:")
+  (dotest ":ARCHIVE:\n:end:") ; incorrect parse
 
   )
 
@@ -1264,7 +1266,7 @@ y y:
   (dotest "_" #:node-type p)
   (dotest "#+" #:node-type p)
   (dotest ":lolololol" #:node-type p)
-  (dotest ":lolololol:" #:node-type p)
+  (dotest ":lolololol:" #:node-type p) ; malformed detached drawer
 
   (dotest "#+x[ ]x:" #:node-type p)
   (dotest "#+[ ]x:")

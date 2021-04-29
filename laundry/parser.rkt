@@ -103,6 +103,7 @@ org-node : headline-node | org-node-basic
 
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 paragraph-line : newline parl-lines
+               | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
 hyperlink : LINK
@@ -189,7 +190,12 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XX
           | planning-dissociated
           | ak-key-no-colon
           | babel-call-no-colon
+          | detached-drawer
           | end-drawer
+
+parl-tokens-with-newline : malformed-nl
+malformed-nl : detached-drawer
+detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF ; FIXME distinguish maybe?
 
 ;malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
 

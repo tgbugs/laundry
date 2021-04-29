@@ -48,7 +48,10 @@
 ; backslash escape
 ; https://orgmode.org/list/87tvguyohn.fsf@nicolasgoaziou.fr/T/#u
 ; https://orgmode.org/list/87sgvusl43.fsf@nicolasgoaziou.fr/T/#u
-(define-lex-abbrev hyperlink (:seq "[[" (:+ (:~ "\n")) "]]"))
+(define-lex-abbrev hyperlink-content (:+ (:or (:~ "[" "]" "\n") (:seq "\\" "[")  (:seq "\\" "]"))))
+; FIXME not sure if correct
+(define-lex-abbrev hyperlink (:seq "[[" hyperlink-content (:? (:seq "][" hyperlink-content) ) "]]"))
+
 
 #; ; can't use this variant because it gobbles \n# in the \n#+name: case
 (define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:* (:seq (:or " " "\t") (:* (:~ "\n")))))))
@@ -83,7 +86,7 @@
   (from/stop-before
    (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":")
    (:or stop-before-heading
-        (:seq "\n" (:* " " "\t") ":end:"))))
+        (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n"))))
 
 (define-lex-abbrev todo-spec-line
   ; XXX TODO FIXME BOF issues >_<
@@ -233,7 +236,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   (if (string-suffix? lexeme "*")
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
-      (token TOKEN lexeme)))
+      (if (eq? (peek-char input-port) eof)
+          ; FIXME decide how we are goin to do this and make it consistent
+          (token (string->symbol (format "~a-EOF" TOKEN)) lexeme)
+          (token TOKEN lexeme))))
 
 (define (get-tokens tokenizer)
   (define (sigh next-token [accum '()])
@@ -531,6 +537,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ;[(:or "scheduled:" "SCHEDULED:") (token 'SCHEDULED lexeme)]
    ;[(:or "closed:" "CLOSED:") (token 'CLOSED lexeme)]
 
+   #; ; I don't think we need this anymore
    [":ARCHIVE" (token 'ARCHIVE lexeme)] ; sigh longest match >_<
 
    ;[":no_export" (token 'NO_EXPORT lexeme)] ; TODO this should probably be configurable
@@ -720,24 +727,64 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                                 -first-out)]
                  [out (if (srcloc-token? first-out)
                           (make-srcloc-token
-                           (srcloc-token-token first-out) ; FIXME must strip the leading newline
+                           (let* ([t (srcloc-token-token first-out)]
+                                  #;
+                                  [__ (println (cons 'qq t))]
+                                  [v (token-struct-val t)])
+                             ; FIXME must strip the leading newline
+                             (token
+                              (token-struct-type t)
+                              (if (string? v)
+                                  (substring v 1)
+                                  v)))
                            (let* ([sl (srcloc-token-srcloc first-out)]
-                                  [line (srcloc-line sl)])
-                             (make-srcloc
-                              (srcloc-source sl)
-                              (if line (sub1 line) line) ; FIXME careful with -> 0
-                              (srcloc-column sl)
-                              (srcloc-position sl) ; should always be 1
-                              (- (srcloc-span sl) shift))))
+                                  [line (srcloc-line sl)]
+                                  [srcloc-correct
+                                   (make-srcloc
+                                    (srcloc-source sl)
+                                    (if line (sub1 line) line) ; FIXME careful with -> 0
+                                    (srcloc-column sl)
+                                    (srcloc-position sl) ; should always be 1
+                                    (- (srcloc-span sl) shift))])
+                             srcloc-correct))
                           first-out)])
             (set! bof #f)
             #;
             (pretty-print out)
             out))
-    (let ([out (laundry-lexer port)])
-      #;
-      (pretty-print out)
-      out)))
+        (let* ([out-raw (laundry-lexer port)]
+               #;
+               [__ (println (cons 'aaaaaaaaaaa out-raw))]
+               [out
+                (if (and (not (eq? out-raw eof))
+                         (not (let ([t (srcloc-token-token out-raw)])
+                                (println (cons 'asdf t))
+                                (or (eq? (token-struct-type t) 'NEWLINE)
+                                    (string-suffix?
+                                     (token-struct-val t)
+                                     "\n"))))
+                         (eq? (peek-char port) eof)) ; TODO and lexeme end != newline
+                    (begin
+                      ; FIXME we know the length of these files so there is no reason to peek?! these
+                      ; files are not things that should be appended to while we are reading them and
+                      ; while I guess you could have an org file that wouldn't fit into memory that's
+                      ; the point at which a ... different approach will be needed anyway ... actually
+                      ; you're going to have to branch on something at some point
+                      (file-position port
+                                     (- (file-position port) ; XXX check this
+                                        (srcloc-span (srcloc-token-srcloc out-raw))))
+                      (let ([final-out
+                             (laundry-lexer
+                              (input-port-append #f
+                                                 port
+                                                 (open-input-string "\n")))])
+                        #;
+                        (pretty-print final-out)
+                        final-out))
+                    out-raw)])
+          #;
+          (pretty-print out)
+          out)))
   next-token)
 
 (module+ test-port

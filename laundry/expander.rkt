@@ -259,6 +259,9 @@
   parl-pw-bt
   parl-se-wsnn
   parl-sigh
+  parl-tokens-with-newline
+  malformed-nl ; FIXME -> syntax warn
+  detached-drawer
 
   stuff
   wordhyus

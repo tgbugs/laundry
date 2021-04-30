@@ -52,11 +52,13 @@
 
 org-file : org-node*
 
-org-node : headline-node | org-node-basic
+@org-node : headline-node | org-node-basic
 
 @org-node-basic : org-node-basic-element
                 | double-blank-line
-                | newline
+                | empty-line
+
+empty-line : newline
 
 ;-org-node-basic : affiliated-keyword* ( org-node-basic-element ; old version where aff keywords were implemented in the grammar
 ;                                      | double-blank-line )
@@ -604,7 +606,8 @@ blk-dyn-begin : BEGIN-DB /COLON wsnn blk-line-contents? | BEGIN-DB /COLON ; XXX 
 ; it for some other purpose, but really?
 blk-dyn-end : END-DB /COLON
 blk-dyn-contents : org-node-dyn* ;anything except #+end: basically
-org-node-dyn : affiliated-keyword* ( drawer | org-nbe-less-d | paragraph-line | newline )
+;org-node-dyn : affiliated-keyword* ( drawer | org-nbe-less-d | paragraph-line | newline )
+org-node-dyn : drawer | org-nbe-less-d | paragraph-line | newline
 
 @no-headlines : ( PARAGRAPH @not-newline? | line-not-headline)+
 @line-not-headline : newline+ @start-not-headline @not-newline?
@@ -939,7 +942,7 @@ whitespace : newline | space | tab
 @wsnn : tab | space ; FIXME need other whitespace chars FIXME need to move multi whitespace to tokenizer
 
 ;; this isn't going to work is in ;_;
-blank-line : newline /newline ; please tell me that cutting backtracks, that would be beyond wonderful
+blank-line : newline /newline ; please tell me that cutting backtracks, that would be beyond wonderful noop
 double-blank-line : newline newline /newline
 
 newline : NEWLINE

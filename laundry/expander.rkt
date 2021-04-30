@@ -343,6 +343,7 @@
   org-file
   org-node
   org-node-dyn
+  empty-line
   comment-element
   comment-line
 

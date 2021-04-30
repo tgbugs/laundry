@@ -48,14 +48,14 @@
 ; backslash escape
 ; https://orgmode.org/list/87tvguyohn.fsf@nicolasgoaziou.fr/T/#u
 ; https://orgmode.org/list/87sgvusl43.fsf@nicolasgoaziou.fr/T/#u
-(define-lex-abbrev hyperlink-content (:+ (:or (:~ "[" "]" "\n") (:seq "\\" "[")  (:seq "\\" "]"))))
+(define-lex-abbrev hyperlink-content
+  (:+ (:or (:~ "[" "]" "\n") (:seq "\\" "[")  (:seq "\\" "]"))))
 ; FIXME not sure if correct
-(define-lex-abbrev hyperlink (:seq "[[" hyperlink-content (:? (:seq "][" hyperlink-content) ) "]]"))
+(define-lex-abbrev hyperlink
+  (:seq "[[" hyperlink-content (:? (:seq "][" hyperlink-content) ) "]]"))
 
-
-#; ; can't use this variant because it gobbles \n# in the \n#+name: case
-(define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:* (:seq (:or " " "\t") (:* (:~ "\n")))))))
-(define-lex-abbrev comment-element (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
+(define-lex-abbrev comment-element
+  (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
 
 (define-lex-abbrev keyword-element
   (from/stop-before
@@ -75,12 +75,35 @@
          ; anyway? so we are ok?
          (:* (:~ "\n")))
    "\n"))
+(define-lex-abbrev src-block
+  (:seq (from/stop-before (:seq "\n" (:* " " "\t") (:or "#+begin_src" "#+BEGIN_SRC"))
+                          (:or
+                           stop-before-heading
+                           (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))))
+
 (define-lex-abbrev table-element
   (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:+ (:~ "\n"))))
                     (:or
                      "\n\n"
                      (:seq "\n" (:* (:or " " "\t")) (:~ " " "\t" "\n" "|") (:+ (:~ "\n")) "\n"))))
 (define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") (:or " " "\t")))
+(define-lex-abbrev drawer-props
+  (:or (from/stop-before (:seq "\n" (:* " " "\t") ":properties:")
+                         ; FIXME NOTE there are cases where the pattern in the
+                         ; names of the property values for a draw cause it to NO
+                         ; LONGER BE a property drawer, this is almost certainly a
+                         ; design flaw in org mode which makes it difficult to
+                         ; parse the property drawers correctly and efficiently in
+                         ; this way, the other possibility is to accept the more
+                         ; complex grammar that we already wrote which more or
+                         ; less works as expected at the expense of performance
+                         (:or stop-before-heading
+                              (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
+       ; sigh legacy support for this
+       (from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:") ; FIXME does the case have to match?
+                         (:or stop-before-heading
+                              (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))))
+
 (define-lex-abbrev drawer-ish
   ; FIXME this is not right, check the spec to see
   (from/stop-before
@@ -152,16 +175,8 @@
                              ))
                        (:& (:~ "." ")") par-rest-ok)
                        (:+ par-rest-ok)))))
-#;
-(define-lex-abbrev paragraph (:seq "\n" (:+ (:seq (:+ (:or alpha 0-9 "," " " "\t") (:** 1 2 "\n")) (:or alpha 0-9 " " "\t")))))
-#; ; too complex ?
-(define-lex-abbrev src-block (:seq "\n" (:* (:or " " "\t")) "#+begin_src" (:** 0 1 (:seq (:or " " "\t") (:~ "\n")))
-                                   (:* (:seq "\n"
-                                             (:or (:seq (:~ "*") (:+ (:~ "\n")))
-                                                  (:seq (:+ "*") (:~ "*" " " "\t" "\n")))))
-                                   (:* "\n" " " "\t") "#+end_src" (:* " " "\t")))
 
-(define-lex-abbrev src-block (:seq "#+begin_src" (:+ (:~ "*")) "#+end_src"))
+
 (define-lex-abbrev negated-set
   (:~ ; NOT any of these
    " "
@@ -269,7 +284,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         ; XXX stars eating the space is a design flaw, the tokenizer must peek
         (token 'STARS lexeme)]
        [(:seq (:+ (:or " " "\t"))
-              (:+ ":" (:+ (:or alpha 0-9 "_" "@" "#" "%"))) ; XXX unicode dialect and ascii dialect?
+              (:+ (:seq ":" (:+ (:or alpha 0-9 "_" "@" "#" "%"))))
+              ; XXX warning :+ seems to have an implicit :or lurking in it
+              ; XXX unicode dialect and ascii dialect?
               ":"
               ; FIXME SIGH we can't include eof here because ... reasons ??
               (:* (:or " " "\t"))
@@ -455,25 +472,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                       (:seq "\n" (:+ "*") (:or " " "\t")))
     (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
    ; XXX we can't do start-after on a heading to find a random end_src
-   [(:seq (from/stop-before (:seq "\n" (:* " " "\t") (:or "#+begin_src" "#+BEGIN_SRC"))
-                            ; XXX this gobbles headings, my previous comment on headings was
-                            ; wrong, if we create a phased parser that identifies all headings
-                            ; first, then we could use this, but as it stands this will not work
-                            (:or
-                             stop-before-heading
-                             ; XXX YES BUT NO from/stop-before doesn't actually work correctly!
-                             ; and it eats the stars!
-                             (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))
-          #; ; we have to match the end separately but that is OK
-          (:or (:seq "\n" (:+ "*") (:or " " "\t"))
-               (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))
-    (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)
-    #;
-    (if (string-suffix? lexeme "*")
-        (token-stop-before 'SRC-BLOCK-MALFORMED 'SRC-BLOCK-MALFORMED
-                           lexeme #\newline input-port start-pos)
-        (token 'SRC-BLOCK lexeme))]
-   ;[src-block (token 'SRC-BLOCK lexeme)]
+   [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
 
    [table-element (token 'TABLE-ELEMENT lexeme)] ; FIXME stop before corrections
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
@@ -483,28 +482,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
 
-   [(from/stop-before (:seq "\n" (:* " " "\t") ":properties:")
-             ; FIXME NOTE there are cases where the pattern in the
-             ; names of the property values for a draw cause it to NO
-             ; LONGER BE a property drawer, this is almost certainly a
-             ; design flaw in org mode which makes it difficult to
-             ; parse the property drawers correctly and efficiently in
-             ; this way, the other possibility is to accept the more
-             ; complex grammar that we already wrote which more or
-             ; less works as expected at the expense of performance
-             (:or stop-before-heading
-                  (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
-    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)
-    #;
-    (token 'DRAWER-PROPS lexeme)]
-   ; sigh legacy support for this
-   [(from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:") ; FIXME does the case have to match?
-                      (:or stop-before-heading
-                           (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))
-    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)
-    #;
-    (token 'DRAWER-PROPS lexeme)]
-
+   [drawer-props (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)]
    [drawer-ish (token-stop-before-heading 'DRAWER lexeme input-port start-pos)]
 
    [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
@@ -758,6 +736,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                [out
                 (if (and (not (eq? out-raw eof))
                          (not (let ([t (srcloc-token-token out-raw)])
+                                #;
                                 (println (cons 'asdf t))
                                 (or (eq? (token-struct-type t) 'NEWLINE)
                                     (string-suffix?

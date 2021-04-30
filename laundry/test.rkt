@@ -144,9 +144,9 @@
 (module+ test-cell
   ; from this it seems that we can't do PIPE? at the end because it will be eaten
   ; nope, not true, the PIPE? takes precednece so that does work in the limited case
-  (dotest "|" #:eq '(org-file (org-node (table (table-row (table-cell))))))
-  (dotest "||" #:eq '(org-file (org-node (table (table-row (table-cell))))))
-  (dotest "|||" #:eq '(org-file (org-node (table (table-row (table-cell) (table-cell))))))
+  (dotest "|" #:eq '(org-file (table (table-row (table-cell)))))
+  (dotest "||" #:eq '(org-file (table (table-row (table-cell)))))
+  (dotest "|||" #:eq '(org-file (table (table-row (table-cell) (table-cell)))))
   (dotest "||||")
   (dotest "|||||")
   (dotest "|||||||||||||||||||||||||||||||||||||")
@@ -173,7 +173,7 @@
   )
 
 (module+ test-row
-  (dotest "|\n|" #:eq '(org-file (org-node (table (table-row (table-cell)) (table-row (table-cell))))))
+  (dotest "|\n|" #:eq '(org-file (table (table-row (table-cell)) (table-row (table-cell)))))
   (dotest "||\n|")
   (dotest "||\n||")
   (dotest "|a|\n||")
@@ -321,7 +321,7 @@
   (dotest "* H ") ; how the foo does this work
   (dotest "* He") ; and this work
   (dotest "* He ") ; but this fail?
-
+  (dotest "* T n:t:")
 
   (dotest "* [#P]:t:")
   (dotest "* [#P] :t:")
@@ -495,7 +495,7 @@
   (dotest "  #+")
   (dotest "#+")
   (dotest "#+:")
-  (dotest "#+:aaaa:" #:eq-root '(org-file (org-node (keyword (keyword-key ":aaaa")))))
+  (dotest "#+:aaaa:" #:eq-root '(org-file (keyword (keyword-key ":aaaa"))))
   (dotest "#+:aaaa")
   (dotest "#+::")
   (dotest "#+: :")
@@ -698,7 +698,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
 (module+ test-comments
 
   (dotest "35934")
-  (dotest "35934" #:eq-root '(org-file (org-node (paragraph "\n35934")))) ; FIXME bof newline ...
+  (dotest "35934" #:eq-root '(org-file (paragraph "\n35934"))) ; FIXME bof newline ...
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -1452,28 +1452,25 @@ don't affilaite to other unaff keyword
 
 (define h-l1
   '(org-file
-    (org-node (headline-node (heading 1 ())))))
+    (headline-node (heading 1 ()))))
 (define h-l1-c 
   '(org-file
-    (org-node
-     (headline-node
-      (headline
-       (stars "*")
-       (headline-content (h-sane-comment (h-comment "COMMENT"))))))))
+    (headline-node
+     (headline
+      (stars "*")
+      (headline-content (h-sane-comment (h-comment "COMMENT")))))))
 (define h-l1-t
   '(org-file
-    (org-node
-     (headline-node
-      (headline
-       (stars "*")
-       (headline-content (h-tags (tag-name "t") (tag-name "1"))))))))
+    (headline-node
+     (headline
+      (stars "*")
+      (headline-content (h-tags (tag-name "t") (tag-name "1")))))))
 (define h-l1-p
   '(org-file
-    (org-node
-     (headline-node
-      (headline
-       (stars "*")
-       (headline-content (h-priority (priority-level (not-whitespace1 "P")))))))))
+    (headline-node
+     (headline
+      (stars "*")
+      (headline-content (h-priority (priority-level (not-whitespace1 "P"))))))))
 
 (module+ test-sentinel
   ; things that work and should continue to work
@@ -1495,15 +1492,15 @@ don't affilaite to other unaff keyword
 
   #;
   (dotest "" #:eq     '(org-file (org-node (bof))))
-  (dotest "" #:eq-root '(org-file (org-node "\n")))
+  (dotest "" #:eq-root '(org-file "\n"))
   #;
   (dotest "\n" #:eq   '(org-file (org-node (bof)) (org-node (newline #f))))
-  (dotest "\n" #:eq-root '(org-file (org-node "\n") (org-node "\n")))
+  (dotest "\n" #:eq-root '(org-file "\n" "\n"))
   #;
   (dotest "  " #:eq   '(org-file (org-node (paragraph (space #f) (space #f)))))
-  (dotest "  " #:eq-root   '(org-file (org-node (paragraph "\n  "))))
-  (dotest "  \n" #:eq-root '(org-file (org-node (paragraph "\n  "))
-                                      (org-node "\n")))
+  (dotest "  " #:eq-root   '(org-file (paragraph "\n  ")))
+  (dotest "  \n" #:eq-root '(org-file (paragraph "\n  ")
+                                      "\n"))
 
   (dotest "* :tag:")
   (dotest "*   :ARCHIVE:")

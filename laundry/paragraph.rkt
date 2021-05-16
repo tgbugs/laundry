@@ -1,6 +1,9 @@
 #lang brag
 
-paragraph : markup? ( mu-pre markup | stuff | macro )* markup-eof?
+paragraph : markup? ( mu-pre markup
+                    | stuff
+                    | macro
+                    | hyperlink )* markup-eof?
 
 stuff : ( STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline )+
 
@@ -11,6 +14,12 @@ newline : NEWLINE
 ;;; macros
 
 macro : MACRO
+
+;;; hyperlink
+
+hyperlink : link-regular | link-angle
+link-regular : LINK
+link-angle : LINK-AB
 
 ;;; markup
 

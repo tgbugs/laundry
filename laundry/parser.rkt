@@ -1,4 +1,4 @@
-;; it is easier to navigate this file if you use `outline-minor-mode'
+; it is easier to navigate this file if you use `outline-minor-mode'
 #lang brag
 
 ;;; this grammar is newline first NOT newline last
@@ -60,11 +60,6 @@ org-file : org-node*
 
 empty-line : newline
 
-;-org-node-basic : affiliated-keyword* ( org-node-basic-element ; old version where aff keywords were implemented in the grammar
-;                                      | double-blank-line )
-;                | un-affiliated-keyword
-;                | newline
-
 @org-node-basic-element : drawer
                         | blk-dyn
                         | org-nbe-less-d
@@ -108,7 +103,9 @@ paragraph-line : newline parl-lines
                | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
-hyperlink : LINK
+hyperlink : link-regular | link-angle
+link-regular : LINK
+link-angle : LINK-AB ; we don't actually use this here
 
 paragraph-f-in : @paragraph-line-f-in+
 paragraph-line-f-in : newline ( parl-lines | misplaced-footnote-definition )
@@ -197,7 +194,7 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XX
 
 parl-tokens-with-newline : malformed-nl
 malformed-nl : detached-drawer
-detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF ; FIXME distinguish maybe?
+detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME distinguish maybe?
 
 ;malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
 

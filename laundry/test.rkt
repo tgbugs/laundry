@@ -37,7 +37,7 @@
       (let ([prepended (if p (string-append p test-value) test-value)])
         (if s (string-append prepended s) prepended))))
   (define (t) ((testing-token) (open-input-string test-value-inner)))
-  (define hrm ((if parse-to-datum
+  (define hrm ((if parse-to-datum ; used for debug
                    parse-to-datum
                    (compose syntax->datum (testing-parse)))
                (t)))
@@ -67,6 +67,7 @@
     (unless (or eq node-type)
       hrm)))
 
+#;
 (require debug/repl)
 (define (dotest-q test-value)
   (dotest test-value #:quiet #t))
@@ -100,14 +101,41 @@
   (dotest "")
   (dotest " ")
   (dotest " \n")
-  (dotest "* ")
-  (dotest "* Headline")
-  (dotest "* Headline\n:properties:\n:poop: foo\n:end:") ; FIXME broken again
+  (dotest "* ") ; XXX broken in the rework due to bof eof combo issues
+  (dotest "* Headline") ; XXX broken in the rework due to bof eof combo issues
+  (dotest "* Headline\n:properties:\n:poop: foo\n:end:") ; LOL broken again after it was fixed woo ambiguity
   (dotest "Paragraph foo poop.")
   (dotest "1. ordered list")
   (dotest "- descriptive list")
   (dotest "| table ")
-  (dotest ":drawer:\n:end:")
+
+  ; bof eof same line problem
+  (dotest ":drawer:\n:end:") ; so this one works with bof-eof
+  (dotest "\n:drawer:\n:end:") ; FIXME but now this one is wrong?
+  (dotest ":drawer:\n:end:\n")
+
+  )
+
+(module+ test-wat
+  (dotest "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
+
+  (dotest "x. ")
+  (dotest "x   ")
+  (dotest "abc1")
+  (dotest "abcd")
+  (dotest "a.. ")
+  (dotest "a.  ") ; XXX
+  (dotest ":d:\n* \n:end:")
+  (dotest "\n:d:\n* \n:end:")
+  (dotest " \t ")
+  (dotest "   ")
+  (dotest "    ") ; XXX
+  (dotest "     ") ; XXX
+  (dotest "      ") ; XXX
+  (dotest "       ") ; XXX
+  (dotest "        ") ; XXX
+  (dotest "x.  ") ; XXX
+  (dotest "x.  \n")
   )
 
 (module+ test-list
@@ -115,21 +143,22 @@
   (dotest "0." #:node-type node-type)
   (dotest "0)" #:node-type node-type)
   (dotest "0. " #:node-type node-type)
-  (dotest "0.  " #:node-type node-type)
+  (dotest "0.  " #:node-type node-type) ; XXX neg srcloc
   (dotest " * poop" #:node-type node-type)
   (dotest " - foo" #:node-type node-type)
 
   (dotest "A. " #:node-type node-type)
+  (dotest "A.  " #:node-type node-type) ; XXX neg srcloc
   (dotest "A. asdf" #:node-type node-type)
   (dotest "a. " #:node-type node-type)
 
-  (dotest "1. \n 2. " #:node-type node-type)
+  (dotest "1. \n 2. " #:node-type node-type) ; XXX neg srcloc
 
   (dotest " A. asdf" #:node-type node-type)
   (dotest " a. " #:node-type node-type)
-  (dotest "1. \n a. " #:node-type node-type)
-  (dotest "1. There\n a. asdf" #:node-type node-type)
-  (dotest "1. There\n A. asdf" #:node-type node-type)
+  (dotest "1. \n a. " #:node-type node-type) ; XXX neg srcloc
+  (dotest "1. There\n a. asdf" #:node-type node-type) ; XXX
+  (dotest "1. There\n A. asdf" #:node-type node-type) ; XXX
   (dotest "1. There\n A. asdf\n" #:node-type node-type)
 
   )
@@ -911,10 +940,10 @@ random end
 
   (dotest "\n:drawer:\n:end:")
 
-  (dotest ":d:\n:end:") ; incorrect parse
+  (dotest ":d:\n:end:") ; XXX incorrect parse
   (dotest ":d:\n* \n:end:") ; foo yeah it works ; FIXME malformed ?
 
-  (dotest ":ARCHIVE:\n:end:") ; incorrect parse
+  (dotest ":ARCHIVE:\n:end:") ; XXX incorrect parse
 
   )
 
@@ -1698,6 +1727,7 @@ you called?
   (require
    (submod ".." test-headline-content)
    (submod ".." test-bof)
+   (submod ".." test-wat)
    (submod ".." test-list)
    (submod ".." test-npnn)
    (submod ".." test-cell)

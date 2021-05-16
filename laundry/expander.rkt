@@ -344,6 +344,7 @@
   org-node
   org-node-dyn
   empty-line
+  double-blank-line
   comment-element
   comment-line
 

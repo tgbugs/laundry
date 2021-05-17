@@ -67,3 +67,7 @@ terms such as =headline= will be renamed to =heading=. This has not
 been done to simplify comparison to the existing Org syntax document
 during early development. As such the names of the elements of the
 parse tree should not be considered to be stable.
+* Similar projects
+A grammar for org syntax written in Clojure by the Organice team.
+https://github.com/200ok-ch/org-parser/blob/master/resources/org.ebnf
+https://github.com/200ok-ch/org-parser

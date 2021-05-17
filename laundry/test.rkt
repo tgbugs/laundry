@@ -310,6 +310,17 @@
   (dotest "|\n\n|")
   (dotest "|\n\n\n|")
 
+
+  (dotest "|a\n\nb|c")
+  (dotest "|a\nb|c") ; tests stop-before correction
+  (dotest "|a \n b|c")
+
+  ; FIXME can't repro from test.org
+  (dotest "
+| can you have newlines in cells?
+  this seems strange to me? | no, you can't
+")
+
   )
 
 (module+ test-headline-content

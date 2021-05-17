@@ -324,7 +324,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ; XXX we can't do start-after on a heading to find a random end_src
    [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
 
-   [table-element (token 'TABLE-ELEMENT lexeme)] ; FIXME stop before corrections
+   [table-element
+    #;
+    (token 'TABLE-ELEMENT lexeme)
+    (token-stop-before 'TABLE-ELEMENT 'TABLE-ELEMENT lexeme #\newline input-port start-pos)
+    ]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
    [hyperlink-ab (token 'LINK-AB lexeme)]

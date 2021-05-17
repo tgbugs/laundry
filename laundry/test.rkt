@@ -8,7 +8,11 @@
          laundry/parser
          laundry/tokenizer
          (rename-in (only-in laundry/heading make-rule-parser)
-                    [make-rule-parser heading-rule-parser]))
+                    [make-rule-parser heading-rule-parser])
+         (for-syntax
+          racket/base
+          (only-in racket/port with-output-to-string)
+          syntax/parse))
 
 (provide dotest dotest-q dotest-file dotest-quiet)
 (define testing-parse (make-parameter parse))
@@ -16,6 +20,18 @@
 (define dotest-prefix (make-parameter #f))
 (define dotest-suffix (make-parameter #f))
 (define dotest-quiet (make-parameter #t)) ; parameters across require ... ?
+
+(define-syntax (current-module-path stx)
+  (syntax-parse stx
+    [(_)
+     #`(displayln
+        #,(datum->syntax
+           stx
+           (with-output-to-string
+             (λ ()
+               (display "Running tests in module: ")
+               (display (variable-reference->module-path-index (#%variable-reference)))))))]))
+
 #;
 (define testing-parse-to-datum (make-parameter parse-to-datum))
 (define (rec-cont tree atom)
@@ -25,9 +41,11 @@
 
 (define-namespace-anchor anc-test)
 (define ns-test (namespace-anchor->namespace anc-test))
-(define (dotest test-value #:eq [eq #f] #:eq-root [eq-root #f]
-                #:nt [nt #f]
-                #:node-type [node-type nt] #:quiet [quiet #f]
+(define (dotest test-value
+                #:eq  [eq #f]  #:eq-root            [eq-root #f]
+                #:nt  [nt  #f] #:node-type          [node-type          nt]
+                #:nte [nte #f] #:node-type-expanded [node-type-expanded nte]
+                #:quiet [quiet #f]
                 #:parse-to-datum [parse-to-datum #f]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
@@ -49,23 +67,25 @@
   ; if you actually require the module !? ARGH!
   (unless (or quiet (dotest-quiet))
     (pretty-write (list 'dotest: hrm)))
-  (if do-expand
-    (when do-expand ; LOL when x vs begin ...
-      (define hrms #`(module org-module laundry/expander
-                       #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
-                          #; ; NAH just a completely insane case-lambda
-                          ; that causes the call to revert to the full grammar
-                          (format "test-source ~s" test-value-inner)
-                          (t))))
-      (parameterize ([current-namespace ns-test])
-        (eval-syntax hrms)
-        (define root (dynamic-require ''org-module 'root))
-        (when (and eq-root (not (equal? eq-root root)))
-          (error (format "foo ~s ~s" test-value-inner root)))
-        (unless (or eq-root node-type)
-          root)))
-    (unless (or eq node-type)
-      hrm)))
+  (if (or do-expand node-type-expanded)
+      (when (or do-expand node-type-expanded) ; LOL when x vs begin ...
+        (define hrms #`(module org-module laundry/expander
+                         #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
+                            #; ; NAH just a completely insane case-lambda
+                            ; that causes the call to revert to the full grammar
+                            (format "test-source ~s" test-value-inner)
+                            (t))))
+        (parameterize ([current-namespace ns-test])
+          (eval-syntax hrms)
+          (define root (dynamic-require ''org-module 'root))
+          (when (and node-type-expanded (not (rec-cont root node-type-expanded)))
+            (error (format "expansion of ~s does not contain ~s" test-value node-type-expanded)))
+          (when (and eq-root (not (equal? eq-root root)))
+            (error (format "foo ~s ~s" test-value-inner root)))
+          (unless (or eq-root node-type node-type-expanded)
+            root)))
+      (unless (or eq node-type)
+        hrm)))
 
 #;
 (require debug/repl)
@@ -96,6 +116,7 @@
       hrm))
 
 (module+ test-bof
+  (current-module-path)
   ; fooing annoying as foo having to duplicate the whole fooing grammar
   ; just for this one fooing little special case FOO
   (dotest "")
@@ -117,6 +138,7 @@
   )
 
 (module+ test-wat
+  (current-module-path)
   (dotest "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
   (dotest "x. ")
@@ -139,6 +161,7 @@
   )
 
 (module+ test-list
+  (current-module-path)
   (define node-type 'plain-list-line)
   (dotest "0." #:node-type node-type)
   (dotest "0)" #:node-type node-type)
@@ -164,18 +187,22 @@
   )
 
 (module+ test-npnn
+  (current-module-path)
   (dotest "asdf" #:node-type 'paragraph)
   (dotest ";alksdjf;l jd; j;1oj;oij10j [p0j asd;foja ;kjas.d/f a.ldfjaoiejf01923jOAJ--1!@@#$%^&*[]{}\\/" #:node-type 'paragraph)
   (dotest "\n")
+  (dotest "\t")
+  (dotest " ")
   (dotest "|" #:node-type 'table)
   )
 
 (module+ test-cell
+  (current-module-path)
   ; from this it seems that we can't do PIPE? at the end because it will be eaten
   ; nope, not true, the PIPE? takes precednece so that does work in the limited case
-  (dotest "|" #:eq '(org-file (table (table-row (table-cell)))))
-  (dotest "||" #:eq '(org-file (table (table-row (table-cell)))))
-  (dotest "|||" #:eq '(org-file (table (table-row (table-cell) (table-cell)))))
+  (dotest "|" #:eq-root '(org-file (table (table-row (table-cell)))))
+  (dotest "||" #:eq-root '(org-file (table (table-row (table-cell)))))
+  (dotest "|||" #:eq-root '(org-file (table (table-row (table-cell) (table-cell)))))
   (dotest "||||")
   (dotest "|||||")
   (dotest "|||||||||||||||||||||||||||||||||||||")
@@ -185,24 +212,31 @@
   (dotest "|a|")
   (dotest "|a||")
   (dotest "||a|")
-  (dotest "||a|b") ;
+  (dotest "||a|b")
   (dotest "||a|b|")
 
   (dotest "|||oops|||oops|||oops oops|||")
-  (dotest "|a\n") ;
+  (dotest "|a\n")
   (dotest "| hello there")
 
   (dotest "|a ")
   (dotest "\n|a")
 
-  (dotest "| a | yo") ;
+  (dotest "| a | yo")
 
   (dotest "| a | yo |")
+
+  (dotest "| \\| |")
+
+  (dotest "| - |")
+
+  (dotest "| oh it is *bad /yes/ _it_ =is=* <https://> [[(oh-boy)]] |")
 
   )
 
 (module+ test-row
-  (dotest "|\n|" #:eq '(org-file (table (table-row (table-cell)) (table-row (table-cell)))))
+  (current-module-path)
+  (dotest "|\n|" #:eq-root '(org-file (table (table-row (table-cell)) (table-row (table-cell)))))
   (dotest "||\n|")
   (dotest "||\n||")
   (dotest "|a|\n||")
@@ -214,6 +248,12 @@
   )
 
 (module+ test-table
+  (current-module-path)
+  (dotest "|") ; XXX
+  (dotest "| ")
+  (dotest " |") ; XXX
+  (dotest " | ")
+  (dotest "|t\n|2\n|-\n|3")
   (dotest "|i|am|a|table")
   (dotest "|i |am|a|table ")
   (dotest "| t")
@@ -229,8 +269,6 @@
   (dotest "|t\n")
   (dotest "|t\n|2")
   (dotest "|t\n|2|")
-  (dotest "|")
-  (dotest " |")
   (dotest "|\n")
   (dotest "|\n|")
   (dotest "|\n|\n")
@@ -275,6 +313,7 @@
   )
 
 (module+ test-headline-content
+  (current-module-path)
 
   (parameterize ([testing-parse
                   ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
@@ -317,6 +356,7 @@
   ))
 
 (module+ test-planning ; FIXME very broken now
+  (current-module-path)
   (dotest "* H\nDEADLINE:")
   (dotest "* H\nSCHEDULED:")
   (dotest "* H\nCLOSED:")
@@ -337,7 +377,17 @@
 
   )
 
+(module+ test-priority
+  (dotest "* [#A]")
+  (dotest "* [#A]Title")
+  (dotest "* [#A]:not_a_tag:")
+  (dotest "* [#A] :a_tag:") ; FIXME why no hyphen? opporunity for regularization or what is going on?
+  (dotest "* TODO [#A]")
+  (dotest "* x [#A]")
+  )
+
 (module+ test-headline
+  (current-module-path)
   ; FIXME not sure what COMMENT breaks things ?!
   ;(define test-value "this is ORG MODE\n* headline\n YEAH\n** COMMENT comment headline\nstuff\n* hl2 :tag:\n")
   ; ok, so BOF and EOF are causing annoying edge cases
@@ -383,7 +433,7 @@
   (dotest "* H [#P]COMMENT:t: ")
   (dotest "* H [#P]COMMENT:ARCHIVE:")
 
-  ; the behavior of org-export is clear here
+  ; the behavior of org-export is clear here, no spaces -> title
   (dotest "* TODO[#P]COMMENT T")
   (dotest "* TODO[#P]COMMENT Ti")
   (dotest "* TODO[#P]COMMENT Ti :t:")
@@ -395,6 +445,8 @@
   (dotest "* TODO[#P]COMMENT:ARCHIVE:")
 
   (dotest "* COMMENTARY") ; the poor sods
+
+  (dotest "* TODO:tag:")
 
   ; wow wtf these are max spook
   (dotest "* H [#P]COMMENTT")
@@ -445,11 +497,11 @@
   (dotest "* [#L] wat wat wat :tag: \n")
   (dotest "* [#K] wat wat wat :tag: \n")
 
-
   ; always ambig since we don't use title unprefixed
-  (dotest "** Headline level 2\n")
+  (dotest "** Headline level 2\n" #:nte 'heading)
 
-  (dotest "why can't we share this newline?\n** Headline level 2\n") ; FIXME why is this so slow to parse
+  ; FIXME XXXXXXXXXXXXXXXXXXXXX WHAT !?
+  (dotest "why can't we share this newline?\n** Headline level 2\n" #:nte 'heading)
 
   ;; broken
   (dotest "* Headline Sigh\n") ; this should hit todo-keyword but is gobbled just the title
@@ -476,16 +528,37 @@
   (dotest "* ]")
   (dotest "* ] ")
 
+  (dotest "* 
+** 
+*** 
+**** 
+****** 
+******* 
+******** 
+********* ")
+
+  ; watch out for negated patterns that don't include a newline in the negated set >_<
+  (dotest "a\nb\nc\nd\n* \ne\nf\ng\n****** h\ni" #:nte 'heading)
+  (dotest "* \ne\nf\ng\n****** h\ni" #:nte 'heading)
+  (dotest "g\n****** h" #:nte 'heading)
+  (dotest "g\n***** h" #:nte 'heading)
+  (dotest "\n****** h\ni" #:nte 'heading) ; this one ok in most cases anyway
+
   )
 
 (module+ test-paragraph-start
+  (current-module-path)
 
   (dotest "  #+begin_src")
-  (dotest "  #+begin_srclol" #:node-type 'bg-type-special)
+  (dotest "  #+begin_srclol" #:node-type 'paragraph)
   (dotest "  #+begin_src\n")
   (dotest "  #+begin_")
   (dotest "  #+begin_-") ; -> block
-  (dotest "  #+begin_:") ; -> block
+  (dotest "  #+begin_:") ; -> block FIXME keyword line confict XXX ambig
+
+  (dotest "#+end_ " #:node-type 'malformed) ; ok
+  (dotest "  #+begin_src oops not a thing") ; ok
+  (dotest "  #+begin_ more" #:node-type 'paragraph) ; ok
 
   ; FIXME dynamic block weirdness
   (dotest "#+end:" #:node-type 'keyword) ; -> keyword
@@ -500,10 +573,12 @@
   (dotest "#+:end::properties::end: lol" #:node-type 'keyword) ; -> keyword
   (dotest "#+:end:" #:node-type 'keyword) ; -> keyword
   (dotest "#+:properties:" #:node-type 'keyword) ; -> keyword
+  (dotest "#+:end::asdf")
+  #; ; in our current implementation this is a keyword-line what the key and value actually parse to ???
   (dotest "#+:end::asdf" #:node-type 'paragraph) ; XXX inconsistnet org element says keyword, font locking and spec say paragraph
 
 
-  (dotest (make-string 99 #\*))
+  (dotest (make-string 99 #\*)) ; FIXME ideally nested markup should issue a warning and not nest in the tree
   ; now fixed and blazingly fast but
   ; but wow NAME+ has horrible performance, probably need to move more of this stuff to the lexer
   ; LOL at 99 it is bad, at 999 THIS IS A DISASTER for performnace and memory usage
@@ -524,6 +599,8 @@
   (dotest "  #+")
   (dotest "#+")
   (dotest "#+:")
+  (dotest "#+:aaaa:")
+  #; ; correct but not fully implemented yet
   (dotest "#+:aaaa:" #:eq-root '(org-file (keyword (keyword-key ":aaaa"))))
   (dotest "#+:aaaa")
   (dotest "#+::")
@@ -573,13 +650,26 @@
   (dotest "  9)a")
   (dotest "9)a")
   (dotest "9)#+end:")
-  (dotest "  9999999.") ; -> ordered list
-  (dotest "9999999.") ; -> ordered list
+  (dotest "9)ARCHIVE")
+  (dotest "  9999999." #:nte 'ordered-list-line) ; -> ordered list XXX FIXME broken ??!
+  (dotest "9.") ; -> ordered list
+  (dotest "99")
+  (dotest "99._")
+  (dotest "99 _")
+  (dotest "999999 hello world")
+  (dotest "99. ") ; -> ordered list
+  (dotest "99." #:nte 'ordered-list-line) ; -> ordered list
+  (dotest "999.") ; -> ordered list
+  (dotest "9999.") ; -> ordered list
+  (dotest "99999.") ; -> ordered list
+  (dotest "999999.") ; -> ordered list
+  (dotest "9999999." #:nte 'ordered-list-line) ; -> ordered list
   (dotest "  9999999.a")
   (dotest "9999999.a")
 
   (dotest "  COMMENT")
   (dotest "COMMENT")
+  (dotest "COMMENT more")
   (dotest "  ARCHIVE")
   (dotest "ARCHIVE")
   (dotest "ARCHIVE more")
@@ -606,6 +696,7 @@
   )
 
 (module+ test-paragraphs
+  (current-module-path)
   (dotest "aaaaaaaaa paragraph")
 
   (dotest "\nIf nothing else this is a paragraph.")
@@ -663,6 +754,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
   )
 
 (module+ test-markup
+  (current-module-path)
 
   (dotest "*")
   (dotest "**")
@@ -719,15 +811,17 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
 (module+ test-macros
 
+  (current-module-path)
   (dotest "{{{macro}}}")
   (dotest "{{{macro(a,b,c)}}}")
 
   )
 
 (module+ test-comments
+  (current-module-path)
 
   (dotest "35934")
-  (dotest "35934" #:eq-root '(org-file (paragraph "\n35934"))) ; FIXME bof newline ...
+  (dotest "35934" #:eq-root '(org-file (paragraph "\n35934")))
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -752,6 +846,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
   )
 
 (module+ test-rando
+  (current-module-path)
   (dotest "* Headline")
   (dotest "1.")
 
@@ -812,6 +907,8 @@ WHEEEEEEEEEE
   )
 
 (module+ test-drawers
+  (current-module-path)
+
   (dotest "
 * Headline 1
 :properties:
@@ -936,6 +1033,16 @@ random end
 :end:
 ")
 
+  (dotest "
+:random-drawer:
+
+you called?
+@@hrm: oops @@ in drawer context esinips are ignored
+   :end:
+
+:end:
+") ; ok
+
   (dotest "\n:drawer:\n\n:end:")
 
   (dotest "\n:drawer:\n:end:")
@@ -948,6 +1055,7 @@ random end
   )
 
 (module+ test-string
+  (current-module-path)
   ; longest match kills using the tokenizer for this
   (dotest #<<--
 "1 2"
@@ -968,6 +1076,7 @@ random end
 
 #; ; slows the build, and most are tested in test-block-switches now
 (module+ test-switches
+  (current-module-path)
 
   #; ; this sets for the parent module as well but not on require?
   (testing-parse (make-rule-parser --test--switches-sane))
@@ -986,6 +1095,8 @@ random end
     ))
 
 (module+ test-block-switches
+  (current-module-path)
+
   (define strings
     '("#+begin_src elisp -r -l \"(ref:%s)\" +e -e :noweb yes :tangle (some-file \"oh great\")"
       "#+begin_src elisp -r -l \"(ref:%s)\" +e -e"
@@ -1039,6 +1150,7 @@ random end
   )
 
 (module+ test-blk-dyn
+  (current-module-path)
   (dotest "#+begin:\n#+end:") ; FIXME keyword not parsing correctly really
   (dotest "#+begin: \n#+end:")
   (dotest "#+begin:
@@ -1058,6 +1170,7 @@ drawer contents
   )
 
 (module+ test-blocks
+  (current-module-path)
 
   ; for some reason this one is slighly bugged
   (dotest "
@@ -1153,12 +1266,18 @@ y y:
   )
 
 (module+ test-big-tokes
+  (current-module-path)
+
   (dotest "hrm :properties:")
+  (dotest ":properties:")
+  (dotest ":properties:asdf")
+  (dotest ":properties: no newline")
 
   )
 
 (module+ test-todo-kw
-  
+  (current-module-path)
+
   (dotest "\n* TODO something")
   (dotest "* TODO something")
   (dotest "* TODO lol COMMENT broken")
@@ -1166,59 +1285,63 @@ y y:
   )
 
 (module+ test-hcom
+  (current-module-path)
+
+  (define nte 'h-comment)
 
   (dotest "* COMMENT")
   (dotest "* COMMENTT")
   (dotest "* COMMENTTi")
   (dotest "* COMMENT:t:") ; tag not matching correctly
 
+  ; these are all correct, COMMENT[^ ] does NOT start a comment line
   (dotest "* COMMENTT :ARCHIVE:")
-  (dotest "* COMMENTT :t:") ; BROKEN
-  (dotest "* COMMENTT :ta:") ; BROKEN
-  (dotest "* COMMENTTi :t:") ; BROKEN
-  (dotest "* COMMENTTi :ta:") ; BROKEN
+  (dotest "* COMMENTT :t:")
+  (dotest "* COMMENTT :ta:")
+  (dotest "* COMMENTTi :t:")
+  (dotest "* COMMENTTi :ta:")
 
   ; the tricks that work below don't work here
-  (dotest "* COMMENTT :t:") ; BROKEN
-  (dotest "* COMMENTT  :t:") ; BROKEN
-  (dotest "* COMMENTT :tag:") ; BROKEN
-  (dotest "* COMMENTTit :tag:") ; BROKEN
+  (dotest "* COMMENTT :t:")
+  (dotest "* COMMENTT  :t:")
+  (dotest "* COMMENTT :tag:")
+  (dotest "* COMMENTTit :tag:")
 
   (dotest "* COMMENT ")
   (dotest "* COMMENT :t:")
-  (dotest "* COMMENT :t:1:") ; BROKEN
+  (dotest "* COMMENT :t:1:")
 
   ;; now fixed after reworking paragraphs to not be fallthrough
-  (dotest "* COMMENT             :t:1:") ; broken
-  ;;;;;;;
-  (dotest "* COMMENT          :t:1:") ; ok ?
-  (dotest "* COMMENT           :t:1:") ; broken
-  (dotest "* COMMENT  t                  :t:1:") ; broken, very very broken -> paragraph
-  (dotest "* COMMENT   t                 :t:1:") ; ok
-  ;;;;;;;
-  (dotest "* COMMENT      t              :t:1:") ; ok
-  (dotest "* COMMENT                     :t:1:") ; BROKEN WHAT THE FOO -> paragraph
+  (dotest "* COMMENT             :t:1:" #:nte nte)
+  (dotest "* COMMENT          :t:1:" #:nte nte)
+  (dotest "* COMMENT           :t:1:" #:nte nte)
 
-  (dotest "* COMMENT T")
-  (dotest "* COMMENT T ")
-  (dotest "* COMMENT T  ")
-  (dotest "* COMMENT T\n")
-  (dotest "* COMMENT T ARCHIVE") ; just some sanity
-  (dotest "* COMMENT Ti")
+  (dotest "* COMMENT  t                  :t:1:") ; broken, very very broken -> paragraph
+  (dotest "* COMMENT   t                 :t:1:") ; XXX
+  (dotest "* COMMENT      t              :t:1:") ; XXX
+
+  (dotest "* COMMENT                     :t:1:" #:nte nte)
+
+  (dotest "* COMMENT T" #:nte nte)
+  (dotest "* COMMENT T " #:nte nte)
+  (dotest "* COMMENT T  " #:nte nte)
+  (dotest "* COMMENT T\n" #:nte nte)
+  (dotest "* COMMENT T ARCHIVE" #:nte nte) ; just some sanity
+  (dotest "* COMMENT Ti" #:nte nte)
   (dotest "* COMMENT T :ARCHIVE:")
-  (dotest "* COMMENT T :t:") ; BROKEN
-  (dotest "* COMMENT T :t: ") ; BROKEN
-  (dotest "* COMMENT T :t:\n") ; BROKEN
-  (dotest "* COMMENT T :ta:") ; BROKEN
-  (dotest "* COMMENT Ti :t:") ; BROKEN
+  (dotest "* COMMENT T :t:" #:nte nte)
+  (dotest "* COMMENT T :t: ")
+  (dotest "* COMMENT T :t:\n")
+  (dotest "* COMMENT T :ta:")
+  (dotest "* COMMENT Ti :t:")
   (dotest "* COMMENT T :tag:") ; ok ok what the FOO sig going on here 7 chars total >= 2 spaces
   (dotest "* COMMENT Ti :ta:") ; ok
   (dotest "* COMMENT Tit :t:") ; ok
   (dotest "* COMMENT T   :t:") ; ok
   (dotest "* COMMENT T  :t:") ; ok
   (dotest "* COMMENT T  :ta:") ; ok
-  (dotest "* COMMENT - :t:") ; BROKEN
-  (dotest "* COMMENT -  :t:") ; BROKEN
+  (dotest "* COMMENT - :t:" #:nte nte)
+  (dotest "* COMMENT -  :t:" #:nte nte)
   (dotest "* COMMENT T") ; ok
 
   ; ok now
@@ -1235,6 +1358,8 @@ y y:
   )
 
 (module+ test-tags
+  (current-module-path)
+
   (dotest "* H :")
 
   (dotest "* H :n: :t:") ; this is the counter example that proves that you cannot write a
@@ -1283,6 +1408,8 @@ y y:
   )
 
 (module+ test-keywords
+  (current-module-path)
+
   (define node-type 'keyword)
   (define nt-2 'keyword-node)
   (define p 'paragraph)
@@ -1443,6 +1570,7 @@ y y:
   )
 
 (module+ test-afkw
+  (current-module-path)
 
   ; bug in the malformed-wsnn grammar incorrectly matching #+name:
   ; not clear why removing anyone of the 3 preceeding lines restores
@@ -1481,7 +1609,7 @@ don't affilaite to other unaff keyword
 
 (define h-l1
   '(org-file
-    (headline-node (heading 1 ()))))
+    (headline-node (heading 1 (tags)))))
 (define h-l1-c 
   '(org-file
     (headline-node
@@ -1502,34 +1630,41 @@ don't affilaite to other unaff keyword
       (headline-content (h-priority (priority-level (not-whitespace1 "P"))))))))
 
 (module+ test-sentinel
+  (current-module-path)
+
   ; things that work and should continue to work
 
   (dotest "* ")
   (dotest "* " #:eq-root h-l1)
   (dotest "*  " #:eq-root h-l1)
   (dotest "*                                     ")
-  (dotest "* COMMENT")
-  (dotest "* COMMENT ")
-  (dotest "* ::" ); #:eq h-l1-t)
-  (dotest "* :: " ); #:eq h-l1-t)
-  (dotest "* :::" ); #:eq h-l1-t)
-  (dotest "* ::: " ); #:eq h-l1-t)
-  (dotest "* :t:1:"); #:eq h-l1-t)
-  (dotest "* :t:1: "); #:eq h-l1-t)
-  (dotest "* [#P]" );#:eq h-l1-p) ; foo
-  (dotest "* [#P] " ); #:eq h-l1-p) ; foo
+  (dotest "* COMMENT" #:nte 'comment)
+  (dotest "* COMMENT " #:nte 'comment)
 
+  (dotest "* ::" #:nte 'tags)
+  (dotest "* :: " #:nte 'tags)
+  (dotest "* :::" #:nte 'tags)
+  (dotest "* ::: " #:nte 'tags)
+  (dotest "* title ::: " #:nte 'tags)
+  (dotest "* title ::" #:nte 'tags)
+  (dotest "* title ::t:" #:nte 'tags)
+  (dotest "* :t:1:")
+  (dotest "* :t:1: ")
+  (dotest "* [#P]" #:nte 'h-priority)
+  (dotest "* [#P] " #:nte 'h-priority)
+
+  ; FIXME TODO deal with newlines preceeding the start of the file
   #;
   (dotest "" #:eq     '(org-file (org-node (bof))))
-  (dotest "" #:eq-root '(org-file "\n"))
+  (dotest "" #:eq-root '(org-file (empty-line "\n")))
   #;
   (dotest "\n" #:eq   '(org-file (org-node (bof)) (org-node (newline #f))))
-  (dotest "\n" #:eq-root '(org-file "\n" "\n"))
+  (dotest "\n" #:eq-root '(org-file (empty-line "\n") (empty-line "\n")))
   #;
   (dotest "  " #:eq   '(org-file (org-node (paragraph (space #f) (space #f)))))
   (dotest "  " #:eq-root   '(org-file (paragraph "\n  ")))
   (dotest "  \n" #:eq-root '(org-file (paragraph "\n  ")
-                                      "\n"))
+                                      (empty-line "\n")))
 
   (dotest "* :tag:")
   (dotest "*   :ARCHIVE:")
@@ -1543,6 +1678,7 @@ don't affilaite to other unaff keyword
 
   (dotest "* :t:1:@:#:_:%:")
   (dotest "*   :!asdft1@#_%:       ")
+  (dotest "*   :asdft1@#_%:       ")
 
   (dotest "* :a: b:cd:")
   (dotest "* :a: b:cd:")
@@ -1560,6 +1696,8 @@ don't affilaite to other unaff keyword
   )
 
 (module+ test-word-char-vs-word-char-n
+  (current-module-path)
+
   (dotest "* Heading\n  lower case is ok")
 
   (dotest "* Heading\n  oh Ok")
@@ -1595,6 +1733,8 @@ don't affilaite to other unaff keyword
   )
 
 (module+ test-files
+  (current-module-path)
+
   #; ; #+CAPTION: Value bug ...
   (define setup (dotest-file "~/git/sparc-curation/docs/setup.org"))
   ; yeah ... for big files scanning to heading offsets and parsing
@@ -1670,6 +1810,8 @@ a
   )
 
 (module+ test-not-markup
+  (current-module-path)
+
   (dotest "+wat" #:node-type 'paragraph)
   (dotest " +wat" #:node-type 'paragraph)
 
@@ -1693,38 +1835,19 @@ a
   )
 
 (module+ test-known-broken
+  (current-module-path)
+
   ; this goes last so we can sort out remaining issues
 
   ; from test-paragraph-start
-  (dotest "9)ARCHIVE")
   (dotest "#+end ")
   (dotest "#+end-")
-  (dotest "COMMENT more")
-
-  (dotest "#+end_ " #:node-type 'malformed) ; ok
-  (dotest "  #+begin_src oops not a thing") ; ok
-  (dotest "  #+begin_ more" #:node-type 'paragraph) ; ok
-
-  ; from test-drawers
-  (dotest "
-:random-drawer:
-
-you called?
-@@hrm: oops @@ in drawer context esinips are ignored
-   :end:
-
-:end:
-") ; ok
-
-  ; from test-big-tokes
-  (dotest ":properties:")
-  (dotest ":properties:asdf")
-  (dotest ":properties: no newline")
 
   )
 
 (module+ test
   (require
+   (submod ".." test-sentinel)
    (submod ".." test-headline-content)
    (submod ".." test-bof)
    (submod ".." test-wat)
@@ -1752,7 +1875,6 @@ you called?
    (submod ".." test-hcom)
    (submod ".." test-tags)
    (submod ".." test-keywords)
-   (submod ".." test-sentinel)
    (submod ".." test-word-char-vs-word-char-n)
    (submod ".." test-not-markup)
    #; ; XXX big boy

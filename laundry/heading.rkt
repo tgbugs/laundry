@@ -1,31 +1,33 @@
 #lang brag
 
-;; So. Parsing titles is hard.
+; So. Parsing titles is hard.
 
-;; In the first draft of this grammar I made the exact same mistake as
-;; the elisp implementation. The mistake is to eat the space that
-;; terminates stars rather than peeking it. This is from/to vs
-;; from/stop-before. The tokenizer has to deal with this.
+; In the first draft of this grammar I made the exact same mistake as
+; the elisp implementation. The mistake is to eat the space that
+; terminates stars rather than peeking it. This is from/to vs
+; from/stop-before. The tokenizer has to deal with this.
 heading : stars heading-rest
 
 @heading-rest : ( /wsnn+ @heading-content )? ( h-tags | NEWLINE-END )
               | /wsnn+ NEWLINE-END
 
+; Note that unlike the other elements h-priority does not have to be followed by a space,
+; however tags must still be preceeded by a space
 heading-content : todo-keyword /wsnn*
                 |                     h-priority /wsnn*
                 |                                       h-comment /wsnn*
                 |                                                         h-t-rpc-t
                 | todo-keyword /wsnn+ h-priority /wsnn*
-                |                     h-priority /wsnn+ h-comment /wsnn*
+                |                     h-priority /wsnn* h-comment /wsnn*
                 | todo-keyword /wsnn+                   h-comment /wsnn*
                 | todo-keyword /wsnn+                                      h-t-pc-t
-                |                     h-priority /wsnn+                     h-t-c-t
+                |                     h-priority /wsnn*                     h-t-c-t
                 |                                       h-comment /wsnn+               h-title
-                | todo-keyword /wsnn+ h-priority /wsnn+ h-comment
-                | todo-keyword /wsnn+ h-priority /wsnn+                     h-t-c-t
-                |                     h-priority /wsnn+ h-comment /wsnn+               h-title
+                | todo-keyword /wsnn+ h-priority /wsnn* h-comment
+                | todo-keyword /wsnn+ h-priority /wsnn*                     h-t-c-t
+                |                     h-priority /wsnn* h-comment /wsnn+               h-title
                 | todo-keyword /wsnn+                   h-comment /wsnn+               h-title
-                | todo-keyword /wsnn+ h-priority /wsnn+ h-comment /wsnn+               h-title
+                | todo-keyword /wsnn+ h-priority /wsnn* h-comment /wsnn+               h-title
 
 ; convenience nodes to simplify remerging the full title
 h-t-rpc-t : h-title-r-p-c @h-title? ; in this case if you don't have a todo-keyword first then anything after is not comment or priority even if they look like they are
@@ -35,7 +37,9 @@ h-t-c-t :   h-title-c     @h-title?
 ; h-title-p is not needed because if you can't have p you also can't have c
 ; BLANK is excluded from being the first char since a single blank will match
 ; allowing h-title to incorrectly match COMMENT or [#A]
-@h-title-r-p-c : ( BLANK | OTHER | OOPS | STARS )*
+@h-title-r-p-c : ( BLANK | OTHER | OOPS | STARS
+                 | CHARS-COMMENT @not-blank
+                 | RUNTIME-TODO-KEYWORD ( PRIORITY | CHARS-COMMENT | @not-blank ) )+ ; this can't be * must be +
 @h-title-p-c : ( h-title-r-p-c | @todo-keyword )+ ; FIXME misplaced ?
 @h-title-c : ( h-title-p-c | @h-priority )+ ; FIXME misplaced ?
 h-title : ( h-title-c | @h-comment )+ ; FIXME misplaced ?
@@ -47,6 +51,8 @@ h-comment : CHARS-COMMENT
 h-tags : TAGS ; | /wsnn+ archive
 ; archive : ARCHIVE /wsnn* /NEWLINE-END
 wsnn : BLANK
+
+not-blank : OTHER | OOPS | STARS
 
 --test--heading-rest : heading-rest
 ; 1

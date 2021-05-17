@@ -73,7 +73,7 @@ empty-line : newline
                  ;| keyword ; lol yep you can affiliate keywords to keywords
                  | keyword-node
                  | comment-element
-                 | table
+                 | table-element
                  | plain-list-line
 
 @org-nbe-less-d : @org-nbe-less-df
@@ -189,12 +189,16 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XX
           | planning-dissociated
           | ak-key-no-colon
           | babel-call-no-colon
-          | detached-drawer
+          ;| detached-drawer
           | end-drawer
 
 parl-tokens-with-newline : malformed-nl
-malformed-nl : detached-drawer
+malformed-nl : detached-drawer | detached-block
 detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME distinguish maybe?
+; due to changes in the tokenizer the detached blocks always carry their own newline
+; however if you are testing from the start of a file you may not see the newline there
+; because it is stripped as an imlementation detail
+detached-block : SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED
 
 ;malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
 
@@ -711,13 +715,13 @@ string-contents : ( @not-bs-dq | /BS DQ | BS )+
 ;;; tables
 
 ;table : ( table-row | table-row-rule )+
-table : ( /newline /wsnn* ( table-row | table-row-rule ) )+ | table-node
-table-node : TABLE-ELEMENT
+;table : ( /newline /wsnn* ( table-row | table-row-rule ) )+ | table-node
+table-element : TABLE-ELEMENT
 ;table-dumb : /newline /PIPE @not-newline ; as a matter of last resort
-table-row : table-cell+ /PIPE?
+;table-row : table-cell+ /PIPE?
 ;table-cell : /PIPE @not-pipe-not-newline? ; this is NOT ambiguous the minimal match is /PIPE+ PIPE? !??!?!
-table-cell : /PIPE /space? ( @not-pipe-bs-newline | /BS PIPE | BS )* /space? ; XXX divergence
-table-row-rule : /PIPE /HYPHEN /not-newline? ; everything else gets wiped
+;table-cell : /PIPE /space? ( @not-pipe-bs-newline | /BS PIPE | BS )* /space? ; XXX divergence
+;table-row-rule : /PIPE /HYPHEN /not-newline? ; everything else gets wiped
 
 ;;;;
 

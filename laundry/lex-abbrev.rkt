@@ -123,10 +123,15 @@
 ;;; tables
 
 (define-lex-abbrev table-element
-  (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:+ (:~ "\n"))))
+  ; FIXME EOF issues
+  (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:* (:~ "\n"))))
                     (:or
                      "\n\n"
-                     (:seq "\n" (:* (:or " " "\t")) (:~ " " "\t" "\n" "|") (:+ (:~ "\n")) "\n"))))
+                     (:seq "\n"
+                           (:* (:or " " "\t"))
+                           (:~ " " "\t" "\n" "|")
+                           (:+ (:~ "\n"))
+                           "\n"))))
 
 ;;; elements that cannot contain headings 
 
@@ -168,6 +173,8 @@
 
 ;; paragraphs
 
+(define-lex-abbrev bullet-marker (:or "." ")"))
+
 ; parsing paragraph here in this way is an optimization that is absolutely necessary for performance
 ; in order to avoid some quadratic algorithm lurking somewhere in the grammar or in brag or in parser-tools
 (define-lex-abbrev paragraph
@@ -182,7 +189,7 @@
   (:+ (from/stop-before
        (:seq "\n"
              ;(:~ "*" "")
-             (:* " " "\t")
+             (:* (:or " " "\t"))
              (:or
               (:or
                "'"
@@ -197,15 +204,23 @@
                "^"
                "&"
                ".")
-              (:seq (:or "+" "-" "*") (:~ whitespace))
+              (:seq (:or "+" "-") (:~ whitespace))
+              #; ; broken ? or something else is wrong?
+              (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
+              ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
+              ; FIXME TODO how to handle cases like \n123456789\n
+              (:seq (:+ a-z) (:~ bullet-marker a-z "\n"))
+              (:seq (:+ A-Z) (:~ bullet-marker A-Z "\n"))
+              (:seq (:+ 0-9) (:~ bullet-marker 0-9 "\n"))
               (:seq
                (:or 
                 (:+ lower-case)
                 (:+ upper-case)
                 (:+ 0-9))
-               (:or (:~ "." ")")
-                    (:seq (:or "." ")") (:~ whitespace))))))
+               bullet-marker
+               (:~ whitespace))))
        "\n"))
+
   #;
   (:+ (:seq "\n" (:seq (:* " " "\t")
                        (:+ (:or

@@ -10,23 +10,28 @@
  racket/pretty
  (only-in laundry/parser make-rule-parser)
  ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
- (for-syntax (only-in laundry/tokenizer paragraph-make-tokenizer bind-runtime-todo-keywords))
- (for-syntax (rename-in (only-in laundry/heading parse parse-to-datum)
-                        [parse parse-heading]
-                        [parse-to-datum parse-heading-to-datum])
-             (rename-in (only-in laundry/paragraph parse parse-to-datum)
-                        [parse parse-paragraph]
-                        [parse-to-datum parse-paragraph-to-datum]))
- (for-syntax racket/base
-             racket/syntax
-             racket/stxparam
-             racket/pretty
-             syntax/parse
-             (only-in racket/string string-trim string-split)
-             #;
-             (only-in racket/list splitf-at)
-             
-             ))
+ (for-syntax
+  (only-in laundry/tokenizer
+           table-make-tokenizer
+           paragraph-make-tokenizer
+           bind-runtime-todo-keywords)
+  (rename-in (only-in laundry/heading parse parse-to-datum)
+             [parse parse-heading]
+             [parse-to-datum parse-heading-to-datum])
+  (rename-in (only-in laundry/paragraph parse parse-to-datum)
+             [parse parse-paragraph]
+             [parse-to-datum parse-paragraph-to-datum])
+  (rename-in (only-in laundry/table parse parse-to-datum)
+             [parse parse-table]
+             [parse-to-datum parse-table-to-datum])
+  racket/base
+  racket/syntax
+  racket/stxparam
+  racket/pretty
+  syntax/parse
+  (only-in racket/string string-trim string-split string-contains?)
+  (only-in racket/list remove-duplicates)))
+
 (provide
  (rename-out [laundry-module-begin #%module-begin])
  (except-out (all-from-out racket/base) #%module-begin)
@@ -226,6 +231,7 @@
   #; ; FIXME h-title must use the paragraph parser internally
   h-title
   plain-list-line-tail
+  #;
   table-cell)
 
 (define-sa-nodes ; XXX things in this list should probably be spliced out
@@ -309,6 +315,7 @@
   |#
 
   detached-block-node
+  detached-block ; FIXME not sure if we need this
   blk-greater-malformed
   det-blk-ex-begin
   det-blk-ex-end
@@ -356,6 +363,7 @@
   h-priority
   h-comment
   ;h-tags
+  tags ; XXX internal should probably be a struct field
   archive
 
   plain-list-line
@@ -371,8 +379,9 @@
   table
   table-row
   table-row-rule
-  table-node
   hyperlink ; FIXME needs to be an sa alt probably
+  link-angle
+  link-regular
 
   bof
   digits
@@ -440,7 +449,7 @@
   blk-dyn-contents
   blk-dyn-end
 
-  macro
+  macro ; TODO determine the phase at which macros expand
 
   bold
   italic
@@ -530,7 +539,7 @@
 (define-syntax (heading stx)
   (syntax-parse stx
     #:literals (stars)
-    [(_ (stars sstring) pct ... tags)
+    [(_ (stars sstring) pct ... tags-string)
      #:with depth (datum->syntax
                    #'sstring
                    (string-length
@@ -540,10 +549,10 @@
      #:with (other ...)
      ; TODO priority comment title
      #'(pct ...)
-     #:with tags-list (let ([t (syntax->datum #'tags)])
+     #:with tags-list (let ([t (syntax->datum #'tags-string)])
                         (if t
-                            (local-expand #'tags 'expression #f)
-                            #''()))
+                            (local-expand #'tags-string 'expression #f)
+                            #''(tags)))
      #'(cons 'heading (list depth other ... tags-list))])
   #;
   (syntax-parse stx
@@ -555,11 +564,18 @@
 (define-for-syntax (process-tag-string tag-string)
   (datum->syntax
    tag-string
-   (cons 'list
-         (string-split
-          (string-trim
-           (syntax->datum tag-string)
-           #px"\\s+|:") ":"))))
+   (cons 'tags ; TODO struct probably
+          (let ([trimmed
+                 (string-trim
+                  (syntax->datum tag-string)
+                  #px"\\s+|:" #:repeat? #t)])
+            (if (string-contains? trimmed ":")
+                (remove-duplicates
+                 (string-split
+                  trimmed
+                  ":"
+                  #:trim? #f))
+                (list trimmed))))))
 
 (define-syntax (h-tags stx)
   (syntax-parse stx
@@ -804,3 +820,49 @@
     [(_ line:str)
      #'(cons 'todo-spec-line line) ; XXX TODO
      ]))
+
+;; table
+
+(define-for-syntax (do-table str)
+  (let* ([table-input (with-newlines str)]
+         #;
+         [__ (println (cons 'do-table-input: table-input))]
+         [out (parse-table-to-datum
+               (table-make-tokenizer
+                (open-input-string table-input)))])
+    #;
+    (pretty-write (cons 'do-table: out))
+    out))
+
+(define-syntax (table-element stx)
+  (syntax-parse stx
+    [(_ table-string:str)
+     #:with table
+     (local-expand
+      (datum->syntax
+       #'table-string ; FIXME we can get better granularity than this surely ?
+       (do-table (syntax-e #'table-string)))
+      'expression
+      #f)
+     (let ([out #'table])
+       #;
+       (pretty-write (cons 'table: (syntax->datum out)))
+       out)
+     ])
+  )
+
+(define-syntax (table-cell stx) ; FIXME abstract along with h-title
+  (syntax-parse stx
+    [(_ body ...)
+     #:do [(define table-cell-input
+             (apply string-append
+                    (map (λ (e)
+                           (syntax->datum
+                            (local-expand e 'expression #f)))
+                         (syntax->list #'(body ...)))))]
+     #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
+                            (datum->syntax
+                             #'(body ...)
+                             (do-paragraph table-cell-input))
+                            'expression #f)
+     #'(list 'table-cell expanded ...)]))

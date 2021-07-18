@@ -379,6 +379,7 @@
   table
   table-row
   table-row-rule
+  citation
   hyperlink ; FIXME needs to be an sa alt probably
   link-angle
   link-regular

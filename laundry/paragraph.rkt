@@ -3,6 +3,7 @@
 paragraph : markup? ( mu-pre markup
                     | stuff
                     | macro
+                    | citation
                     | hyperlink )* markup-eof?
 
 stuff : ( STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline )+
@@ -14,6 +15,10 @@ newline : NEWLINE
 ;;; macros
 
 macro : MACRO
+
+;;; citation
+
+citation : CITATION
 
 ;;; hyperlink
 

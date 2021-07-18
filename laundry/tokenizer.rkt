@@ -215,6 +215,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [mu-pre-n-not-lcb (token 'MU-PRE-N-NOT-LCB lexeme)] ; LCB cannot be in mu-pre-n because it would block macro
    [mu-pre-1 (token 'MU-PRE-1 lexeme)] ; needed to prevent accidental capture when :+ length for stuff is longer than markup
 
+   [citation (token 'CITATION lexeme)] ; FIXME annoying because it gets parsed twice
+
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]
    #;

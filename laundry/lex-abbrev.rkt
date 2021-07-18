@@ -233,6 +233,22 @@
 
 ;; paragraph parts
 
+;;; citation
+
+(define-lex-abbrev citation-key
+  (:seq "@" (:+ (:or 0-9 A-Z a-z "-.:?!`'/*@+|(){}<>&_^$#%&~"))))
+
+(define-lex-abbrev citation
+  (from/to (:seq "[cite" (:* (:seq "/"
+                                   ; FIXME I think this is wrong because it will match [cite//:] ?
+                                   (:+ (:or 0-9 alpha "-" "_" "/"))))
+                 ":"
+                 (:* whitespace))
+           ; TODO internal citation structure parser
+           ; FIXME I think we need to stop before heading here as well?
+           ; because [cite:\n* @key] would match this I think ...?
+           (:seq "]")))
+
 ;;; hyperlink
 
 ; XXX this is better than the from/to version in one sense, but worse

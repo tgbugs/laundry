@@ -103,6 +103,7 @@ paragraph-line : newline parl-lines
                | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
+; citation : CITATION ; don't use this here, handle only in paragraph
 hyperlink : link-regular | link-angle
 link-regular : LINK
 link-angle : LINK-AB ; we don't actually use this here

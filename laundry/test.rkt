@@ -1618,6 +1618,44 @@ don't affilaite to other unaff keyword
   (dotest-quiet #f)
   )
 
+(module+ test-footnotes
+  (dotest "Text [fn::Inline footnote.] more.")
+  )
+
+(module+ test-cite
+  ; from test-org-element
+  (dotest "[cite:@key]" #:nte 'citation)
+  (dotest "[cite:-@key]" #:nte 'citation)
+  (dotest "[cite:text]") ; not key
+  (dotest "[cite/style:@key]" #:nte 'citation)
+  #; ; TODO ?
+  (dotest "[cite/elyts:@key]" #:nte 'style) ; element property should be style
+  (dotest "[cite:@a;@b;@c]" #:nte 'citation)
+  #; ; TODO not sure of the distinction
+  (dotest "[cite:@a;@b;@c]" #:nte 'citation-reference)
+  (dotest "[cite:@a;-@b]")
+  (dotest "[cite:common-prefix@a]") ; ??? what should this be
+  (dotest "[cite:common-prefix;@a]")
+  (dotest "[cite:@a;common-suffix]")
+  (dotest "[cite: common-prefix ;@a]")
+  (dotest "[cite: @a; common-suffix]")
+  (dotest "[cite: @a ; common-suffix]") ; ???
+  (dotest "[cite:common-prefix;@a;common-suffix]")
+  (dotest "[cite:@[]]") ; not key
+  (dotest "[cite:@a:.#$%&-+?<>~/1]" #:nte 'citation)
+  (dotest "[cite:@;]") ; not citation-reference ? XXX
+
+  (dotest "[cite: pre @key post]")
+  (dotest "[cite: pre @key]")
+  (dotest "[cite:@key post]")
+
+  (dotest "[cite: pre1 @k1 post1; pre2 @k2 post2]")
+  (dotest "[cite: pre1 @k1;pre2 @k2 post2]")
+  (dotest "[cite: pre1 @k1 post1;@k2 post2]")
+  (dotest "[cite:@k1 post1; pre2 @k2]")
+
+  )
+
 (define h-l1
   '(org-file
     (headline-node (heading 1 (tags)))))

@@ -67,14 +67,39 @@ using from/stop-before where the stop-before pattern contains multiple charachte
             ; has to handle the backtrack
             (cons token-correct position-correct)))))
 
+(define (-stop-before-alt-branch TOKEN lexeme input-port)
+  (if (eq? (peek-char input-port) eof)
+      ; FIXME decide how we are goin to do this and make it consistent
+      (token (string->symbol (format "~a-EOF" TOKEN)) lexeme)
+      (token TOKEN lexeme)))
+
+(define (token-stop-before-blank-line TOKEN lexeme input-port start-pos)
+  (if (string-suffix? lexeme "]") ; EOF case goes here I think
+      (-stop-before-alt-branch TOKEN lexeme input-port)
+      (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
+        (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))))
+
 (define (token-stop-before-heading TOKEN lexeme input-port start-pos)
   (if (string-suffix? lexeme "*")
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
-      (if (eq? (peek-char input-port) eof)
-          ; FIXME decide how we are goin to do this and make it consistent
-          (token (string->symbol (format "~a-EOF" TOKEN)) lexeme)
-          (token TOKEN lexeme))))
+      (-stop-before-alt-branch TOKEN lexeme input-port)))
+
+(define (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
+  (if (string-suffix? lexeme "]")
+      (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
+        (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
+      (-stop-before-alt-branch TOKEN lexeme input-port)))
+
+(define (token-stop-before-heading-foot-def-double-blank-line TOKEN lexeme input-port start-pos)
+  ; we don't have to do anything for the double-blank-line case
+  ; because it will stop before the final newline allowing the newline
+  ; first parsing to continue
+  (if (string-suffix? lexeme "*")
+      (token-stop-before-heading TOKEN lexeme input-port start-pos)
+      (if (string-suffix? lexeme "]")
+          (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
+          (-stop-before-alt-branch TOKEN lexeme input-port))))
 
 (define (get-tokens tokenizer)
   (define (sigh next-token [accum '()])
@@ -168,12 +193,16 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
   )
 
+; FIXME TODO consider using parameters to avoid emitting duplicate
+; markup but consider also that this may not be the best or even
+; correct place to attempt such a thing
+
 (define paragraph-lexer
   (lexer-srcloc
    [(from/to (:seq "{{{" alpha) "}}}") (token 'MACRO lexeme)]
    #; ; the spec for macro reads like it can be multi-line
    [(:seq "{{{" alpha (:+ (:or alpha 0-9 "-" "_")) (:? (:seq "(" ")")) "}}}") (token 'MACRO lexeme)]
-   [(:+ (:~ mu-pre-1 mu-marker mu-post-1)) (token 'STUFF-B lexeme)]
+   [(:+ (:~ mu-pre-1 mu-marker mu-post-1 "]")) (token 'STUFF-B lexeme)]
 
    #|
    [markup-*/_+ (token 'MU-BIUS lexeme)]
@@ -217,8 +246,16 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [citation (token 'CITATION lexeme)] ; FIXME annoying because it gets parsed twice
 
+   [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
+   [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
+   [footnote-inline-malformed
+    (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED lexeme input-port start-pos)]
+
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]
+
+   ["]" (token 'RSB lexeme)]
+
    #;
    [(:+ mu-marker) (token 'MARKER lexeme)] ; break out from the pre/post to avoid creating longer matches than eof? cases
 
@@ -262,21 +299,23 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [" " (token 'SPACE)]
    [(:+ (:~ (:or "|" #;"-" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
 
-(define (table-make-tokenizer port)
+(define (paragraph-make-tokenizer port)
   (define (next-token)
-    (let ([out (table-lexer port)])
-      #;
+    (let ([out (paragraph-lexer port)])
+      ;#;
       (begin
-        (println ':table-make-tokenizer)
+        (println ':paragraph-make-tokenizer)
         (pretty-print out))
       out))
   next-token)
 
-(define (paragraph-make-tokenizer port)
+(define (table-make-tokenizer port)
   (define (next-token)
-    (let ([out (paragraph-lexer port)])
-      #;
-      (pretty-print out)
+    (let ([out (table-lexer port)])
+      ;#;
+      (begin
+        (println ':table-make-tokenizer)
+        (pretty-print out))
       out))
   next-token)
 
@@ -329,6 +368,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [table-element
     #;
     (token 'TABLE-ELEMENT lexeme)
+    ; FIXME somehow this is off by one and not backtracking far enough
     (token-stop-before 'TABLE-ELEMENT 'TABLE-ELEMENT lexeme #\newline input-port start-pos)
     ]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
@@ -352,9 +392,20 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(:+ " ") (token 'SPACE-N lexeme)]
    ["\t" (token 'TAB)]
 
+   #; ; don't parse this at the top level, only in the paragraph
+   [citation (token 'CITATION lexeme)] ; TODO will likely want nested tokenization here
+
    ; these are lexemes so that we can ignore them if they don't start the line
 
+   #;
    ["[fn:" (token 'FOOTNOTE-START lexeme)]
+   #; ; eaten by paragraph in nearly all cases I think
+   [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
+   #; ; eaten by paragraph in nearly all cases I think
+   [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
+   [footnote-definition (token-stop-before-heading-foot-def-double-blank-line
+                         'FOOTNOTE-DEFINITION lexeme input-port start-pos)] ; FIXME needs stop-before backtracking
+   #;
    ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
 
    ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; FIXME ALPHA-N takes priority over this >_< FFS

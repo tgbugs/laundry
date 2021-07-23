@@ -1620,6 +1620,35 @@ don't affilaite to other unaff keyword
 
 (module+ test-footnotes
   (dotest "Text [fn::Inline footnote.] more.")
+  (dotest "Text [fn::Inline footnote.\nmore paragraph.] more.") ; yes
+
+  (dotest "Text [fn::Inline footnote.\n\nA new paragraph?] more.") ; officially NOT an inline footnote YAY!!!!!!!
+
+  (dotest "Text [fn:anchor] more.")
+  (dotest "Text [fn:x] more.\n[fn:x] Gonna")
+
+  (dotest "A [fn:1].\n[fn:1] footnote.\n**\n")
+  (dotest "A [fn:1].\n[fn:1] footnote.\n** \n")
+
+  ; FIXME none of these should be inline ! which means that we have to update the paragraph tokenizer to skip ^[fn:
+  (dotest "[fn::]")
+
+  (dotest "[fn:: hello =]= there ]")
+
+  (dotest "[fn:: [ hello =]= there ]")
+
+  (dotest "[fn:: [ hello =]= there\n\n\nanother p]")
+
+  (dotest "[fn:: =a= \n\n")
+
+  (dotest "[fn:: =a= \n")
+
+  (dotest "[fn:: =a=\n")
+
+  (dotest "[fn:: =a= \n\n b]")
+
+  (dotest "[fn:: =a= \n b]") ; should be inline footnote
+
   )
 
 (module+ test-cite
@@ -1924,6 +1953,9 @@ a
    (submod ".." test-hcom)
    (submod ".." test-tags)
    (submod ".." test-keywords)
+   (submod ".." test-afkw)
+   (submod ".." test-footnotes)
+   (submod ".." test-cite)
    (submod ".." test-word-char-vs-word-char-n)
    (submod ".." test-not-markup)
    #; ; XXX big boy

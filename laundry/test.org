@@ -4,7 +4,11 @@
 # [[file:test.html]]
 # [[file:test.pdf]]
 
+#+latex_header: \usepackage{bigfoot}
+
 #+keyword: hello
+
+# (((( rainbow delims or my version of it is dumb
 
 * plain lists
 hello
@@ -101,3 +105,94 @@ the code~
 the verbatim=
 
 a *b* /c/ _d_ +e+ =f= ~g~ yes newline is a bug
+
+* footnotes
+
+Inline [fn::footnote] footnote.
+
+Anchor [fn:x] footnote.
+
+Inline anchor [fn:y:Because we are going to reference this somewhere else.] footnote.
+
+Somewhere else [fn:y].
+
+[fn:x] Definition
+
+** here we go
+
+Inline nested [fn::And now we have another footnote in here [fn::Nested.]]
+
+Inline nested two [fn::
+ asdf [fn::ech
+ ]
+ oof]
+
+Inline nested three [fn::
+ asdf [fn::ech
+ ] this does not work
+    #+begin_src bash
+    echo seems like blocks can only go in non-inline footnotes
+    #+end_src
+ oof]
+
+Inline drawer should fail [fn::
+:hello:
+this should not be an inline footnote I think?
+:end:
+] and thankfully is not.
+
+Inline multiple spaces [fn::Paragraph thing
+
+
+Hrm.
+
+
+Sigh
+
+
+] should still be part of the original paragraph?
+
+HAHAH YES. IT IS NOT!
+Despite the fact that the font locking regex shows that it is.
+
+A [fn::B
+C] D. Yes.
+
+E [fn::F
+
+G] H. No.
+
+I [fn::J
+
+
+K] L. No.
+
+Wat [fn:q].
+
+Intervening.
+
+The following is NOT a footnote anchor [fn:con].
+ [fn:con] confusingly.
+
+Testing [fn:no-space].
+
+What?!?!?!?! [fn:: [ hello =]= there
+another p]
+
+[fn:q] Hello there
+#+begin_src bash
+echo this works for html but not for pdf or latex? A regression I think?
+echo no, you must have #+latex_header: \usepackage{bigfoot} for this
+echo see https://tex.stackexchange.com/questions/203/how-to-obtain-verbatim-text-in-a-footnote
+#+end_src
+after block
+:also:
+a drawer!
+:end:
+
+[fn:con]
+
+We have to have a real working =[fn:con]= definition otherwise org will not export.
+You can't set =#+options: broken-footnotes:t= like you can with =#+options: broken-links:t=.
+
+[fn:no-space]These don't require a space actually.

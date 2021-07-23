@@ -98,6 +98,7 @@ empty-line : newline
 ; through we can only fall through for a single line, then we stitch
 ; it back together in post
 
+; FIXME do we allow newline? before PARAGRAPH?
 paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 paragraph-line : newline parl-lines
                | parl-tokens-with-newline
@@ -792,11 +793,17 @@ pl-tag-end : COLON COLON
 
 ;;; footnotes
 
+; FIXME there isn't really any such thing as a malformed or eof footnote defintion in the way
+; that there can be for blocks or drawers, but because we are reusing some of the internal
+; machinery they show up here, there is a TODO to refactor so that this is clear
+footnote-definition : FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-DEFINITION-MALFORMED
+;footnote-inline : FOOTNOTE-START-INLINE org-node? RSB ; FIXME this is really org-node-less-fd probably
+
 ; XXX impl note: these bind the paragraph that follow them ... but they do it
 ; differently than other elements, probably due to ... who knows? what differences
 ; in the implementation, actually they bind all elements that follow them except for
 ; a double blank line
-footnote-definition : footnote-definition-line org-node-f*
+-footnote-definition : footnote-definition-line org-node-f*
 
 @org-node-f : org-nbe-less-f | blank-line
 @org-node-f-in : org-nbe-f-in  | blank-line
@@ -810,9 +817,9 @@ footnote-definition-line : newline FOOTNOTE-START fn-label RSB fn-def
 
 fn-def : @not-newline? org-node-f
 
-footnote-anchor : footnote-inline | footnote-marker
+footnote-anchor : -footnote-inline | footnote-marker
 ; NOTE fn-defs must start at column 0, not 100% sure what that means
-footnote-inline : FOOTNOTE-START-INLINE fn-def-inline RSB ; FIXME the tokenizer for this is :/ [fn:: !?
+-footnote-inline : FOOTNOTE-START-INLINE fn-def-inline RSB ; FIXME the tokenizer for this is :/ [fn:: !?
 ;ootnote-contents : not-rsb ; FIXME I'm pretty sure there is a nasty bug in the elisp impl where
                             ; footnotes don't do shortest match, they do longest match
                             ; FIXME this naieve definition also fails to correctly manage

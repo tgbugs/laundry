@@ -342,6 +342,8 @@
   blk-src-end
 
   end-drawer
+
+  footnote-inline-malformed
   )
 #;
 (begin-for-syntax
@@ -419,9 +421,17 @@
 
   babel-call
 
+  footnote-reference ; FIXME likely needs a separate implementation
+  footnote-anchor
+  #;
+  footnote-inline
+
   footnote-definition
+  #;
   footnote-definition-line
+  #;
   fn-label
+  #;
   fn-def
 
   blk-src
@@ -698,6 +708,7 @@
                                 [blk-src-args-broken (make-rename-transformer #'sa-node)]
                                 [blk-src-end (make-rename-transformer #'sa-node)]
                                 [end-drawer (make-rename-transformer #'sa-node)]
+                                [footnote-inline-malformed (make-rename-transformer #'sa-node)]
                                 )
             (sa-malformed body ...))))
      (syntax-property
@@ -714,6 +725,21 @@
   (paragraph-node (malformed (blk-src-begin "oops")))
   )
 
+(define-syntax (footnote-inline stx)
+  (syntax-parse stx
+    [(_ label body ...)
+     ; TODO parse the label out FIXME during expansion, so long as we
+     ; can put the definition back inline it should be ok to pull the
+     ; definitions out to the to level and even make it possible to
+     ; interconvernt compatible definitions from end of section to
+     ; inline and vice versa ... I think we just use gensym on the
+     ; unlabeled ones or something and keep track so we know that they
+     ; were originally inline?
+     ; (footnote-reference (footnote-anchor) (footnote-definition-inline body ...))
+     #'(list 'footnote-inline body ...)
+     #;
+     #'(list 'footnote-inline #:ref label body ...)]))
+
 (define-syntax (paragraph stx)
   (syntax-parse stx
     [(_ body ...)
@@ -727,6 +753,19 @@
           (syntax->list #'(body ...)))
      ;#:do [(pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...))))]
      #'(expanded ...)]))
+
+(define-syntax (paragraph-inline stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #:with (expanded ...)
+     (map (λ (e)
+            (when (syntax-property e 'malformed)
+              ; TODO syntax warn probably? also this doesn't seem to work?
+              ; maybe the malformed annotation is getting lost during an sa?
+              (println (format "Found malformed structure! ~s" e)))
+            (local-expand e 'expression #f))
+          (syntax->list #'(body ...)))
+     #'(list 'paragraph expanded ...)]))
 
 (define-syntax (paragraph-node stx)
   (syntax-parse stx

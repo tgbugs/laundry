@@ -249,6 +249,46 @@
            ; because [cite:\n* @key] would match this I think ...?
            (:seq "]")))
 
+;;; footnote
+
+;; footnotes are exceptionally tricky because they allow nesting other footnotes
+;; so we can't actually use from/to for from/stop-before
+
+(define-lex-abbrev footnote-label
+  (:+ (:or 0-9 alpha "_" "-")))
+
+(define-lex-abbrev footnote-anchor
+  (:seq "[fn:" footnote-label "]")
+  )
+
+(define-lex-abbrev footnote-inline-start
+  ; see footnote references
+  ; the key constraint is that square brackets must be balanced
+  ; which means that this portion cannot be handled in the tokenizer
+  ; TODO technically these are allowed to contain only paragraph contents
+  ; so not blocks or drawers
+  (:seq "[fn:" (:? footnote-label) ":"))
+
+(define-lex-abbrev footnote-inline-malformed
+  ; FIXME verbatim issues probably
+  (from/stop-before (:seq footnote-inline-start
+                          (:* (:~ "]")))
+                    "\n\n"))
+
+(define-lex-abbrev stop-before-footnote-def
+   (:seq "\n" "[fn:" footnote-label "]"))
+
+(define-lex-abbrev footnote-definition
+  ; FIXME "word constituent characters" not 100% sure what that means in this and other similar contexts
+  (from/stop-before
+   (:seq "\n" "[fn:" footnote-label "]")
+   (:or
+    stop-before-footnote-def
+    stop-before-heading
+    "\n\n\n"
+    ; eof as well it seems
+    )))
+
 ;;; hyperlink
 
 ; XXX this is better than the from/to version in one sense, but worse

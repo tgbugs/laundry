@@ -4,9 +4,14 @@ paragraph : markup? ( mu-pre markup
                     | stuff
                     | macro
                     | citation
-                    | hyperlink )* markup-eof?
+                    | footnote-reference
+                    | hyperlink
+                    | malformed ; XXX note that if malformed is placed here it MUST terminate the paragraph
+                    )* markup-eof?
 
-stuff : ( STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline )+
+@stuff-less-rsb-1 : STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline
+stuff-less-rsb : stuff-less-rsb-1+
+stuff : ( stuff-less-rsb-1 | RSB )+
 
 newline : NEWLINE
 
@@ -19,6 +24,18 @@ macro : MACRO
 ;;; citation
 
 citation : CITATION
+
+;;; footnote
+
+footnote-reference : footnote-anchor | footnote-inline
+footnote-anchor : FOOTNOTE-ANCHOR
+; FIXME RSB fighting with markup e.g. [fn:: hello =]= there ] vs [fn:: [ hello =]= there ]
+paragraph-inline : @paragraph
+footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnotes may contain at most a single paragraph
+                | FOOTNOTE-INLINE-MALFORMED-EOF ; FIXME wrong because it somehow ends with the banned value, sigh EOF madness
+malformed : footnote-inline-malformed
+footnote-inline-malformed : FOOTNOTE-INLINE-MALFORMED-MALFORMED
+; footnote-definition : FOOTNOTE-DEFINITION ; these never appear here, they are always outside paragraphs
 
 ;;; hyperlink
 

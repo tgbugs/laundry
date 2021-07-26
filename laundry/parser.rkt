@@ -231,12 +231,9 @@ nc-start : parl-ncln-bt-l-d
 
 ; both planning and property drawer can only have a single newline each before them
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
-headline : HEADING | newline stars @wsnn+ headline-content? ; XXX do we force normalize to a single space in headlines? XXX probably need to preserve wsnn+ due to the fact that we are going to reparse and thus would lose srcloc
-stars : ASTERISK | STARS ; ASTERISK+ destorys performance
-headline-content : @not-newline
+headline : HEADING
 
-; we don't use the simplest form to avoid parsing the stars twice
-; headline : stars /wsnn+ @not-newline
+stars : ASTERISK | STARS ; ASTERISK+ destorys performance
 
 ;;; planning
 
@@ -284,110 +281,7 @@ plan-close : CHARS-CLOSED
 
 planning-dissociated : planning
 
-;;; headline runtime parsing
-
-; note that even in this setting COMMENT cannot be a todo keyword
-; becuase it will require a change to the lexer since COMMENT would
-; appear in two places in the grammar which would force the grammar
-; to change, which it can't, I really don't like reserved words anywhere
-; in a grammar, but if there are going to be headline comments then we
-; will deal with it
-
-headline-content-2 : h-rt-todo-keyword /wsnn+ h-rt-mid? h-rt-tags?
-                   | h-rt-todo-keyword /wsnn*
-                   | h-rt-mid-no-rtk? h-rt-tags?
-                   | h-rt-mid-weird? h-rt-tags?
-                   | h-rt-mid-no-rtk
-                   | h-rt-tags-tail?
-
-h-rt-mid-common : h-priority /wsnn* h-comment h-rt-title?
-                | h-priority /wsnn* h-rt-title-not-comment?
-                ; TODO I think we need to unnegate lsb at some point here?
-                | h-comment h-rt-title? ;h-rt-tags?
-
-h-rt-mid : h-rt-mid-common
-         | h-rt-title-not-comment?; h-rt-tags?
-
-h-rt-mid-no-rtk : h-rt-mid-common
-                | h-rt-title-not-comment-rtk?; h-rt-tags?
-
-; this will mark the line as weird because there is a todo keyword at the start of the title
-h-rt-mid-weird : h-rt-mid-common
-               ; we don't have to worry about insanity like a todo keyword of COM ending with MENT
-               ; the tokenizer will save us from that
-               | h-rt-title-weird ; note the lack of a space ; FIXME kna needs to be part of title here
-
-h-rt-title-weird : h-rt-todo-keyword-not-active h-rt-title?
-                 | h-rt-todo-keyword-not-active h-rt-tags-missing-space?
-h-rt-todo-keyword-not-active : @h-rt-todo-keyword
-h-rt-tags-missing-space : @h-tags wsnn* newline
-
-;asdf : h-priority h-comment? h-rt-title-not-comment? h-rt-tags?
-                 ;| h-rt-title-begin not-newline? h-rt-title-end
-                 ;| h-rt-title-single
-
-;h-rt-tail : h-priority? h-ctt? h-rt-tags? /wsnn*
-          ;| h-priority h-rt-title?
-          ;| h-rt-title
-
-h-rt-todo-keyword : RUNTIME-TODO-KEYWORD ; configure the tokenizer at runtime
-h-rt-title : @h-ctt-start
-h-rt-tags : /wsnn+ h-rt-tags-tail
-h-rt-tags-tail : @h-tags wsnn* newline-or-eof ; XXX really I need to be able to get token-EOF
-
-
-; TODO will need to incorporate this into the h-rt-title-begin
-
-headline-chars-complex : not-lsb-whitespace1
-                       | LSB not-hash-newline1
-                       | LSB HASH not-rsb-newline1 not-rsb-newline1 ; XXX example of where NEGATED-SET being more than one char hurts us?
-                       | LSB HASH RSB not-rsb-newline1 ; the workaround is simple enough
-
-not-tags : not-colon-newline wsnn* newline-or-eof ; block ending with colon
-         | not-tag-whitespace tags-contents wsnn* newline-or-eof ; seriously, this is all you need XXX FALSE I was right that we had to handle the fact that not-tag-newline tag-contents allows whitespace COLON to happen
-         | not-tag-newline not-colon-whitespace1 tags-contents wsnn* newline-or-eof
-
-; * :a: b:cd:
-; * :a: b:cd:
-; * :a: b:cd:
-; * :a: b:cd:
-; * :a:!b:cd:
-; * :a:-b:cd:
-
-; not ( tag contents + COMMENT + todo keywords ) ? ARCHIVE ? I think it is ok given wsnn+ before h-tags?
-; those are the only single tokesn we need to ban
-; a single char can't match properties so we are ok
-; then we refine such that 
-; todo keywords can be included in the start of the one that comes after todo keywords
-; comment can be included after comment
-
-h-rt-title-begin : not-COMMENT-RTK-lsb-whitespace
-; TODO as with all negated, specify the full set so you know that you are closed
-; then add back the patterns that are ok to match
-h-rt-title-end : not-tags
-h-rt-title-single : not-COMMENT-RTK-lsb-tag-whitespace ; a lot o nots
-
-h-rt-title-not-comment-rtk : h-rt-title-begin @not-newline? h-rt-title-end
-                           | h-rt-title-single
-
-;h-rt-title-not-comment : ( h-rt-title-begin | CHARS-COMMENT ) @not-newline? h-rt-title-end
-; FIXME h-comment somehow does not take priority over this but I don't think we needed CHARS-COMMENT
-; here anyway or at all, because h-rt-title-not-comment does not come _after_ h-comment, it comes _beside_ it
-; XXX no, just a bug, this was supposed to be adding RTK back in
-h-rt-title-not-comment : ( h-rt-title-begin | RUNTIME-TODO-KEYWORD ) @not-newline? h-rt-title-end
-                       | h-rt-title-single
-
 ;; comment
-
-h-comment : CHARS-COMMENT ; XXX implementation note the elisp impl does NOT require a space following comment
-; org-element is inconsistent with fontification here
-
-;; priority
-h-priority : @priority
-priority : /LSB /HASH priority-level /RSB
-priority-level : not-whitespace1 ; XXX spec and impl are divergent here ; XXX LOL [#$] is a valid priority in the elisp impl XXX this is safe under NEGATED-SET+
-; spec says "a single letter" impl works with any char
-; XXX fontification bug highlighting only works with uppercase and digit
 
 ;; tags
 
@@ -401,29 +295,6 @@ priority-level : not-whitespace1 ; XXX spec and impl are divergent here ; XXX LO
 ; by not being able to have tagged nameless headlines, but in a sense
 ; it does simplify the grammar a bit
 
-h-tags : ( tag-start | tag-archive )+ /COLON
-@tag-start : /COLON tag-name
-tag-name : @tag-name-parts* ; XXX spec unclear behavior inconsistent ; XXX change: empty tags for regularity
-tag-name-parts : word-char-n | word-char | UNDERSCORE | AT | HASH | PERCENT 
-tags-contents : ( @tag-name-parts | COLON | ARCHIVE )+
-; org-element allows empty tags and interaction layer recognizes them
-; IF THEY ARE NOT BY THEMSLEVES AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-; XXX my suggestion is either to allow empty tags or to fix the elisp implementation
-
-; FIXME any alpha-numeric char ... UTF? not-whitespace ??? probably not ?
-;tag-archive : /COLON CHARS-ARCHIVE
-tag-archive : ARCHIVE
-
-;;;;;;;;;;;;;;;; XXX unused
-h-ctt : ( h-comment | @not-whitespace ) @not-newline? not-tags
-      | ( h-comment | @not-whitespace )? not-tags
-      | h-comment
-
-h-ctt-start : ( h-comment | @headline-chars-complex ) @not-newline? not-tags
-            | ( h-comment | @headline-chars-complex )? not-tags
-            | h-comment
-;;;;;;;;;;;;;;;; XXX unused
-
 ;;;; :
 
 ;;; drawers
@@ -433,7 +304,7 @@ h-ctt-start : ( h-comment | @headline-chars-complex ) @not-newline? not-tags
 ; to parse a property drawer correctly if it hits a point where it
 ; must backtrack because the regular drawer will take precednece
 ; this is EXTREMELY annoying and there is no way around it
-property-drawer : pdrawer-unparsed | newline wsnn* properties node-property* /nlws end-drawer
+property-drawer : pdrawer-unparsed ;| newline wsnn* properties node-property* /nlws end-drawer
 ; NOTE when this fails to parse, it WILL parse as a regular drawer
 pdrawer-unparsed : DRAWER-PROPS
 properties : PROPERTIES-D ; COLON "properties" COLON
@@ -454,19 +325,7 @@ property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newli
 ; XXX the grammer becomes more complicated because regular drawers are allowed to match properties
 ; this means that we have to fully specify how drawers and property drawers because the ambiguity
 ; in the grammar is exploited by the parser to increase performance
-drawer : DRAWER | drawer-spec | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
-@drawer-spec : newline wsnn* ( /COLON drawer-name /COLON | ARCHIVE /COLON | properties ) wsnn* drawer-contents? /nlws end-drawer ; XXX the second wsnn* is undocumented
-drawer-name : @wordhyus ; A-Za-z0-9_- (rx word) (explicilty not + apparently?) ; FIXME word constituent ???
-;drawer-contents : ( newline @not-newline )* ; FIXME big issue with headlines
-
-; drawer-contents : no-headlines ;( newline @not-newline? )+ ; the simple version
-drawer-contents : org-node-d* ; FIXME I'm kind of expecting fallthrough due to ambiguity here? also big issue with the fact that paragraph-lines inside of drawer need to not match :end:
-
-org-node-d : org-nbe-less-d | paragraph-line-d | newline
-
--org-node-d : affiliated-keyword* ( org-nbe-less-d | paragraph-line-d )
-           | un-affiliated-keyword
-           | newline
+drawer : DRAWER | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
 
 ;;;; #
 
@@ -514,48 +373,9 @@ keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend a
 
 ;;; affiliated keywords (do not implement as part of the grammar)
 
-affiliated-keyword : nlwsnn @affiliated-keyword-line
-affiliated-keyword-line : ak-key keyword-options? /COLON ( /wsnn+ keyword-value )? /wsnn*
-; ak-key defines which keywords can affiliate
 ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
-
-; unaff keywords are keywords, excep that they cannot affiliate to other un-affiliated keywords
-; the logic is a bit convoluted, org element types them as keywords, but it is more complicated than that
-un-affiliated-keyword : affiliated-keyword
-
-;;; affiliated keywords (old)
-
--affiliated-keyword : /newline wsnn* ak-key /COLON /wsnn+ ak-value ; leading whitespace on the value is not explicitly in the spec
-ak-value : @not-newline
--ak-key : ak-key-opt | ak-key-attr | ak-key-no-opt
-@ak-key-no-opt : ak-key-name-no-opt
-; but apparently AUTHOR DATE TITLE can also have opt??
-; caption author date title all can contain objects?
-; what are those?
-@ak-key-name-no-opt : header | name | plot ; | ak-key-maybe-opt
-;; @ak-key-maybe-opt : AUTHOR | DATE | TITLE  ; XXX the syntax document is EXTREMELY confusing here
-; these three are very much not affiliated keywords, they do not and
-; will not affiliate to anything, despite this they are listed in the
-; affiliated keywords section
 ak-key-attr : ATTR-PREFIX attr-backend
-
-header : HEADER
-name : NAME
-plot : PLOT
 attr-backend : @wordhyus
-
-; not clear whether this should be enforced here
-; I don't think that it is actually part of the
-; syntax at all
-; multi is caption header and attr
-; affiliated-keywords-multi
-; affiliated-keywords-single
-
-ak-opt : LSB not-newline RSB
-ak-key-opt : ak-key-name-opt ak-opt
-ak-key-name-opt : caption | result
-caption : CAPTION
-result : RESULT
 
 ;;; blocks
 
@@ -644,7 +464,7 @@ det-blk-src-end : blk-src-end ; basically all of these now that the tokenizer is
 det-blk-ex-begin : blk-ex-begin
 det-blk-ex-end : blk-ex-end
 
-blk-src : blk-src-whole | /newline blk-src-begin blk-src-contents? nlpws blk-src-end
+blk-src : blk-src-whole ;| /newline blk-src-begin blk-src-contents? nlpws blk-src-end
 blk-src-whole : SRC-BLOCK ; XXX requires a nested parser OR chaining the positions of input port in the lexer to produce more than one token i.e. checking in next-token for a list
 ;blk-src : blk-src-begin newline blk-src-contents? wsnn* blk-src-end
 blk-src-begin : ( BEGIN-SRC wsnn blk-src-line-contents | BEGIN-SRC ) /wsnn*
@@ -654,6 +474,8 @@ blk-src-contents : no-headlines ; FIXME we just need the bounds for the contents
 ;blk-src-contents : no-headlines-hungry-no-src-end ; this is a version that eats newlines
 blk-src-line-contents : language wsnn blk-src-line-rest-alt | language wsnn*
 language : @not-whitespace ; FIXME
+
+blk-unknown : UNKNOWN-BLOCK
 
 ;no-headlines-hungry-no-src-end : line-not-headline-not-src-end+
 ;line-not-headline-not-src-end : newline* start-not-headline not-newline-not-src-end newline
@@ -807,11 +629,6 @@ footnote-definition : FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-D
 
 @org-node-f : org-nbe-less-f | blank-line
 @org-node-f-in : org-nbe-f-in  | blank-line
-
--org-node-f : affiliated-keyword* ( org-nbe-less-f | blank-line )
-            | un-affiliated-keyword
--org-node-f-in : affiliated-keyword* ( org-nbe-f-in  | blank-line )
-               | un-affiliated-keyword
 
 footnote-definition-line : newline FOOTNOTE-START fn-label RSB fn-def
 

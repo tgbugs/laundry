@@ -1,6 +1,6 @@
 #lang info
 
-(define collection 'multi)
+(define collection "org")
 
 (define deps '("base"
                "laundry"))

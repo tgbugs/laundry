@@ -867,7 +867,7 @@
   (let* ([table-input (with-newlines str)]
          #;
          [__ (println (cons 'do-table-input: table-input))]
-         [out (parse-table-to-datum
+         [out (parse-table-to-datum ; TODO fixup srcloc in errors errors here probably?
                (table-make-tokenizer
                 (open-input-string table-input)))])
     #;

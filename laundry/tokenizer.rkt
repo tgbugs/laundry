@@ -73,7 +73,18 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (token (string->symbol (format "~a-EOF" TOKEN)) lexeme)
       (token TOKEN lexeme)))
 
-(define (token-stop-before-blank-line TOKEN lexeme input-port start-pos)
+(define (token-stop-before-table-double-blank-line TOKEN lexeme input-port start-pos)
+ (if (string-suffix? lexeme "|") ; EOF case goes here I think
+      (-stop-before-alt-branch TOKEN lexeme input-port)
+      (if (string-suffix? lexeme "\n")
+          ; FIXME if there is ever a case where we double back over a newline
+          ; then it induces the wierdest errors
+          (token TOKEN lexeme) ; this ending is correct, even if we were at eof
+          (begin
+            (pretty-print (list 'original-lexeme: lexeme))
+            (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos)))))
+
+(define (token-stop-before-blank-line TOKEN lexeme input-port start-pos) ; FIXME confusing naming
   (if (string-suffix? lexeme "]") ; EOF case goes here I think
       (-stop-before-alt-branch TOKEN lexeme input-port)
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
@@ -366,11 +377,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
 
    [table-element
-    #;
-    (token 'TABLE-ELEMENT lexeme)
-    ; FIXME somehow this is off by one and not backtracking far enough
-    (token-stop-before 'TABLE-ELEMENT 'TABLE-ELEMENT lexeme #\newline input-port start-pos)
-    ]
+    (token-stop-before-table-double-blank-line 'TABLE-ELEMENT lexeme input-port start-pos)]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
    [hyperlink-ab (token 'LINK-AB lexeme)]
@@ -577,6 +584,22 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   ; still need to check though
   )
 
+(define (fix-srcloc-mod srcloc-token-instance)
+  (let* ([token (srcloc-token-token srcloc-token-instance)]
+         [value (token-struct-val token)]
+         [actual-span (if (string? value) (string-length value) 1)]
+         [srcloc-raw (srcloc-token-srcloc srcloc-token-instance)]
+         [span (srcloc-span srcloc-raw)]
+         [srcloc (make-srcloc
+                  (srcloc-source srcloc-raw)
+                  (srcloc-line srcloc-raw)
+                  (srcloc-column srcloc-raw)
+                  (srcloc-position srcloc-raw)
+                  (if (not (= actual-span span))
+                      actual-span
+                      span))])
+    (make-srcloc-token token srcloc)))
+
 (define (fix-srcloc-eof srcloc-token-instance actual-start end-consumed)
   (let* ([stt (srcloc-token-token srcloc-token-instance)]
          [value (token-struct-val stt)]
@@ -762,7 +785,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (begin
         #;
         (println (cons 'lllllllllllllllllllllll out-raw))
-        out-raw)))
+        (if (eq? out-raw eof)
+            out-raw
+            (fix-srcloc-mod out-raw)))))
 
 (define (process-rest port)
   (let* ([out-raw (laundry-lexer port)]

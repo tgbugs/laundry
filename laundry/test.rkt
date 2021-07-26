@@ -321,6 +321,17 @@
   this seems strange to me? | no, you can't
 ")
 
+  ; test eof and table-element lex abbrev issues
+  (dotest "|\n\n|\nx|")
+  (dotest "\n|\n\n|\nx|")
+
+  (dotest "\n|\n\n|\n x|\n")
+  (dotest "\n|\n\n|\n x|")
+
+  (dotest "|\n x|")
+
+  (dotest "|\n x|\n\nwat")
+
   )
 
 (module+ test-headline-content

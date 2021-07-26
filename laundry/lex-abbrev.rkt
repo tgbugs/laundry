@@ -144,10 +144,53 @@
 ;;;; blocks
 
 (define-lex-abbrev src-block
-  (:seq (from/stop-before (:seq "\n" (:* " " "\t") (:or "#+begin_src" "#+BEGIN_SRC"))
+  (:seq (from/stop-before (:seq "\n"
+                                (:* " " "\t")
+                                (:or "#+begin_src" "#+BEGIN_SRC")
+                                (:+ (:~ "\n")))
                           (:or
                            stop-before-heading
                            (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))))
+
+; block types named in the spec
+; center
+; quote
+; comment
+; example
+; export
+; src
+; verse
+
+(define-lex-abbrev unknown-block
+  ; this parses to headings or to the next #+end_
+  ; we cannot do the matching at this stage, so nested blocks will terminate
+  ; early so we will have to detect mismatched suffixes in a second step
+  ; OR we will have to terminate if we hit another #+begin_ block before
+  ; finding an end, which might make more sense, but will have to test
+  (:seq (from/stop-before (:seq "\n"
+                                (:* " " "\t")
+                                (:or (:seq "#+begin_"
+                                           (:+ (:~ " " "\t" "\n"))
+                                           (:or " " "\t")
+                                           (:+ (:~ "\n")))
+                                     (:seq "#+BEGIN_"
+                                           (:+ (:~ " " "\t" "\n"))
+                                           (:or " " "\t")
+                                           (:+ (:~ "\n")))))
+                          (:or
+                           stop-before-heading
+                           (:seq "\n"
+                                 (:* " " "\t")
+                                 (:or (:seq "#+end_"
+                                            (:+ (:~ " " "\t" "\n"))
+                                            (:or " " "\t")
+                                            (:+ (:~ "\n")))
+                                      (:seq "#+END_"
+                                            (:+ (:~ " " "\t" "\n"))
+                                            (:or " " "\t")
+                                            (:+ (:~ "\n"))))
+                                 (:* " " "\t")
+                                 "\n")))))
 
 ;;;; drawers
 

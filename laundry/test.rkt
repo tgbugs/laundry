@@ -332,6 +332,12 @@
 
   (dotest "|\n x|\n\nwat")
 
+  (dotest "\n|x|")
+  (dotest "\n\n|x|")
+  (dotest "\n:end:\n* \n|\nx|") ; can't repro
+  (dotest "\n:end:\n* \n|\n x|") ; can't repro
+  (dotest "\n:end:\n** \n|\n x|") ; can't repro
+
   )
 
 (module+ test-headline-content
@@ -1069,10 +1075,10 @@ you called?
 
   (dotest "\n:drawer:\n:end:")
 
-  (dotest ":d:\n:end:") ; XXX incorrect parse
-  (dotest ":d:\n* \n:end:") ; foo yeah it works ; FIXME malformed ?
+  (dotest ":d:\n:end:" #:nte 'drawer)
+  (dotest ":d:\n* \n:end:" #:nte 'heading) ; foo yeah it works ; FIXME malformed ?
 
-  (dotest ":ARCHIVE:\n:end:") ; XXX incorrect parse
+  (dotest ":ARCHIVE:\n:end:" #:nte 'drawer)
 
   )
 
@@ -1262,6 +1268,7 @@ c c:
 #+end_src
 ")
 
+  #; ; case folding is evil and should no longer be supported
   (dotest "\n#+begin_src l
 
 d d:
@@ -1269,6 +1276,7 @@ d d:
 #+END_SRC
 ")
 
+  #; ; case folding is evil and should no longer be supported
   (dotest "\n#+BEGIN_SRC l
 
 y y:

@@ -2,9 +2,9 @@
 (require racket/pretty)
 (require brag/support
          "lex-abbrev.rkt"
-         (only-in racket/string string-suffix?)
+         (only-in racket/string string-suffix? string-trim string-split)
          (only-in racket/port input-port-append)
-         (only-in racket/list cons?)
+         (only-in racket/list cons? last)
          (for-syntax racket/base
                      #;
                      syntax/parse
@@ -67,8 +67,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
             ; has to handle the backtrack
             (cons token-correct position-correct)))))
 
-(define (-stop-before-alt-branch TOKEN lexeme input-port)
-  (if (eq? (peek-char input-port) eof)
+(define (-stop-before-alt-branch TOKEN lexeme input-port #:eof [eof-nok #t])
+  (if (and eof-nok (eq? (peek-char input-port) eof))
       ; FIXME decide how we are goin to do this and make it consistent
       (token (string->symbol (format "~a-EOF" TOKEN)) lexeme)
       (token TOKEN lexeme)))
@@ -90,11 +90,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))))
 
-(define (token-stop-before-heading TOKEN lexeme input-port start-pos)
+(define (token-stop-before-heading TOKEN lexeme input-port start-pos #:eof [eof-nok #t])
   (if (string-suffix? lexeme "*")
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
-      (-stop-before-alt-branch TOKEN lexeme input-port)))
+      (-stop-before-alt-branch TOKEN lexeme input-port #:eof eof-nok)))
 
 (define (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
   (if (string-suffix? lexeme "]")
@@ -375,8 +375,25 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
    ; XXX we can't do start-after on a heading to find a random end_src
    [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
+   [unknown-block ; FIXME somehow this is taking priority over src-block? or what?
+    (let* (#;[test-lexeme (string-downcase lexeme)] ; FIXME case folding is evil, we should not support this
+           [suffix (string-trim (car (regexp-match "_[^ \t]+[ \t]" lexeme)) #:repeat? #t)]
+           [sigh (last (string-split (string-trim lexeme "\n" #:repeat? #t) "\n"))]
+           )
+      (unless (or (regexp-match (regexp suffix)
+                                ; FIXME super inefficient check!
+                                sigh)
+                  (regexp-match #rx"\n\\*+[ \t]$" lexeme))
+        ; TODO proper next steps when a mismatch is detected
+        (error "mismatch" sigh suffix))
+      (if (member suffix '("_src" "_SRC"))
+          (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos #:eof #f) ; FIXME workaround ...
+          (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)
+          )
+      )]
 
    [table-element
+    ; FIXME this still has issues where the newline following the last | is dropped
     (token-stop-before-table-double-blank-line 'TABLE-ELEMENT lexeme input-port start-pos)]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely

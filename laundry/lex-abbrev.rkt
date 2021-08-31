@@ -147,10 +147,38 @@
   (:seq (from/stop-before (:seq "\n"
                                 (:* " " "\t")
                                 (:or "#+begin_src" "#+BEGIN_SRC")
-                                (:+ (:~ "\n")))
+                                (:* (:~ "\n")))
                           (:or
                            stop-before-heading
                            (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))))
+
+(module+ test-block
+  (define src-lexer
+    (lexer-srcloc
+     [src-block (token 'SRC-BLOCK lexeme)]))
+  (src-lexer (open-input-string "\n#+begin_src\n#+end_src\n#+end_src\n"))
+  (src-lexer (open-input-string "\n#+begin_src\nin\n#+end_src\n#+end_src\n"))
+  (src-lexer (open-input-string "
+#+begin_src elisp
+'lol
+#+end_src
+#+end_src"))
+
+(define unk-lexer
+    (lexer-srcloc
+     [src-block (token 'SRC-BLOCK lexeme)]
+     [unknown-block (token 'UNK-BLOCK lexeme)]
+     ))
+
+  (unk-lexer (open-input-string "\n#+begin_src\n#+end_src\n#+end_src\n"))
+  (unk-lexer (open-input-string "\n#+begin_src\nin\n#+end_src\n#+end_src\n"))
+  (unk-lexer (open-input-string "
+#+begin_src elisp
+'lol
+#+end_src
+#+end_src"))
+
+  )
 
 ; block types named in the spec
 ; center
@@ -183,12 +211,15 @@
                                  (:* " " "\t")
                                  (:or (:seq "#+end_"
                                             (:+ (:~ " " "\t" "\n"))
-                                            (:or " " "\t")
-                                            (:+ (:~ "\n")))
+                                            (:? (:seq
+                                                 (:or " " "\t")
+                                                 (:* (:~ "\n")))))
                                       (:seq "#+END_"
                                             (:+ (:~ " " "\t" "\n"))
-                                            (:or " " "\t")
-                                            (:+ (:~ "\n"))))
+                                            (:? (:seq
+                                                 (:or " " "\t")
+                                                 (:* (:~ "\n"))))
+                                            ))
                                  (:* " " "\t")
                                  "\n")))))
 

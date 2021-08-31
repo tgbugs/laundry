@@ -1200,12 +1200,74 @@ drawer contents
 (module+ test-blocks
   (current-module-path)
 
-  ; for some reason this one is slighly bugged
+  (dotest "
+#+begin_src
+#+end_src
+")
+
+  (dotest "
+#+begin_src 
+#+end_src
+") ; with space
+
+  (dotest "
+#+begin_src lang
+#+end_src
+#+end_src
+")
+
+  (dotest "
+#+begin_src 
+#+end_src
+#+end_src
+") ; note the space after #+begin_src it produces different behavior
+  ; this is due to the difference 
+
+  (dotest "
+#+begin_src
+#+end_src
+#+end_src
+")
+
+  (dotest "
+#+begin_src
+in
+#+end_src
+out
+#+end_src
+")
+
+
+  (dotest "
+#+begin_src
+inside the block
+#+end_src
+outside the block
+#+end_src
+")
+
   (dotest "
 #+begin_src elisp
 'lol
 #+end_src
 #+end_src")
+
+  (dotest "
+#+begin_src elisp
+'lol
+#+end_src
+x wat
+* 
+#+end_src
+")
+
+  (dotest "
+#+BEGIN_SRC elisp
+'lol
+#+END_SRC
+x wat
+#+END_SRC
+")
 
   ; don't you love ambiguous grammars ? check out the whitespace at the end of the first #+end_src >_<
   ; when you hit 6 whitespace chars trailing on the line it splits the paragraph, woo
@@ -1215,7 +1277,6 @@ drawer contents
 #+end_src      
 #+end_src")
 
-  ; and this one parses correctly for reasons not currently understood
   (dotest "
 #+begin_src elisp
 'lol

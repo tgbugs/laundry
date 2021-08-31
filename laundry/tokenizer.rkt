@@ -380,7 +380,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
            [suffix (string-trim (car (regexp-match "_[^ \t]+[ \t]" lexeme)) #:repeat? #t)]
            [sigh (last (string-split (string-trim lexeme "\n" #:repeat? #t) "\n"))]
            )
-      (unless (or (regexp-match (regexp suffix)
+      (unless (or (regexp-match #rx"^[*]+$" sigh) #;(regexp-match #rx"\n[*]+$" lexeme)
+                  (regexp-match (regexp suffix)
                                 ; FIXME super inefficient check!
                                 sigh)
                   (regexp-match #rx"\n\\*+[ \t]$" lexeme))

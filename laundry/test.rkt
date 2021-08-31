@@ -249,9 +249,27 @@
 
 (module+ test-table
   (current-module-path)
-  (dotest "|") ; XXX
+
+  (dotest "|\nx ")
+  (dotest "|\n\nx")
+  (dotest "|\nxx")
+
+  ; test to make sure that the stop before clause does zero or more not newlines
+  (dotest "   |\nx")
+  (dotest "|\nx")
+  (dotest " |\nx\n")
+  (dotest "|\nx\n")
+  (dotest "\n |\n x\n")
+  (dotest "\n |\n !\n")
+
+  (dotest "\n |\n x| \n")
+  (dotest "\n |\n x|")
+  (dotest "\nwat\n|\nx")
+  (dotest "\n|\nx")
+  (dotest "|\n")
+  (dotest "|")
   (dotest "| ")
-  (dotest " |") ; XXX
+  (dotest " |")
   (dotest " | ")
   (dotest "|t\n|2\n|-\n|3")
   (dotest "|i|am|a|table")

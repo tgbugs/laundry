@@ -1,3 +1,4 @@
+#lang org
 * Heading
 Hrm
 
@@ -58,3 +59,37 @@ foo stool
  ^
  &
  *
+* H
+The newline has to be present after the begin src line for this to fail.
+The space before the dq must be present as well.
+
+#+begin_src language
+
+x x:
+ "
+#+end_src
+
+#+BEGIN_SRC language
+
+x x:
+ "
+#+end_src
+
+#+begin_src language
+
+x x:
+ "
+#+END_SRC
+
+#+BEGIN_SRC language
+
+x x:
+ "
+#+END_SRC
+
+* sigh
+#+begin_src 
+inside the block
+#+end_src
+outside the block
+#+end_src

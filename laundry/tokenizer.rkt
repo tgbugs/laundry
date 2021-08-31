@@ -45,10 +45,10 @@
                          (search (sub1 look-at))))])
     (search (sub1 (string-length str)))))
 
-(define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos)
+(define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
   "Encapsulates the machinery needed to correctly reset the location of input-port when
 using from/stop-before where the stop-before pattern contains multiple charachters."
-  (if (eq? (peek-char input-port) eof)
+  (if (and eof-ok (eq? (peek-char input-port) eof))
       (token TOKEN-EOF lexeme)
       (let*-values ([(lexeme-correct offset) (find-last char lexeme)]
                     [(token-correct position-correct)
@@ -74,15 +74,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (token TOKEN lexeme)))
 
 (define (token-stop-before-table-double-blank-line TOKEN lexeme input-port start-pos)
- (if (string-suffix? lexeme "|") ; EOF case goes here I think
-      (-stop-before-alt-branch TOKEN lexeme input-port)
-      (if (string-suffix? lexeme "\n")
-          ; FIXME if there is ever a case where we double back over a newline
-          ; then it induces the wierdest errors
-          (token TOKEN lexeme) ; this ending is correct, even if we were at eof
-          (begin
-            (pretty-print (list 'original-lexeme: lexeme))
-            (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos)))))
+  (if (string-suffix? lexeme "\n")
+      (token TOKEN lexeme) ; this ending is correct, even if we were at eof
+      (if (regexp-match #rx"\n[ \t]*\\|[^\n]*$" lexeme) ; FIXME double parse
+          (token TOKEN lexeme) ; the last line is a well formed list
+          (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos #:eof #f))))
 
 (define (token-stop-before-blank-line TOKEN lexeme input-port start-pos) ; FIXME confusing naming
   (if (string-suffix? lexeme "]") ; EOF case goes here I think
@@ -310,10 +306,27 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [" " (token 'SPACE)]
    [(:+ (:~ (:or "|" #;"-" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
 
+(module+ test-table
+  ; table element stop before is not straight forward
+  (define test-table-lexer
+    (lexer-srcloc
+     [table-element
+      #;(token 'TABLE-ELEMENT lexeme)
+      (token-stop-before-table-double-blank-line 'TABLE-ELEMENT lexeme input-port start-pos)]))
+
+  ; manual newline because we aren't using all the bof/eof fixes
+  (test-table-lexer (open-input-string "\n |\n x\n"))
+  (test-table-lexer (open-input-string "\n|\nx|"))
+  (test-table-lexer (open-input-string "\n|\nx"))
+  (test-table-lexer (open-input-string "\n|\n"))
+  (test-table-lexer (open-input-string "\n|"))
+
+  )
+
 (define (paragraph-make-tokenizer port)
   (define (next-token)
     (let ([out (paragraph-lexer port)])
-      ;#;
+      #;
       (begin
         (println ':paragraph-make-tokenizer)
         (pretty-print out))
@@ -323,7 +336,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 (define (table-make-tokenizer port)
   (define (next-token)
     (let ([out (table-lexer port)])
-      ;#;
+      #;
       (begin
         (println ':table-make-tokenizer)
         (pretty-print out))

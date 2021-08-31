@@ -123,18 +123,13 @@
 ;;; tables
 
 (define-lex-abbrev table-element
-  ; FIXME EOF issues
   (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:* (:~ "\n"))))
                     (:or
                      "\n\n"
-                     (:seq "\n" ; FIXME not sure why the explicit "|" is needed since (:+ (:~ "\n")) should be matching it?
-                           (:* (:or " " "\t"))
-                           (:~ (:or " " "\t" "\n" "|"))
-                           "|")
                      (:seq "\n"
                            (:* (:or " " "\t"))
                            (:~ (:or " " "\t" "\n" "|"))
-                           (:+ (:~ "\n"))
+                           (:* (:~ "\n"))
                            "\n"))))
 
 ;;; elements that cannot contain headings 

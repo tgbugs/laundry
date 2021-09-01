@@ -1,0 +1,7 @@
+#lang org
+:a:
+* b
+:c:
+* d
+:e:
+* f

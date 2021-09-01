@@ -11,6 +11,8 @@
                      (only-in racket/list combinations permutations)
                      ))
 (provide laundry-make-tokenizer
+         #;
+         cumulative-offset
          table-make-tokenizer
          paragraph-make-tokenizer
          ;heading-make-tokenizer
@@ -39,7 +41,7 @@
   ; bytes into cacheline size and search for a sub-offset within that?
   (letrec ([search (λ (look-at)
                      #;
-                     (println (cons 'find-last: (string-ref str look-at)))
+                     (println (list 'find-last: (string-ref str look-at) look-at))
                      (if (eq? (string-ref str look-at) char)
                          (values (substring str 0 look-at) (sub1 look-at))
                          (search (sub1 look-at))))])
@@ -48,16 +50,48 @@
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
   "Encapsulates the machinery needed to correctly reset the location of input-port when
 using from/stop-before where the stop-before pattern contains multiple charachters."
+  #;
+  (print (list 'lexeme-original lexeme))
   (if (and eof-ok (eq? (peek-char input-port) eof))
       (token TOKEN-EOF lexeme)
       (let*-values ([(lexeme-correct offset) (find-last char lexeme)]
                     [(token-correct position-correct)
                      (values (token TOKEN lexeme-correct)
-                             (+ (position-offset start-pos) offset))])
+                             (+ (position-offset start-pos)
+                                offset))]
+                    #;
+                    [(this-offset) (- (add1 (file-position input-port)) position-correct)])
+        #;
+        (println (list 'ooooooo lexeme-correct offset (position-offset start-pos) position-correct))
         (if (or (file-stream-port? input-port)
                 (string-port? input-port)) ; cooperate with laundry lexer first-port
             (begin
+              #;
+              (begin
+                (println (list 'p0: (file-position input-port)))
+                (println (list 'pnl0: (let-values ([(l c p) (port-next-location input-port)]) (list l c p)))))
+
+              (let-values ([(l c p) (port-next-location input-port)])
+                ; TODO we need to transition from file-position over to port-next-location for this probably
+                (set-port-next-location! ; FIXME TODO this might be our culprit yep!
+                 input-port
+                 l #;
+                 (if (eq? char #\newline) (sub1 l) l)
+                 (if (eq? char #\newline) 0 c) ; FIXME this will break at some point (and may be already)
+                 ; note that this is NEXT location, not current location
+                 (add1 position-correct)))
               (file-position input-port position-correct)
+              #;
+              (begin
+                #;
+                (cumulative-offset (+ this-offset (cumulative-offset)))
+                (println (list 'p1: (file-position input-port)))
+                (println (list 'pnl1: (let-values ([(l c p) (port-next-location input-port)]) (list l c p))))
+                (println (list 'pppppppppppppppp (peek-char input-port)))
+                (println (list 'tttttttttttttttt token-correct))
+                #;
+                (println (list 'cumoff (cumulative-offset)))
+                )
               token-correct)
             ; FIXME we will have to come up with a better solution where we can set the
             ; file position on the appended ports for the first token so that everything
@@ -376,7 +410,15 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #;
    ["DONE" (token 'RUNTIME-TODO-KEYWORD lexeme)]
 
-   [heading (token 'HEADING lexeme)]
+   [heading (begin0 (token 'HEADING lexeme)
+              #;
+              (println (list
+                        "heading start-pos" start-pos
+                        "file-position input-port after heading" (file-position input-port)
+                        input-port
+                        (port-file-identity input-port)
+                             )))
+            ]
 
    ; FIXME there is a question of whether to use the lexer like this
    ; to slurp code blocks in the first pass and then run code block
@@ -418,7 +460,17 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
 
    [drawer-props (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)]
-   [drawer-ish (token-stop-before-heading 'DRAWER lexeme input-port start-pos)]
+   [drawer-ish
+    (begin0
+        (token-stop-before-heading 'DRAWER lexeme input-port start-pos)
+      #;
+      (println (list
+                "drawer start-pos" start-pos
+                "file-position input-port after drawer" (file-position input-port)
+                input-port
+                (port-file-identity input-port)
+                ))
+      )]
 
    [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
 
@@ -615,6 +667,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   ; still need to check though
   )
 
+#; ; default to #f to force a contract violation if not parameterized correctly
+(define cumulative-offset (make-parameter #f))
+
 (define (fix-srcloc-mod srcloc-token-instance)
   (let* ([token (srcloc-token-token srcloc-token-instance)]
          [value (token-struct-val token)]
@@ -626,8 +681,21 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                   (srcloc-line srcloc-raw)
                   (srcloc-column srcloc-raw)
                   (srcloc-position srcloc-raw)
+                  #;
+                  (if #f
+                      ; FIXME position gives correct numbers now when
+                      ; parsing from a file but the actual file position
+                      ; is still broken and this also breaks the
+                      ; so it looks like somehow when using string ports
+                      ; resetting file-position works correctly but not for file ports !?
+                      (- (srcloc-position srcloc-raw) (cumulative-offset))
+                      (srcloc-position srcloc-raw))
                   (if (not (= actual-span span))
                       actual-span
+                      #;
+                      (begin
+                        (cumulative-offset (+ (cumulative-offset) (- span actual-span)))
+                        actual-span)
                       span))])
     (make-srcloc-token token srcloc)))
 
@@ -815,7 +883,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
           final-out))
       (begin
         #;
-        (println (cons 'lllllllllllllllllllllll out-raw))
+        (println (cons 'lll-src-loc-source-line-column-position-span out-raw))
         (if (eq? out-raw eof)
             out-raw
             (fix-srcloc-mod out-raw)))))
@@ -856,10 +924,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     #;
     (println (cons 'lolololol (file-position port)))
     (let ([out (if bof ; sigh branches instead of rewriting
-               (begin
-                 (set! bof #f)
-                 (process-first port))
-               (process-rest port))])
+                   (begin
+                     (set! bof #f)
+                     (process-first port))
+                   (process-rest port))])
       #;
       (pretty-print out)
       out))

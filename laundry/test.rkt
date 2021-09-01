@@ -69,13 +69,17 @@
     (pretty-write (list 'dotest: hrm)))
   (if (or do-expand node-type-expanded)
       (when (or do-expand node-type-expanded) ; LOL when x vs begin ...
-        (define hrms #`(module org-module laundry/expander
-                         #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
-                            #; ; NAH just a completely insane case-lambda
-                            ; that causes the call to revert to the full grammar
-                            (format "test-source ~s" test-value-inner)
-                            (t))))
+        (define hrms
+          #`(module org-module laundry/expander
+              #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
+                 #; ; NAH just a completely insane case-lambda
+                 ; that causes the call to revert to the full grammar
+                 (format "test-source ~s" test-value-inner)
+                 (t))))
         (parameterize ([current-namespace ns-test])
+          (unless (or quiet (dotest-quiet))
+            (pretty-write (list 'expanded: (syntax->datum (expand hrms))))
+          )
           (eval-syntax hrms)
           (define root (dynamic-require ''org-module 'root))
           (when (and node-type-expanded (not (rec-cont root node-type-expanded)))
@@ -98,15 +102,20 @@
             #f)
     (error "Should have failed.")))
 
-(define (dotest-file path #:eq [eq #f])
+(define (dotest-file path #:eq [eq #f] #:parse-to-datum [parse-to-datum #f])
   ; FIXME super inefficient
   #;
   (define (t) (laundry-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
   (define hrm
     (with-input-from-file (expand-user-path (string->path path))
       (λ ()
+        (port-count-lines! (current-input-port)) ; XXXXXXXXXXXXXX YAY this is what causes our backtracking issues :D :D
         (let ([t (laundry-make-tokenizer (current-input-port))])
-          (parse-to-datum t)))
+          ((if parse-to-datum
+               parse-to-datum
+               (compose syntax->datum (testing-parse)))
+           path
+           t)))
       #:mode 'text))
   (if eq
       (unless (equal? eq hrm)
@@ -355,6 +364,32 @@
   (dotest "\n:end:\n* \n|\nx|") ; can't repro
   (dotest "\n:end:\n* \n|\n x|") ; can't repro
   (dotest "\n:end:\n** \n|\n x|") ; can't repro
+
+  (dotest "#lang org\n:end:\n*** \n|\nx|") ; can't repro
+  (dotest "* \n:end:\n* \n|\nx|") ; can't repro
+
+  (dotest ":a:\n* \n:b:\n* ") ; cant' seem to repro
+  (dotest "\n:a:\n* \n:b:\n* ") ; cant' seem to repro
+
+  (dotest "
+:a:
+* b
+:c:
+* d
+:e:
+* f
+")
+
+  (dotest "#lang org
+:a:
+* b
+:c:
+* d
+:e:
+* f
+")
+
+
 
   )
 
@@ -1219,6 +1254,14 @@ drawer contents
   (current-module-path)
 
   (dotest "
+#+begin_example org
+,#+begin_src bash -r -l :noweb yes
+(+ 1 2)
+,#+end_src
+#+end_example
+")
+
+  (dotest "
 #+begin_src
 #+end_src
 ")
@@ -1963,6 +2006,8 @@ wat
   (dotest-file "simple.org")
 
   (define test-org (dotest-file "test.org")) ; WOOOOOOOOOOOOOOO all working ?! yay for tokenizers simplifying things?
+
+  (define test-pos-vs-loc-org (dotest-file "test-pos-vs-loc.org"))
 
   #; ; #+results[a]: issue
   (define dev-guide (dotest-file "~/git/sparc-curation/docs/developer-guide.org"))

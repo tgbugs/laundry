@@ -389,7 +389,7 @@ attr-backend : @wordhyus
 ; of an org-file from just its syntax because you need
 ; a stack to keep track of which block you are in
 
-@block-less-dyn : ( blk-src | /newline blk-ex ) ; FIXME do we really / the newline here? I guess?
+@block-less-dyn : ( blk-src | blk-unknown | /newline blk-ex ) ; FIXME do we really / the newline here? I guess?
 
 ; NOTE greater blocks that do not have a special status e.g. src blocks for babel
 ; can only be determined to be malformed during a later pass, not by the grammar alone

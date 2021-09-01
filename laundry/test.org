@@ -196,3 +196,7 @@ We have to have a real working =[fn:con]= definition otherwise org will not expo
 You can't set =#+options: broken-footnotes:t= like you can with =#+options: broken-links:t=.
 
 [fn:no-space]These don't require a space actually.
+
+#+begin_src elisp
+(+ 1 2)
+#+end_src

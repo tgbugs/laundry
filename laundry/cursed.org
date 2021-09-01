@@ -1,5 +1,9 @@
 #+title: I can't believe you've done this.
 [fn:x] lol
+
+#+options: broken-links:t
+#+property: header-args :eval no-export
+
 * comments
 other element
 
@@ -33,7 +37,7 @@ yes it does work doesn't it
 #+ATTR_HTML: asdf
 paragraph
 
-1.asdf
+1. asdf
 1. asdf
 2.
 * comments
@@ -123,6 +127,8 @@ LOOK AT ALL THE BUGS this isn't commented
 ** [#A]COMMENT:t:
 The elisp implementation treats the ~:t:~ as title here but not in the next one.
 ** [#A]COMMENT                                                            :t:
+** [#Z]COMMENTT
+This is commented apparently.
 ** [#P]:t:
 tags nil
 ** [#P]                                                                   :t:
@@ -141,7 +147,9 @@ is completely broken when dealing with tags and titles
 ** T ::!sdf::
 ** T ::!sdf:: :t:
 ** TODO:not_a_tag:
-
+** how did I not come up with this test:case:before:?:
+** how did I not come up with this test:case:before:
+** how did I not come up with this test :case:before:
 * what does the :grammar say about this?                         :tagme:baby:
 [[*what does the :grammar say about this?][what does the :grammar say about this?]]
 * this is :not-a-tag:
@@ -217,7 +225,7 @@ yes?
 
 Yes these are paragraphs
 #+name
-#+attr_html
+#+attr_html 
 
 * test table
 ||
@@ -235,6 +243,9 @@ Yes these are paragraphs
 |   |   |
 -
 1.
+   
+| oh it is *bad /yes/ _it_ =is=* <https://> [[(oh-boy)]] |
+
 * COMMENT COMMENT Blocks
 # FIXME lol foo when something is broken in the export backend using the :noexport: tag
 # still foos it you have to comment it out ... fffs no idea what is breaking everything
@@ -245,7 +256,7 @@ see also [[file:./test-header-args.org]]
 (+ 1 2)
 #+end_src
 
-#+RESULTS:
+# #+RESULTS:
 
 
 #+begin_example org
@@ -266,7 +277,7 @@ see also [[file:./test-header-args.org]]
 #+BEGIN: wat
 #+begin_src elisp
 #+end_src
-wat
+# wat
 #+END:
 
 #+end:
@@ -295,16 +306,16 @@ lol broken highlighting
 #+assdfasdf asdfffffffasdfasdf:
 
 
-#+begin:poop
+# #+begin:poop
 asdf
 #+end
 
-#+begin: 
+# #+begin: 
 wat
 #+end:
 
 
-#+begin: wat wat
+# #+begin: wat wat
 ARGH somehow this is not a keyword to org-element but ~#+begin:~ alone is !?!??!! FOOING FOO POOP FOO
 come on guys this is insane
 
@@ -317,7 +328,7 @@ ah poop this is bad
 :end:
 ** MADLADS
 
-#+begin: the-dynamic-block
+# #+begin: the-dynamic-block
 IN THE BATTLE OF THE AGES WHO WILL WIN?
 :the-drawer:
 or
@@ -341,10 +352,10 @@ asdf
 +
 *
 
-#+call:end:
-#+call:properties:
-#+keyword:end:
-#+keyword:properties:
+# #+call:end:
+# #+call:properties:
+# #+keyword:end:
+# #+keyword:properties:
 
 lol fooing broken fontification among other insanity
 DOUBLE lol on broken fontification in here ???!?!?! no actually that one pipe is correct
@@ -412,7 +423,7 @@ asdf [fn:1] well poop [fn:: Why hello there
 you must be new here
 this is a footnote.] anyway. [fn:2: what is this thing?] lol foo your numbers
 
- [fn:this-is-inconsistent]
+# [fn:this-is-inconsistent]
 
 [fn:foo-this-poop] is a footnote that starts at the start of a line? I DONT THINK SO
 # this should be the split? but actually you can define a footnote ANYWHERE !?!?!?! after its anchor???
@@ -429,13 +440,13 @@ See?
 
 HRM why do I get the feeling that footnotes literally _define_ the start of the end of the section and leave everything else out? Actually I'm wrong. [fn:9] [fn:10]
 
-[fn:this-is-inconsistent] now this will render
+# [fn:this-is-inconsistent] now this will render
 
-[fn:1] oh foo me right? wait ... the footnote definition can now appear anywhere !?
+# [fn:1] oh foo me right? wait ... the footnote definition can now appear anywhere !?
 
 hello there [fn:poop]
 
-[fn:poop: but maybe they can!? OH FOO WHAT HAVE I DONE?! I just destroyed the fontification here
+# [fn:poop: but maybe they can!? OH FOO WHAT HAVE I DONE?! I just destroyed the fontification here
 lol foo, is this running all the way back to the fn1 definition !? how the foo?!]
 [fn:poop] general kenobi, these things can't be multiline can then :(
 # this is some fooed up poop. I have no idea what is going on.
@@ -451,6 +462,9 @@ lol foo, is this running all the way back to the fn1 definition !? how the foo?!
 LOL NOT A FOOTNOTE GET FOOED
 WHY WOULD YOU DO THIS!?
 [fn:1] The actual footnote
+
+
+# this is completely broken, nesting footnotes is beyond insane and the syntax is so obscure that I cannot remember what it is supposed to do or how it is supposed to behave
 [fn:sadness] NO THIS IS ORG MODE FOOTNOTES
 Please let these be multi-line here? Please !??!?! Apparently they have to come after all other footnotes or something? 
 YAY! [fn:: MULTI LINE WORKS! :D ] An so do nested footnotes, despite what the spec says.
@@ -516,7 +530,15 @@ Oh foo oh poop [fn:help].
 Poop.
 [fn:help] We are so fooed.
 EEEEEEEEEEEEEEEEEEEEEEEEEEEE] Maybe?
-
+* footnotes redux EXTRA CURSED
+** I do like like them [fn:Sam I am]
+** I do not like them with a [fn::BANG]!
+** I do not like them with strange [[(oh-dear)][slang]]
+#+begin_src elisp
+whargle-blarg ; (ref:oh-dear)
+#+end_src
+** I do not like them :on:a:stoat:
+** I particularly hate that :asymtote:
 * asdf 
 ** a
                  DEADLINE:         SCHEDULED:             CLOSED:
@@ -562,4 +584,89 @@ DEADLINE: <2020-11-29                                          Sun>
 :PROPERTIES:
 :CREATED:  [2020-12-11 Fri 12:11]
 :END:
+
+
+* markup
+********************************************************************************************
+*********************************************************************************************
+
+*
+*bold*
+oh boy * not bold
+
+Note that =**= together is NOT bold. 
+**
+
+However 3 is.
+***
+
+*bold text /bi text/ bold _bu text_ bold*
+
+ *=bv=*
+ *~bc~*
+ /=iv=/
+
+* inline src blocks
+** ob julia being weird
+:PROPERTIES:
+:header-args:julia: :results output
+:END:
+
+src_julia{1 + 2}
+
+#+begin_src julia
+1 + 2
+#+end_src
+** ob ruby
+#+begin_src ruby
+1 + 2
+#+end_src
+
+src_ruby{1 + 2} {{{results(=3=)}}}
+
+** oops
+:PROPERTIES:
+:header-args:python: :prologue "x = (" :epilogue ")\nreturn x" :results list :comment "OOPS list bad"
+:inline-header-args:python: :prologue "x = (" :epilogue ")\nreturn x" :comment "not implemented"
+:END:
+[[hrm]]
+src_elisp{(let ((a (list 'b))) (+ 1 2))} {{{results(=3=)}}}
+src_python{1 + 2} {{{results(3)}}}
+src_python[:prologue "x = (" :epilogue ")\nreturn x"]{1 + 2} {{{results(=3=)}}}
+src_lisp{(+ 1 2)} {{{results(=3=)}}}
+src_lisp[:exports code]{(+ 1 2)} {{{results(=3=)}}}
+
+#+begin_src elisp
+(+ 1 2)
+(let ((a (list 'b))) (+ 1 2))
+#+end_src
+
+src_org[:lang de]{Meine deutsch ist zher schlect!}
+
+* keywords
+
+#+key:          value
+
+#+key:  
+
+#+key:
+
+#+name:
+something
+
+#+:end::asdf
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+font locking and org-element disagree on this
+
+#+::not-paragraph-according-to-org-element
+
+#+:paragraph
+
+I'm ruling this a bug in org element since it doesn't match the spec.
+
+#+k:k : :]
+oh dear
+
+#+k: : :]
+oh no
 

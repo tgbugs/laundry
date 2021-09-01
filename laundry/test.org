@@ -123,15 +123,17 @@ Somewhere else [fn:y].
 Inline nested [fn::And now we have another footnote in here [fn::Nested.]]
 
 Inline nested two [fn::
- asdf [fn::ech
+ this is actually allowed [fn::and this is a footnote inside a footnote 
+ however the nesting behavior results in nested footnotes being rendered first
+ for some very strange reason, that might be a bug actually
  ]
- oof]
+ because the contents are just paragraphs]
 
 Inline nested three [fn::
- asdf [fn::ech
+ not footnote due to block [fn::however this inner footnote does work
  ] this does not work
     #+begin_src bash
-    echo seems like blocks can only go in non-inline footnotes
+    echo per the spec blocks can only go in non-inline footnotes
     #+end_src
  oof]
 
@@ -139,7 +141,7 @@ Inline drawer should fail [fn::
 :hello:
 this should not be an inline footnote I think?
 :end:
-] and thankfully is not.
+] and thankfully does because drawers are not valid parts of paragraphs.
 
 Inline multiple spaces [fn::Paragraph thing
 
@@ -178,6 +180,8 @@ Testing [fn:no-space].
 
 What?!?!?!?! [fn:: [ hello =]= there
 another p]
+
+Unmatched [fn:: [ lol]
 
 [fn:q] Hello there
 #+begin_src bash

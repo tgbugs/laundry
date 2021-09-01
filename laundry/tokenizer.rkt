@@ -110,7 +110,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 (define (token-stop-before-table-double-blank-line TOKEN lexeme input-port start-pos)
   (if (string-suffix? lexeme "\n")
       (token TOKEN lexeme) ; this ending is correct, even if we were at eof
-      (if (regexp-match #rx"\n[ \t]*\\|[^\n]*$" lexeme) ; FIXME double parse
+      (if (regexp-match #rx"\n[ \t]*\\|[^\n]*$" lexeme) ; FIXME double parse try (peek-char input-port) maybe?
           (token TOKEN lexeme) ; the last line is a well formed list
           (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos #:eof #f))))
 
@@ -127,7 +127,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (-stop-before-alt-branch TOKEN lexeme input-port #:eof eof-nok)))
 
 (define (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
-  (if (string-suffix? lexeme "]")
+  (if (eq? (peek-char input-port) #\])
+      (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos)
+      #;
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
       (-stop-before-alt-branch TOKEN lexeme input-port)))
@@ -138,7 +140,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   ; first parsing to continue
   (if (string-suffix? lexeme "*")
       (token-stop-before-heading TOKEN lexeme input-port start-pos)
-      (if (string-suffix? lexeme "]")
+      (if (eq? (peek-char input-port) #\])
           (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
           (-stop-before-alt-branch TOKEN lexeme input-port))))
 
@@ -289,8 +291,14 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
    [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
+   [footnote-inline-simple (token 'FOOTNOTE-INLINE-SIMPLE lexeme)]
    [footnote-inline-malformed
-    (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED lexeme input-port start-pos)]
+    ; I think this kind of works? we might not back up enough? we hard match \n\n without stop before
+    (begin
+      (file-position input-port (sub1 (file-position input-port))) ; FIXME port-next-location
+      (let-values ([(l c p) (port-next-location input-port)])
+        (set-port-next-location! input-port l 0 (sub1 p)))
+      (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED (substring lexeme 0 (sub1 (string-length lexeme))) input-port start-pos))]
 
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]

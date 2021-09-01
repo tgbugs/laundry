@@ -269,6 +269,7 @@
                "\""
                "("
                ")"
+               "]"
                ","
                "!"
                "?"
@@ -282,6 +283,7 @@
               (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
               ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
               ; FIXME TODO how to handle cases like \n123456789\n
+              (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
               (:seq (:+ a-z) (:~ bullet-marker a-z "\n"))
               (:seq (:+ A-Z) (:~ bullet-marker A-Z "\n"))
               (:seq (:+ 0-9) (:~ bullet-marker 0-9 "\n"))
@@ -342,11 +344,47 @@
   ; so not blocks or drawers
   (:seq "[fn:" (:? footnote-label) ":"))
 
-(define-lex-abbrev footnote-inline-malformed
+(define-lex-abbrev footnote-inline-malformed ; FIXME -maybe-malformed, because it will match ok bits too but EOF causes issues
   ; FIXME verbatim issues probably
+
+  ; FIXME arbitrary nesting cannot be handled effectively here
+
+  ; FIXME this is incorrect, what we wanted was to detect cases where
+  ; there was a double blank line (or was it single blank line?)
+  ; before a RSB
+  ; TODO this is going to need some special post processing
+  ; yes footnotes are annoying to deal with due to need to match brackets
+  ; we can't use from/stop-before for this because the gap will allow closing brackets to creep in
+  (:seq footnote-inline-start (:* (:~ "]")) "\n\n")
+  #;
   (from/stop-before (:seq footnote-inline-start
                           (:* (:~ "]")))
-                    "\n\n"))
+                    (:or "]"
+                         "\n\n")))
+
+(define-lex-abbrev footnote-inline-simple
+  (:seq footnote-inline-start (:* (:~ "[" "]")) "]"))
+
+(module+ test-fim
+  (define fis-lexer
+    (lexer-srcloc
+     [footnote-inline-start (token 'FIS lexeme)]))
+
+  (fis-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
+
+  (define fisim-lexer
+    (lexer-srcloc
+     [footnote-inline-simple (token 'FISIM lexeme)]))
+
+  (fisim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
+
+  (define fim-lexer
+    (lexer-srcloc
+     [footnote-inline-malformed (token 'FIM lexeme)]))
+
+  ; expect to fail
+  (fim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
+  )
 
 (define-lex-abbrev stop-before-footnote-def
    (:seq "\n" "[fn:" footnote-label "]"))

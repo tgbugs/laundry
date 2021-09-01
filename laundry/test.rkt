@@ -1760,6 +1760,20 @@ don't affilaite to other unaff keyword
   )
 
 (module+ test-footnotes
+  (dotest "Text [fn::Inline footnote[fn::Nested.].] more.")
+
+  (dotest "be[fn::in[fn::ne]]aft") ; FIXME bad parse on the ne
+
+  (dotest "[fn::")
+
+  (dotest "[fn:: asdf")
+
+  (dotest "be[fn::in[fn::ne]
+#+begin_src bash
+echo oops a block
+#+end_src
+]aft")
+
   (dotest "Text [fn::Inline footnote.] more.")
   (dotest "Text [fn::Inline footnote.\nmore paragraph.] more.") ; yes
 

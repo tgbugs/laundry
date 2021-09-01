@@ -796,7 +796,12 @@
 (define-for-syntax (do-paragraph str)
   ; FIXME this is gonna be a bit of work
   ; we use -to-datum here because there are two different paragraphs
-  ; FIXME this is a bit busted maybe?
+  ; FIXME this is a bit busted maybe? yeah def busted, parse-paragraph should work but doesn't
+
+  ; FIXME do we use hander-case here or something to deal with
+  ; malformed?  I don't think we do because the malformed cases are
+  ; things we should be able to handle the only issue is dealing with
+  ; eol induced ambiguity
   (let ([out (parse-paragraph-to-datum
               (paragraph-make-tokenizer
                (open-input-string str)))])

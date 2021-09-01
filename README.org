@@ -67,7 +67,20 @@ terms such as =headline= will be renamed to =heading=. This has not
 been done to simplify comparison to the existing Org syntax document
 during early development. As such the names of the elements of the
 parse tree should not be considered to be stable.
+* Debugging
+Change ~[debug #f]~ on line 32 of =br-parser-tools-lib= [[file:~/.racket/8.2/pkgs/br-parser-tools-lib/br-parser-tools/yacc.rkt::32][yacc.rkt]] to
+point to a file (e.g. ~[debug "/tmp/parser-debug-output.rktd"]~) and then
+when the parser fails you can check that file for a dump of the full
+parser state at the time of failure.
+
+Unfortunately for some reason providing that debug value does not
+result in the behavior that is articulated in the documentation, and
+on error the stack is _not_ printed. You can go in and tamper inside
+the parsing loop of the same file and sort of get a view into what is
+going on.
 * Similar projects
 A grammar for org syntax written in Clojure by the Organice team.
 https://github.com/200ok-ch/org-parser/blob/master/resources/org.ebnf
 https://github.com/200ok-ch/org-parser
+
+https://alphapapa.github.io/org-almanac/#Parsing

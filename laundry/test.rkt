@@ -6,7 +6,11 @@
          racket/pretty
          racket/string
          laundry/parser
-         laundry/tokenizer
+         (only-in laundry/tokenizer
+                  laundry-make-tokenizer
+                  bind-runtime-todo-keywords)
+         #;
+         (except-in laundry/expander #%module-begin)
          (rename-in (only-in laundry/heading make-rule-parser)
                     [make-rule-parser heading-rule-parser])
          (for-syntax
@@ -78,9 +82,9 @@
                  (t))))
         (parameterize ([current-namespace ns-test])
           (unless (or quiet (dotest-quiet))
-            (pretty-write (list 'expanded: (syntax->datum (expand hrms))))
+            (pretty-write (list 'expanded: (syntax->datum (expand hrms)))) ; FIXME xpand borken in drracket as well
           )
-          (eval-syntax hrms)
+          (eval-syntax hrms ns-test) ; FIXME this is broken in drracket
           (define root (dynamic-require ''org-module 'root))
           (when (and node-type-expanded (not (rec-cont root node-type-expanded)))
             (error (format "expansion of ~s does not contain ~s" test-value node-type-expanded)))
@@ -474,6 +478,11 @@
   ; ok, so BOF and EOF are causing annoying edge cases
   #;
   (dotest-quiet #f)
+
+  (dotest "** COMMENT[#A]")
+  (dotest "** COMMENT [#A] COMMENT")
+
+  (dotest "*                      :x:")
 
   (dotest "* " #:node-type 'headline)
   (dotest (string-append (make-string 99 #\*) " "))
@@ -1873,6 +1882,7 @@ echo oops a block
   (dotest "*                                     ")
   (dotest "* COMMENT" #:nte 'comment)
   (dotest "* COMMENT " #:nte 'comment)
+  (dotest "* COMMENT[#A]")
 
   (dotest "* ::" #:nte 'tags)
   (dotest "* :: " #:nte 'tags)

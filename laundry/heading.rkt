@@ -52,7 +52,7 @@ h-tags : TAGS ; | /wsnn+ archive
 ; archive : ARCHIVE /wsnn* /NEWLINE-END
 wsnn : BLANK
 
-not-blank : OTHER | OOPS | STARS
+not-blank : OTHER | OOPS | STARS | PRIORITY
 
 --test--heading-rest : heading-rest
 ; 1

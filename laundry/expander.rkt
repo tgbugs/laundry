@@ -547,7 +547,7 @@
                            (syntax->datum
                             (local-expand e 'expression #f)))
                          (syntax->list #'(body ...))))])
-        (do-headline heading-input-raw)))]))
+        (do-headline heading-input-raw #'(body ...))))]))
 
 (define-syntax (heading stx)
   (syntax-parse stx
@@ -581,7 +581,8 @@
           (let ([trimmed
                  (string-trim
                   (syntax->datum tag-string)
-                  #px"\\s+|:" #:repeat? #t)])
+                  ; don't use \\s+ and #t you can use \\s+ and #f or \\s and #t
+                  #px"\\s|:" #:repeat? #t)])
             (if (string-contains? trimmed ":")
                 (remove-duplicates
                  (string-split
@@ -607,7 +608,7 @@
      #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
                             (datum->syntax
                              #'(body ...)
-                             (do-paragraph title-input))
+                             (do-paragraph title-input #'(body ...)))
                             'expression #f)
      #'(list 'h-title expanded ...)]))
 
@@ -623,17 +624,18 @@
         prepended
         (string-append prepended "\n"))))
 
-(define-for-syntax (do-headline str)
-  (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
-         [heading-input (with-newlines str)]
-         #;
-         [__ (displayln (format "heading-input: ~s" heading-input))]
-         [out (parse-heading-to-datum
-               (heading-make-tokenizer
-                (open-input-string heading-input)))])
-    #;
-    (pretty-write (list 'do-heading-out: out))
-    out))
+(define-for-syntax (do-headline str [original-syntax #f])
+  (with-handlers ([exn:fail? (λ (e) (raise-syntax-error #f "happened in" original-syntax))])
+    (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
+           [heading-input (with-newlines str)]
+           #;
+           [__ (displayln (format "heading-input: ~s" heading-input))]
+           [out (parse-heading-to-datum
+                 (heading-make-tokenizer
+                  (open-input-string heading-input)))])
+      #;
+      (pretty-write (list 'do-heading-out: out))
+      out)))
 
 ; paragraph
 
@@ -677,7 +679,8 @@
                     (cdr (do-paragraph
                           (substring dat-text
                                      (add1 leading-len)
-                                     (sub1 (string-length dat-text)))))) ; FIXME base case
+                                     (sub1 (string-length dat-text)))
+                          #'text))) ; FIXME base case
 
      ;#:with (expanded ...) (map (λ (e) (local-expand e 'expression #f)) (syntax-e #'more-par))
      ;#:do [(pretty-write (datum->syntax))]
@@ -784,7 +787,8 @@
                (map (λ (e)
                       (syntax->datum
                        (local-expand e 'expression #f)))
-                    (syntax-e #'(body ...))))))
+                    (syntax-e #'(body ...))))
+        #'(body ...)))
       'expression
       #f)
      (let ([out #'(list 'paragraph expanded ...)])
@@ -793,7 +797,7 @@
        out)
      ]))
 
-(define-for-syntax (do-paragraph str)
+(define-for-syntax (do-paragraph str [original-syntax #f])
   ; FIXME this is gonna be a bit of work
   ; we use -to-datum here because there are two different paragraphs
   ; FIXME this is a bit busted maybe? yeah def busted, parse-paragraph should work but doesn't
@@ -802,12 +806,13 @@
   ; malformed?  I don't think we do because the malformed cases are
   ; things we should be able to handle the only issue is dealing with
   ; eol induced ambiguity
-  (let ([out (parse-paragraph-to-datum
-              (paragraph-make-tokenizer
-               (open-input-string str)))])
-    #;
-    (pretty-write (cons 'do-paragraph: out))
-    out))
+  (with-handlers ([exn:fail? (λ (e) (raise-syntax-error #f "happened in" original-syntax))])
+    (let ([out (parse-paragraph-to-datum
+                (paragraph-make-tokenizer
+                 (open-input-string str)))])
+      #;
+      (pretty-write (list 'do-paragraph: out (when original-syntax (syntax-position original-syntax) original-syntax)))
+      out)))
 
 (define (merge-thing do-fun l)
   (if (null? l)
@@ -910,6 +915,6 @@
      #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
                             (datum->syntax
                              #'(body ...)
-                             (do-paragraph table-cell-input))
+                             (do-paragraph table-cell-input #'(body ...)))
                             'expression #f)
      #'(list 'table-cell expanded ...)]))

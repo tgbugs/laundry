@@ -220,6 +220,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         any-char
         #;(:~ "*")
         (token 'OOPS lexeme)]))
+  ; FIXME apparently this is incredibly slow, taking up nearly a quarter of our runtime !?
   (define (heading-make-tokenizer port)
     ; FIXME can't run compile-syntax due to use of eval above probably?
     (define heading-lexer (eval-syntax heading-lexer-src))

@@ -771,11 +771,13 @@
                                     label-raw
                                     (list 'quote (gensym))
                                     )])
+                    #;
                     (println (list "inline start:" #'start "inline ss:" ss))
                     (datum->syntax #'start label))
      #:do [
            #;
            (println (list "should be doing footnote-inline:" (syntax->datum #'(body ...))))
+           #;
            (println (list "inline label:" #'label))
            ]
 
@@ -820,6 +822,7 @@
        (list (datum->syntax #'body (string-append (car sp) ":" label ":"))
              (datum->syntax #'body (string-join body ":"))))
      (let ([out #'(footnote-inline label (paragraph-inline content))])
+       #;
        (println (list "fis out:" out))
        out
        )]))

@@ -45,6 +45,7 @@
 
 (define-namespace-anchor anc-test)
 (define ns-test (namespace-anchor->namespace anc-test))
+
 (define (dotest test-value
                 #:eq  [eq #f]  #:eq-root            [eq-root #f]
                 #:nt  [nt  #f] #:node-type          [node-type          nt]
@@ -73,8 +74,9 @@
     (pretty-write (list 'dotest: hrm)))
   (if (or do-expand node-type-expanded)
       (when (or do-expand node-type-expanded) ; LOL when x vs begin ...
+        (define modname (string->symbol (format "org-module-~a" (gensym))))
         (define hrms
-          #`(module org-module laundry/expander
+          #`(module #,modname laundry/expander
               #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
                  #; ; NAH just a completely insane case-lambda
                  ; that causes the call to revert to the full grammar
@@ -83,9 +85,9 @@
         (parameterize ([current-namespace ns-test])
           (unless (or quiet (dotest-quiet)) ; FIXME this logic is broken
             (pretty-write (list 'expanded: (syntax->datum (expand hrms)))) ; FIXME xpand borken in drracket as well
-          )
+            )
           (eval-syntax hrms ns-test) ; FIXME this is broken in drracket
-          (define root (dynamic-require ''org-module 'root))
+          (define root (dynamic-require (list 'quote modname) 'root))
           (when (and node-type-expanded (not (rec-cont root node-type-expanded)))
             (error (format "expansion of ~s does not contain ~s" test-value node-type-expanded)))
           (when (and eq-root (not (equal? eq-root root)))
@@ -1755,6 +1757,7 @@ y y:
   (dotest "#+key[: a]: oops")
   (dotest "#+key[ : b]: value")
 
+  #;
   (dotest-quiet #f)
   )
 
@@ -1793,12 +1796,11 @@ oops not affiliated
 don't affilaite to other unaff keyword
 ")
 
+  #;
   (dotest-quiet #f)
   )
 
 (module+ test-footnotes
-  (dotest-quiet #f)
-
   (dotest "[fn::]")
   (dotest "[fn::")
 

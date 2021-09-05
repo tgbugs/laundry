@@ -1,7 +1,10 @@
 #+title: I can't believe you've done this.
 [fn:x] lol
 
-#+options: broken-links:t
+# [[file:cursed.pdf]] won't export at all due to some issue
+# [[file:cursed.html]]
+
+#+options: broken-links:t ^:nil
 #+property: header-args :eval no-export
 
 * comments
@@ -417,6 +420,7 @@ foo
   ???
 
 * footnotes :oh:poo:what:the:foo:
+** into madness
 # [fn:x] I WIN. woah, don't uncomment this line, the whole cursed section will dissapear!
 ;_; THIS IS MADNESS [fn:sadness]
 asdf [fn:1] well poop [fn:: Why hello there
@@ -530,6 +534,61 @@ Oh foo oh poop [fn:help].
 Poop.
 [fn:help] We are so fooed.
 EEEEEEEEEEEEEEEEEEEEEEEEEEEE] Maybe?
+** what happens if you start a line with an inline footnote?
+So it turns out that org export thinks that this
+[fn::this should just be a paragraph but how do you tell? NOPE]
+is an inline footnote ... but the syntax highlighting does not. FUN TIMES.
+[fn:oof:and this?] also an inline footnote [fn:oof]
+
+[fn::
+** interspersed footnote definitions
+Paragraph single blank line example xx [fn:xx] double blank line example yy [fn:yy].
+
+[fn:xx] footnote definition xx
+
+Paragraph after single blank line in xx
+[fn:yy] footnote definition yy
+
+
+Paragraph after double blank line not in yy
+** reuse of footnote labels per section
+*** section a
+paragraph [fn:a1]
+
+[fn:a1] section a footnote
+*** section b
+Paragraph [fn:a1]. Dupe labels use only the first definition (per
+spec) but there is no warning about duplicate footnote labels during
+export. However, =org-lint= does catch the issue.
+
+[fn:a1] section b footnote
+** inline footnote nesting
+a [fn::b[fn::c[fn::d[fn::e[fn::f[fn::g]]]]]]
+*** sandbox
+b [fn::=]=]
+
+c [fn:: =]= ]
+
+d [fn:: x =]= y ]
+
+e [fn::=[=]
+
+# ] block the broken highlighting
+
+# f is truly cursed, it could be verbatim depending on whether verbatim is longest or shortest match
+f =[= [fn:: x =]= y ]
+
+g [fn:: [ x =]= y ]
+
+h [fn:: =[= x ] y ]
+
+i [fn:: =[= x =]= y ]
+** footnote macro interactions
+#+macro: yes no $1 $2
+ARE YOU READY [fn::{{{yes([,])}}}]
+TO EXPERIENCE [fn::{{{yes(],[)}}}]
+oh the pain, footnotes take priority of macros but font lock does not reflect that
+
 * footnotes redux EXTRA CURSED
 ** I do like like them [fn:Sam I am]
 ** I do not like them with a [fn::BANG]!
@@ -587,6 +646,10 @@ DEADLINE: <2020-11-29                                          Sun>
 
 
 * markup
+:PROPERTIES:
+:CUSTOM_ID: markup
+:END:
+
 ********************************************************************************************
 *********************************************************************************************
 
@@ -605,6 +668,32 @@ However 3 is.
  *=bv=*
  *~bc~*
  /=iv=/
+
+ =[= /x/ =]=
+
+ =[ /lol/ =]=
+
+ =[= /lol/ ]=
+
+ =x x==== = x= x= x=
+
+ *b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*
+
+ *x* /z/ *y*
+
+ *x * /z/ *y*
+
+ */_+b+_ _+bus+_ /*
+
+ */_+b+_ +_bsu_+ /*
+
+ x+_ +_bsu_+
+
+ */_+bius+_ _+bius+_ bi/*
+
+ */_+bius+_ _+bius+_/*
+
+ */_+bius+_/*
 
 * inline src blocks
 ** ob julia being weird

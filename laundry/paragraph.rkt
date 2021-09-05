@@ -6,10 +6,11 @@ paragraph : markup? ( mu-pre markup
                     | citation
                     | footnote-reference ; FIXME can this be inside markup?
                     | hyperlink
-                    | malformed ; XXX note that if malformed is placed here it MUST terminate the paragraph
-                    )* markup-eof?
+                    ;| malformed ; XXX note that if malformed is placed here it MUST terminate the paragraph
+                    ;| sigh
+                    )* footnote-inline-malformed-eof? newline ; markup-eof? ; markup-eof no longer needed and no tokens are being produced
 
-@stuff-less-rsb-1 : STUFF-B mu-free? | STUFF-A | MARKER | mu-pre | newline
+@stuff-less-rsb-1 : STUFF-B mu-free? | STUFF-A | LSB | MARKER | mu-pre | newline
 stuff-less-rsb : stuff-less-rsb-1+
 @stuff : ( stuff-less-rsb-1 | RSB )+
 
@@ -27,15 +28,29 @@ citation : CITATION
 
 ;;; footnote
 
-footnote-reference : footnote-anchor | footnote-inline
+footnote-reference : footnote-anchor
+                   | footnote-inline
+                   ; | footnote-inline-simple
 footnote-anchor : FOOTNOTE-ANCHOR
 ; FIXME RSB fighting with markup e.g. [fn:: hello =]= there ] vs [fn:: [ hello =]= there ]
-paragraph-inline : @paragraph
-footnote-inline : FOOTNOTE-INLINE-SIMPLE
-                | FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnotes may contain at most a single paragraph
-                | FOOTNOTE-INLINE-MALFORMED-EOF ; FIXME wrong because it somehow ends with the banned value, sigh EOF madness
-malformed : footnote-inline-malformed
-footnote-inline-malformed : FOOTNOTE-INLINE-MALFORMED-MALFORMED
+paragraph-inline : @paragraph-inline-safe ;| paired-square
+paragraph-inline-safe : markup? ( mu-pre markup
+                    | @stuff-less-rsb
+                    | macro ; inline footnotes and macros will have to fight it out in the tokenizer
+                    | citation
+                    | footnote-reference
+                    | hyperlink
+                    ;| malformed
+                    )*
+
+footnote-inline-malformed-eof : FOOTNOTE-START-INLINE paragraph-inline?
+
+;paired-square : ( FOOTNOTE-START-INLINE | LSB ) stuff-less-rsb? RSB
+;footnote-inline-simple : FOOTNOTE-INLINE-SIMPLE
+footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnotes may contain at most a single paragraph
+                ;| FOOTNOTE-INLINE-MALFORMED-EOF ; FIXME wrong because it somehow ends with the banned value, sigh EOF madness
+;malformed : footnote-inline-malformed
+;footnote-inline-malformed : FOOTNOTE-INLINE-MALFORMED-MALFORMED
                           ; | FOOTNOTE-START-INLINE @stuff-less-rsb ; FIXME can't use due to ambig on rsb
 ; footnote-definition : FOOTNOTE-DEFINITION ; these never appear here, they are always outside paragraphs
 
@@ -47,7 +62,7 @@ link-angle : LINK-AB
 
 ;;; markup
 
-@mu-pre : ( MU-PRE-N-NOT-LCB | MU-PRE-1 )+
+@mu-pre : ( MU-PRE-N-NOT-LCB | MU-PRE-1 | newline )+
 ; XXX I think it is overall simpler to understand and implement parsing of markup
 ; in a second pass over blocks that have already been determined to be paragraphs
 ; trying to parse markup at the top level leads to a number of issues since it is
@@ -84,33 +99,39 @@ verbatim : VERBATIM
 
 @mu-free : BOLD | ITALIC | UNDERLINE | STRIKE | VERBATIM ; x/a b/ like cases
 
-markup-eof : eof-bold | eof-italic | eof-underline | eof-strike-through | eof-code | eof-verbatim
+;@markup-eof : markup-eof-rec | markup-eof-terminal
+;markup-eof-rec : eof-bold | eof-italic | eof-underline | eof-strike-through
+;markup-eof-terminal : eof-code | eof-verbatim
 
-eof-bold : BOLD-EOF
-eof-italic : ITALIC-EOF
-eof-underline : UNDERLINE-EOF
-eof-strike-through : STRIKE-EOF
-eof-code : CODE-EOF
-eof-verbatim : VERBATIM-EOF
+; XXX FIXME TODO you can do away with with need for duplicate eof
+; terms here if you reuse the eof port approach that was used for the
+; top level lexer, however additional care is require due to nested
+; parsing, so the helper newline must not leak out
+;eof-bold : BOLD-EOF
+;eof-italic : ITALIC-EOF
+;eof-underline : UNDERLINE-EOF
+;eof-strike-through : STRIKE-EOF
+;eof-code : CODE-EOF
+;eof-verbatim : VERBATIM-EOF
 
 ;mu-post : MU-PRE-1
 
 ; PRE MARKER CONTENTS MARKER POST
-mu-post-old : SPACE
-        | TAB
-        | DASH
-        | PERIOD
-        | COMMA ; new
-        | SC ; new
-        | COLON
-        | SQ
-        | DQ
-        | R-PAREN
-        | RCB
-        | LSB
-        | BANG ; new
-        | QM
-        | NEWLINE
+;mu-post-old : SPACE
+        ;| TAB
+        ;| DASH
+        ;| PERIOD
+        ;| COMMA ; new
+        ;| SC ; new
+        ;| COLON
+        ;| SQ
+        ;| DQ
+        ;| R-PAREN
+        ;| RCB
+        ;| LSB
+        ;| BANG ; new
+        ;| QM
+        ;| NEWLINE
 
 ;mu-pre-common : HYPHEN | L-PAREN | LCB | SQ | DQ
 ;mu-pre : HYPHEN | L-PAREN | LCB | SQ | DQ | whitespace

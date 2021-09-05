@@ -2,8 +2,9 @@
 
 (require brag/support
          (for-syntax racket/base
-                     #;
+                     ;#;
                      syntax/parse
+                     (only-in racket/syntax format-id)
                      (only-in racket/list combinations permutations)
                      ))
 (provide (all-defined-out))
@@ -259,6 +260,24 @@
   ; #[ \t]
   ; #\+
   ; :[A-Za-z]+:
+  (from/stop-before
+   paragraph-1
+   (:or "\n\n"
+        stop-before-heading
+        stop-before-footnote-def
+        ))
+
+  #;
+  (:+ (:seq "\n" (:seq (:* " " "\t")
+                       (:+ (:or
+                            lower-case
+                            upper-case
+                            0-9
+                             ))
+                       (:& (:~ "." ")") par-rest-ok)
+                       (:+ par-rest-ok)))))
+
+(define-lex-abbrev paragraph-1
   (:+ (from/stop-before
        (:seq "\n"
              ;(:~ "*" "")
@@ -294,17 +313,8 @@
                 (:+ 0-9))
                bullet-marker
                (:~ whitespace))))
-       "\n"))
-
-  #;
-  (:+ (:seq "\n" (:seq (:* " " "\t")
-                       (:+ (:or
-                            lower-case
-                            upper-case
-                            0-9
-                             ))
-                       (:& (:~ "." ")") par-rest-ok)
-                       (:+ par-rest-ok)))))
+       ; FIXME somehow keep the first of two newlines at the end? (per the spec trailing newlines go with the previous element)
+       "\n")))
 
 ;; paragraph parts
 
@@ -336,6 +346,20 @@
   (:seq "[fn:" footnote-label "]")
   )
 
+#;
+(define-lex-abbrev maybe-paired-square ; XXX does not work
+  ; I think the best way to handle this is to use from/to in this way,
+  ; and then check to see whether there are any extra left square
+  ; brackets dangling, if there are then return paragraph instead of
+  ; footnote, which I think is what the elisp implementation does
+  (from/to "[" "]") ; this allows [[]
+  #;
+  (:or
+   (:seq "[" "]")
+   (:seq "[" "]")
+   ;(from/to "[" (:or (:seq "[" ) "]"))
+   ))
+
 (define-lex-abbrev footnote-inline-start
   ; see footnote references
   ; the key constraint is that square brackets must be balanced
@@ -344,6 +368,8 @@
   ; so not blocks or drawers
   (:seq "[fn:" (:? footnote-label) ":"))
 
+; XXX broken
+#;
 (define-lex-abbrev footnote-inline-malformed ; FIXME -maybe-malformed, because it will match ok bits too but EOF causes issues
   ; FIXME verbatim issues probably
 
@@ -355,15 +381,27 @@
   ; TODO this is going to need some special post processing
   ; yes footnotes are annoying to deal with due to need to match brackets
   ; we can't use from/stop-before for this because the gap will allow closing brackets to creep in
-  (:seq footnote-inline-start (:* (:~ "]")) "\n\n")
+  #;
+  (:seq footnote-inline-start (:* (:~ "]")) "\n\n") ; FIXME  double newline never makes it through because they end paragraphs in the top lexer
+  (:seq footnote-inline-start (:seq (:+ (:seq (:* (:~ (:or "[" "]")) "\n")))
+                                    ))
   #;
   (from/stop-before (:seq footnote-inline-start
                           (:* (:~ "]")))
                     (:or "]"
                          "\n\n")))
 
+#; ; XXX fails in the [fn::a][fn::b] case contrast [fn::a[fn::b]]
+(define-lex-abbrev footnote-inline-maybe
+  (:seq footnote-inline-start (:*) "]"))
+
 (define-lex-abbrev footnote-inline-simple
-  (:seq footnote-inline-start (:* (:~ "[" "]")) "]"))
+  (:seq footnote-inline-start
+        (:or
+         (:* (:~ "[" "]"))
+         #; ; XXX this only handles a single level of nesting so is not a valid solution
+         (:* (:seq "[" (:* (:~ "[" "]")) "]")))
+        "]"))
 
 (module+ test-fim
   (define fis-lexer
@@ -378,12 +416,24 @@
 
   (fisim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
 
+  #|
   (define fim-lexer
     (lexer-srcloc
      [footnote-inline-malformed (token 'FIM lexeme)]))
 
+  (define fim+-lexer
+    (lexer-srcloc
+     [footnote-inline-malformed (token 'FIM lexeme)]
+     [footnote-inline-start (token 'FIS lexeme)]))
+
+  ; FIXME the double newline never makes it through the top level parser
+  (fim-lexer (open-input-string "[fn::\n\n"))
+  (fim+-lexer (open-input-string "[fn::\n\n"))
+  (fim+-lexer (open-input-string "[fn:: sigh\n\n"))
+
   ; expect to fail
   (fim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
+  |#
   )
 
 (define-lex-abbrev stop-before-footnote-def
@@ -437,10 +487,12 @@
 
 
 (define-lex-abbrev mu-pre-not-newline-not-lcb (:or " " "\t" "-" "(" "'" "\""))
-(define-lex-abbrev mu-pre-1 (:or "\n" mu-pre-not-newline-not-lcb "{"))
+(define-lex-abbrev mu-pre-1 (:or #;"\n" mu-pre-not-newline-not-lcb "{"))
+#;
 (define-lex-abbrev mu-pre (:+ mu-pre-1))
+#;
 (define-lex-abbrev mu-pre-n (:>= 2 mu-pre-1))
-(define-lex-abbrev mu-pre-n-not-lcb (:>= 2 mu-pre-not-newline-not-lcb "\n"))
+(define-lex-abbrev mu-pre-n-not-lcb (:or (:>= 2 mu-pre-not-newline-not-lcb) #;"\n"))
 ; FIXME mu-post can also be newline, which is a problem due to newline
 ; first from/stop-before solves this
 (define-lex-abbrev mu-post-not-newline (:or " " "\t" "-" "." "," ";" ":" "!" "?" "'" ")" "}" "[" "\""))
@@ -455,14 +507,102 @@
 ; headlines, so I'm 99% sure that this has to be done in a second pass that only applies to paragraphs
 
 ; FIXME TODO work out the rest of the patterns here
-(define-lex-abbrev markup-= (:or (:seq (from/stop-before (:seq #;mu-pre "=" mu-border) (:seq mu-border "=" mu-post)) mu-border "=")
-                                 (from/stop-before (:seq #;mu-pre "=" mu-border "=") mu-post)))
-(define-lex-abbrev markup-~ (:or (:seq (from/stop-before (:seq #;mu-pre "~" mu-border) (:seq mu-border "~" mu-post)) mu-border "~")
-                                 (from/stop-before (:seq #;mu-pre "~" mu-border "~") mu-post)))
+#;
+(define-lex-abbrev markup-= (from/stop-before
+                             (:seq "=" mu-border (:? (:seq (:* (:~ "="))
+                                                           (:~ (:or whitespace "=")))) "=")
+                             mu-post))
 
-(define-lex-abbrev markup-=-eof? (:or (:seq (from/stop-before (:seq #;mu-pre "=" mu-border) (:seq mu-border "=" #;mu-post)) mu-border "=")
+#;
+(define-lex-abbrev markup-~ (from/stop-before
+                             (:seq "~" mu-border (:? (:seq (:* (:~ "~"))
+                                                           (:~ (:or whitespace "~")))) "~")
+                             mu-post))
+
+(define-syntax (define-markup stx)
+  (syntax-parse stx
+    [(_ delimiter:str)
+     #:with (markup-delim-eof? markup-delim)
+     (list
+      (format-id #'delimiter #:source #'delimiter "markup-~a-eof?" (syntax-e #'delimiter))
+      (format-id #'delimiter #:source #'delimiter "markup-~a" (syntax-e #'delimiter)))
+     #; ; XXX have to use format-id for things to work in module+ apparently
+     (string->symbol (format "markup-~a" (syntax-e #'delimiter)))
+     #'(begin
+         (provide markup-delim markup-delim-eof?)
+         ; this should always be shorter than markup-delim so the markup-delim pattern should win
+         ; and this should only appear at EOF
+         (define-lex-abbrev markup-delim-eof?
+           (:& (from/stop-before
+                delimiter
+                #; ; don't need this complex version now that we are using the intersectional approach
+                (:seq delimiter (complement (:seq mu-border any-string)))
+                (:seq
+                 mu-border
+                 delimiter
+                 mu-post))
+               (:seq delimiter mu-border any-string) ; ensure starts with delimiter
+               (:>= 3 any-char) ; exclude degnerate cases
+               ; ensure ends with delimiter to avoid eof issues
+               (:seq any-string mu-border delimiter))
+           #;
+           (:& (from/to delimiter (:seq mu-border delimiter))
+               (:seq delimiter mu-border any-string) ; ensure starts with delimiter
+               (:>= 3 any-char) ; exclude degnerate cases
+               ; ensure ends with delimiter to avoid eof issues
+               (:seq any-string mu-border delimiter)))
+         ; using token-back-1 in the lexer is required for this to work correctly
+         (define-lex-abbrev markup-delim (:seq markup-delim-eof? mu-post)))]))
+
+(define-markup "=")
+(define-markup "~")
+
+(define-markup "*")
+(define-markup "/")
+(define-markup "_")
+(define-markup "+")
+
+(module+ test-mu
+  (define *-lexer
+    (lexer-srcloc
+     [markup-* (token 'BOLD lexeme)]))
+
+  (*-lexer (open-input-string "*b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*\n"))
+  (*-lexer (open-input-string "*x* /z/ *y*\n"))
+  (*-lexer (open-input-string "*x * /z/ *y*\n"))
+
+  #; ; now fails correctly
+  (*-lexer (open-input-string "* /z/ *y")) ; FIXME clearly wrong due to EOF isues
+
+  #; ; now fails
+  (*-lexer (open-input-string "* *"))
+
+  #; ; fails as expected
+  (*-lexer (open-input-string "*"))
+  #; ; fails as expected
+  (*-lexer (open-input-string "**"))
+  (*-lexer (open-input-string "***\n"))
+
+  (define =-lexer
+    (lexer-srcloc
+     [markup-= (token 'VERBATIM lexeme)]))
+
+  (=-lexer (open-input-string "=x= z =y=\n"))
+
+
+  (=-lexer (open-input-string "=x=\n"))
+  (=-lexer (open-input-string "==x==\n"))
+
+  )
+
+
+#;
+(define-lex-abbrev markup-=-eof? (:or (:seq (from/stop-before (:seq #;mu-pre "=" mu-border)
+                                                              (:seq mu-border "=" #;mu-post))
+                                            mu-border "=")
                                       (:seq #;mu-pre "=" mu-border "=")))
 
+#;
 (define-lex-abbrev markup-~-eof? (:or (:seq (from/stop-before (:seq #;mu-pre "~" mu-border) (:seq mu-border "~" #;mu-post)) mu-border "~")
                                       (:seq #;mu-pre "~" mu-border "~")))
 
@@ -470,6 +610,7 @@
 ; technically org immplements this by applying the paragraph parser repeatedly to the
 ; internal contents of markup, which is ... probably less than optimal to say the least
 
+#; ; no longer used
 (define-syntax (make-markup-abbrevs stx)
   (let ([combs (map (λ (chars) (apply string chars))
                     (cdr (combinations (string->list "*/_+"))))])
@@ -484,12 +625,18 @@
                                                  (permutations (string->list c)))])
                               (define stop (list->string (reverse (string->list mut))))
                               ; TODO check behavior to make sure cases like =* a b * c d e *= work
+                              #`(from/stop-before
+                                 (:seq #,mut mu-border (:? (:seq (:* (:~ #,stop)) mu-border)) #,stop)
+                                 mu-post)
+                              #;
                               #`(:or (:seq (from/stop-before (:seq #;mu-pre #,mut mu-border)
                                                              (:seq mu-border #,stop mu-post))
                                            mu-border
                                            #,stop)
                                      (from/stop-before (:seq #;mu-pre #,mut mu-border #,stop) mu-post)))))
+                #;
                 (list 'provide (string->symbol (format "markup-~a-eof?" c)))
+                #;
                 (list 'define-lex-abbrev
                       (string->symbol (format "markup-~a-eof?" c))
                       (cons ':or
@@ -503,6 +650,7 @@
                                            #,stop)
                                      (:seq #;mu-pre #,mut mu-border #,stop))))))))))
 
+#;
 (make-markup-abbrevs)
 
 ;; other parser bits

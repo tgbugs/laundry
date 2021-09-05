@@ -29,7 +29,7 @@
   racket/stxparam
   racket/pretty
   syntax/parse
-  (only-in racket/string string-trim string-split string-contains?)
+  (only-in racket/string string-trim string-split string-join string-contains?)
   (only-in racket/list remove-duplicates)))
 
 (provide
@@ -79,6 +79,7 @@
      #'(define-syntax (name stx)
          (syntax-parse stx
            [(_ body elipsis)
+            ;#:do [(println (syntax->datum #'(body elipsis)))]
             #'(cons 'name (list body elipsis))])))))
 
 (define-syntax (define-nodes stx)
@@ -254,6 +255,9 @@
   ;h-title-c
   ;;h-title
 
+  paired-square
+  paragraph-line
+
   parl-start
   parl-indent
   parl-wsnn
@@ -344,6 +348,7 @@
   end-drawer
 
   footnote-inline-malformed
+  footnote-inline-malformed-eof
   )
 #;
 (begin-for-syntax
@@ -422,13 +427,14 @@
   babel-call
 
   footnote-reference ; FIXME likely needs a separate implementation
+  #;
   footnote-anchor
+  footnote-anchor-inline
   #;
   footnote-inline
 
   footnote-definition
-  #;
-  footnote-definition-line
+  footnote-definition-inline
   #;
   fn-label
   #;
@@ -547,7 +553,7 @@
                            (syntax->datum
                             (local-expand e 'expression #f)))
                          (syntax->list #'(body ...))))])
-        (do-headline heading-input-raw #'(body ...))))]))
+        (do-headline heading-input-raw this-syntax)))]))
 
 (define-syntax (heading stx)
   (syntax-parse stx
@@ -608,7 +614,7 @@
      #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
                             (datum->syntax
                              #'(body ...)
-                             (do-paragraph title-input #'(body ...)))
+                             (do-paragraph title-input this-syntax))
                             'expression #f)
      #'(list 'h-title expanded ...)]))
 
@@ -625,7 +631,8 @@
         (string-append prepended "\n"))))
 
 (define-for-syntax (do-headline str [original-syntax #f])
-  (with-handlers ([exn:fail? (λ (e) (raise-syntax-error #f "happened in" original-syntax))])
+  (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
+                               (raise-syntax-error #f "happened in" original-syntax))])
     (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
            [heading-input (with-newlines str)]
            #;
@@ -649,6 +656,7 @@
      #'(type trimmed)
      ])
   )
+
 (define-syntax (markup-rec stx)
   ; FIXME we may need a markup lexer which has slighly different
   ; properties for inner markup, specifically wrt starting with a
@@ -665,9 +673,9 @@
                  ((italic) #rx"/")
                  ((underline) #rx"_")
                  ((strike-through) #rx"\\+")
-                 #;
+                 #; ; handled via terminal
                  ((verbatim) #rx"=")
-                 #;
+                 #; ; handled via terminal
                  ((code) #rx"~"))
                dat-text)))
            #;
@@ -714,6 +722,7 @@
                                 [blk-src-end (make-rename-transformer #'sa-node)]
                                 [end-drawer (make-rename-transformer #'sa-node)]
                                 [footnote-inline-malformed (make-rename-transformer #'sa-node)]
+                                [footnote-inline-malformed-eof (make-rename-transformer #'sa-node)]
                                 )
             (sa-malformed body ...))))
      (syntax-property
@@ -730,9 +739,23 @@
   (paragraph-node (malformed (blk-src-begin "oops")))
   )
 
+(define-syntax (footnote-anchor stx)
+  (syntax-parse stx
+    [(_ start:str)
+     #:with label (let* ([str (syntax-e #'start)]
+                         [ss (string-split (substring str 0 (sub1 (string-length str))) ":")]
+                         [label-raw (cadr ss)]
+                         ; FIXME label symbol will cause error on reparse so we need another name
+                         [label (if (> (string-length label-raw) 0)
+                                    label-raw
+                                    (list 'quote (gensym))
+                                    )])
+                    (datum->syntax #'start label))
+     #'(list 'footnote-anchor label)]))
+
 (define-syntax (footnote-inline stx)
   (syntax-parse stx
-    [(_ label body ...)
+    [(_ start:str body ...)
      ; TODO parse the label out FIXME during expansion, so long as we
      ; can put the definition back inline it should be ok to pull the
      ; definitions out to the to level and even make it possible to
@@ -741,9 +764,65 @@
      ; unlabeled ones or something and keep track so we know that they
      ; were originally inline?
      ; (footnote-reference (footnote-anchor) (footnote-definition-inline body ...))
-     #'(list 'footnote-inline body ...)
+     #:with label (let* ([ss (string-split (syntax-e #'start) ":")]
+                         [label-raw (cadr ss)]
+                         ; FIXME label symbol will cause error on reparse so we need another name
+                         [label (if (> (string-length label-raw) 0)
+                                    label-raw
+                                    (list 'quote (gensym))
+                                    )])
+                    (println (list "inline start:" #'start "inline ss:" ss))
+                    (datum->syntax #'start label))
+     #:do [
+           #;
+           (println (list "should be doing footnote-inline:" (syntax->datum #'(body ...))))
+           (println (list "inline label:" #'label))
+           ]
+
+     ; FIXME need separate naming for the internal transformed version of these
+     ; FIXME in theory you could dispatch on string vs symbol for labeled vs unlabeled, but it doesn't quite
+     ; work because we also want to be able to distinguish between inline vs not-inline
+     #'(list 'footnote-inline (footnote-anchor-inline label) (footnote-definition-inline label body ...))
      #;
      #'(list 'footnote-inline #:ref label body ...)]))
+
+(module+ test-footnote-inline
+  (footnote-inline "[fn:y:" (paragraph-inline "N."))
+  (footnote-inline-simple "[fn:y:N.]")
+
+  (footnote-inline "[fn::" (paragraph-inline "N."))
+  (footnote-inline-simple "[fn::N.]")
+
+  (paragraph-node "B [fn::I[fn::N.].] A.")
+
+  (paragraph-node "B [fn:x:I[fn:y:N.].] A.")
+
+  (paragraph-inline "I" (footnote-reference (footnote-inline-simple "[fn::N.]")) ".")
+
+  (footnote-reference (footnote-inline-simple "[fn::N.]"))
+
+  (footnote-inline-simple "[fn::N.]")
+
+  (paragraph-inline "I" (footnote-reference (footnote-inline-simple "[fn::N.]")) ".")
+
+  )
+
+(define-syntax (footnote-inline-simple stx)
+  (syntax-parse stx
+    [(_ body:str)
+     #:with (label content)
+     (let* ([str (syntax-e #'body)]
+            [ss (substring str 0 (sub1 (string-length str)))]
+            ; FIXME TODO #:trim? needs careful consideration with respect to leading whitespace and roundtripping
+            [sp (string-split ss ":" #:trim? #f)]
+            [label (cadr sp)]
+            [body (cddr sp)])
+       (list (datum->syntax #'body (string-append (car sp) ":" label ":"))
+             (datum->syntax #'body (string-join body ":"))))
+     (let ([out #'(footnote-inline label (paragraph-inline content))])
+       (println (list "fis out:" out))
+       out
+       )]))
 
 (define-syntax (paragraph stx)
   (syntax-parse stx
@@ -772,9 +851,24 @@
           (syntax->list #'(body ...)))
      #'(list 'paragraph expanded ...)]))
 
+(module+ test-paragraph-node
+
+  ; FIXME some of these forms actually never make it through
+  ; to the paragraph parser becuase the double newline
+  ; is removed before we ever arrive
+  (paragraph-node "[fn::\n\n")
+  (paragraph-node "\n[fn::\n\n\n")
+
+  (paragraph-line (newline #f) (parl-start (not-pl-start-whitespace1 "[")) (not-newline "fn" ":" ":" "a" "[" "fn" ":" ":" "b" "]" "]"))
+
+  (paragraph-node "[fn::")
+
+  )
+
 (define-syntax (paragraph-node stx)
   (syntax-parse stx
     [(_ body ...)
+     ;#:do [(pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...))))]
      #:with (expanded ...)
      ; FIXME for malformed patterns we will need to flag that they are
      ; malformed, record their locations, and add them to syntax warn
@@ -788,7 +882,7 @@
                       (syntax->datum
                        (local-expand e 'expression #f)))
                     (syntax-e #'(body ...))))
-        #'(body ...)))
+        this-syntax))
       'expression
       #f)
      (let ([out #'(list 'paragraph expanded ...)])
@@ -806,12 +900,19 @@
   ; malformed?  I don't think we do because the malformed cases are
   ; things we should be able to handle the only issue is dealing with
   ; eol induced ambiguity
-  (with-handlers ([exn:fail? (λ (e) (raise-syntax-error #f "happened in" original-syntax))])
-    (let ([out (parse-paragraph-to-datum
+  #;
+  (println (list "do-paragraph in:" str))
+  (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
+                               (raise-syntax-error #f "happened in" original-syntax))])
+    (let* ([out-helper (parse-paragraph-to-datum
                 (paragraph-make-tokenizer
-                 (open-input-string str)))])
+                 (open-input-string (string-append "\n" str "\n"))))]
+           [out (cons (car out-helper)
+                      ; FIXME needs a bit of work if there are cases where the newline gets eaten
+                      ; FIXME perf
+                      (reverse (cdr (reverse (cddr out-helper)))))])
       #;
-      (pretty-write (list 'do-paragraph: out (when original-syntax (syntax-position original-syntax) original-syntax)))
+      (pretty-write (list 'do-paragraph: out-helper out (when original-syntax (syntax-position original-syntax) original-syntax)))
       out)))
 
 (define (merge-thing do-fun l)
@@ -915,6 +1016,6 @@
      #:with (expanded ...) (local-expand ; FIXME I'm guessing that this loses the syntax provenance
                             (datum->syntax
                              #'(body ...)
-                             (do-paragraph table-cell-input #'(body ...)))
+                             (do-paragraph table-cell-input this-syntax))
                             'expression #f)
      #'(list 'table-cell expanded ...)]))

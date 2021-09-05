@@ -81,7 +81,7 @@
                  (format "test-source ~s" test-value-inner)
                  (t))))
         (parameterize ([current-namespace ns-test])
-          (unless (or quiet (dotest-quiet))
+          (unless (or quiet (dotest-quiet)) ; FIXME this logic is broken
             (pretty-write (list 'expanded: (syntax->datum (expand hrms)))) ; FIXME xpand borken in drracket as well
           )
           (eval-syntax hrms ns-test) ; FIXME this is broken in drracket
@@ -590,7 +590,6 @@
   ; always ambig since we don't use title unprefixed
   (dotest "** Headline level 2\n" #:nte 'heading)
 
-  ; FIXME XXXXXXXXXXXXXXXXXXXXX WHAT !?
   (dotest "why can't we share this newline?\n** Headline level 2\n" #:nte 'heading)
 
   ;; broken
@@ -789,6 +788,8 @@
   (current-module-path)
   (dotest "aaaaaaaaa paragraph")
 
+  (dotest "p1-1\np1-2\n\np2-1")
+
   (dotest "\nIf nothing else this is a paragraph.")
   ; (dotest "p") ; sigh bof
   (dotest "\np")
@@ -862,7 +863,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "a *b* /c/ _d_ +e+ =f= ~g~ ")
 
   (dotest " ~hello~ there")
-  (dotest "/hahaha/") ; XXX bof issues in the tokenizer
+  (dotest "/hahaha/")
   (dotest " /asdf/")
   (dotest "\n/asdf/")
   (dotest "\n**oops\n* hello\nOH NO *lol*")
@@ -874,7 +875,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
   (dotest "*/_+bius+_/*")
 
-  (dotest "*bold text /bi text/ bold _bu text_ bold =bold verb= bold ~bold code~ code*") ; NOOOOOOOOOOOOOO
+  (dotest "*bold text /bi text/ bold _bu text_ bold =bold verb= bold ~bold code~ bold*")
 
   (dotest "*b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*")
 
@@ -897,6 +898,33 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "d/f \\/")
   (dotest "d*f \\*")
 
+  (dotest "=x= =y=")
+  (dotest "=x=  =y=")
+  (dotest "=x= /z/ =y=" #:nte 'italic)
+
+  (dotest "~x~ /z/ ~y~" #:nte 'italic)
+
+  (dotest "*x* /z/ *y*" #:nte 'italic)
+  (dotest "*x * /z/ *y*")
+
+  (dotest "x * /z/ *y")
+
+  (dotest "*")
+
+  (dotest "_ * *")
+
+
+  (dotest "*/_+b+_ _+bus+_ /*")
+
+  (dotest "/_+x+_ _+bus+_ /")
+
+  (dotest "x+_ _+bus+_")
+  (dotest "x*_ _*bus*_")
+
+  (dotest "*/_+bius+_ _+bius+_/*")
+
+  (dotest "*/_+bius+_ _+bius+_ bi/*")
+
   )
 
 (module+ test-macros
@@ -911,7 +939,7 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (current-module-path)
 
   (dotest "35934")
-  (dotest "35934" #:eq-root '(org-file (paragraph "\n35934")))
+  (dotest "35934" #:eq-root '(org-file (paragraph "\n" "35934")))
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -1769,11 +1797,44 @@ don't affilaite to other unaff keyword
   )
 
 (module+ test-footnotes
-  (dotest "Text [fn::Inline footnote[fn::Nested.].] more.")
+  (dotest-quiet #f)
+
+  (dotest "[fn::]")
+  (dotest "[fn::")
+
+
+  (dotest "[fn::a][fn::b]")
+
+  ; nested
+  (dotest "[fn::a[fn::b]]")
+
+  ; deeply nested
+  (dotest "[fn::[fn::[fn::[fn::[fn::[fn::]]]]]]")
+
+  (dotest "[fn:def] always a definition")
+
+  ; cursed
+  (dotest "[fn::=]=]")
+  (dotest "[fn:: =]= ]")
+  (dotest "[fn:: x =]= y ]")
+  (dotest "[fn::=[=]") ; XXX
+  (dotest "=[= [fn:: x =]= y ]")  ; FIXME HRM this is mismatched do footnotes somehow take priority over verbatim !?
+  (dotest "[fn:: [ x =]= y ]")
+  (dotest "[fn:: =[= x ] y ]")
+  (dotest "[fn:: =[= x =]= y ]") ; FIXME bad markup
+
+  ; cursed anchor
+  (dotest "[fn:lol]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]")
+
+  (dotest "Text [fn::Inline footnote[fn::Nested.].] more." #:expand? #t)
 
   (dotest "be[fn::in[fn::ne]]aft") ; FIXME bad parse on the ne
 
-  (dotest "[fn::")
+  (dotest "a[fn::b[fn:c]]")
+
+
+  (dotest "[fn:: sigh\nwhat")
+  (dotest "[fn:: sigh\n\nwhat")
 
   (dotest "[fn:: asdf")
 
@@ -1781,10 +1842,10 @@ don't affilaite to other unaff keyword
 #+begin_src bash
 echo oops a block
 #+end_src
-]aft")
+]aft") ; XXX broken because the inline footnote doesn't know to stop for blocks
 
   (dotest "Text [fn::Inline footnote.] more.")
-  (dotest "Text [fn::Inline footnote.\nmore paragraph.] more.") ; yes
+  (dotest "Text [fn::Inline footnote.\nmore footnote.] more.") ; yes
 
   (dotest "Text [fn::Inline footnote.\n\nA new paragraph?] more.") ; officially NOT an inline footnote YAY!!!!!!!
 
@@ -1811,7 +1872,7 @@ echo oops a block
 
   (dotest "[fn:: =a= \n\n b]")
 
-  (dotest "[fn:: =a= \n b]") ; should be inline footnote
+  (dotest "[fn:: =a= \n b]") ; XXX verbatim here is wrong as well ... off by two error
 
   )
 
@@ -1905,8 +1966,8 @@ echo oops a block
   (dotest "\n" #:eq-root '(org-file (empty-line "\n") (empty-line "\n")))
   #;
   (dotest "  " #:eq   '(org-file (org-node (paragraph (space #f) (space #f)))))
-  (dotest "  " #:eq-root   '(org-file (paragraph "\n  ")))
-  (dotest "  \n" #:eq-root '(org-file (paragraph "\n  ")
+  (dotest "  " #:eq-root   '(org-file (paragraph "\n" "  "))) ; FIXME vs "\n  "
+  (dotest "  \n" #:eq-root '(org-file (paragraph "\n" "  ") ; FIXME vs "\n  "
                                       (empty-line "\n")))
 
   (dotest "* :tag:")

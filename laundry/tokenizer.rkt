@@ -39,6 +39,9 @@
   ; to find the first char going backward, string-ref backward seems
   ; like it is ok if we really want this to go fast maybe could chunk
   ; bytes into cacheline size and search for a sub-offset within that?
+  #;
+  (println "find-last searching ...")
+  ; FIXME this fails if the pattern we are looking for isn't actually present
   (letrec ([search (λ (look-at)
                      #;
                      (println (list 'find-last: (string-ref str look-at) look-at))
@@ -46,6 +49,17 @@
                          (values (substring str 0 look-at) (sub1 look-at))
                          (search (sub1 look-at))))])
     (search (sub1 (string-length str)))))
+
+(define (token-back-1 TOKEN lexeme input-port)
+  ; FIXME multi-byte case
+  (file-position input-port (sub1 (file-position input-port)))
+  (let-values ([(l c p) (port-next-location input-port)])
+    (set-port-next-location!
+     input-port
+     l ; TODO newline case
+     (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
+     (and p (sub1 p))))
+  (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
 
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
   "Encapsulates the machinery needed to correctly reset the location of input-port when
@@ -263,26 +277,18 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [markup-_+ (token 'MU-US lexeme)]
    |#
 
-   [markup-* (token 'BOLD lexeme)]
-   [markup-/ (token 'ITALIC lexeme)]
-   [markup-_ (token 'UNDERLINE lexeme)]
-   [markup-+ (token 'STRIKE lexeme)]
+   [markup-* (token-back-1 'BOLD lexeme input-port)]
+   [markup-/ (token-back-1 'ITALIC lexeme input-port)]
+   [markup-_ (token-back-1 'UNDERLINE lexeme input-port)]
+   [markup-+ (token-back-1 'STRIKE lexeme input-port)]
 
-   [markup-= (token 'VERBATIM lexeme)]
-   [markup-~ (token 'CODE lexeme)]
-
-   [markup-*-eof? (token 'BOLD-EOF lexeme)]
-   [markup-/-eof? (token 'ITALIC-EOF lexeme)]
-   [markup-_-eof? (token 'UNDERLINE-EOF lexeme)]
-   [markup-+-eof? (token 'STRIKE-EOF lexeme)]
-
-   [markup-=-eof? (token 'VERBATIM-EOF lexeme)]
-   [markup-~-eof? (token 'CODE-EOF lexeme)]
+   [markup-= (token-back-1 'VERBATIM lexeme input-port)]
+   [markup-~ (token-back-1 'CODE lexeme input-port)]
 
    #; ; busted
    [(:+ (:or mu-pre mu-post)) (token 'STUFF-A lexeme)]
 
-   [(:+ (:or (:& (:~ mu-pre-1) mu-post-1) mu-marker)) (token 'STUFF-A lexeme)]
+   [(:+ (:or (:& (:~ mu-pre-1) mu-post-not-newline) mu-marker)) (token 'STUFF-A lexeme)]
 
    [mu-pre-n-not-lcb (token 'MU-PRE-N-NOT-LCB lexeme)] ; LCB cannot be in mu-pre-n because it would block macro
    [mu-pre-1 (token 'MU-PRE-1 lexeme)] ; needed to prevent accidental capture when :+ length for stuff is longer than markup
@@ -290,19 +296,34 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [citation (token 'CITATION lexeme)] ; FIXME annoying because it gets parsed twice
 
    [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
-   [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
-   [footnote-inline-simple (token 'FOOTNOTE-INLINE-SIMPLE lexeme)]
+   #; ; doesn't work in the absense of EOF might work if we detect eof in here
    [footnote-inline-malformed
     ; I think this kind of works? we might not back up enough? we hard match \n\n without stop before
     (begin
+      (println (list "BEFORE" lexeme))
       (file-position input-port (sub1 (file-position input-port))) ; FIXME port-next-location
       (let-values ([(l c p) (port-next-location input-port)])
         (set-port-next-location! input-port l 0 (sub1 p)))
-      (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED (substring lexeme 0 (sub1 (string-length lexeme))) input-port start-pos))]
+      (println "I THOUGH SO")
+      (begin0
+          (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED (substring lexeme 0 (sub1 (string-length lexeme))) input-port start-pos)
+        (println "I don't get here"))
+      )]
+   [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
+   #; ; XXX leave this out for now so we can test a uniform solution
+   [footnote-inline-simple (token 'FOOTNOTE-INLINE-SIMPLE lexeme)]
+
+   #; ; busted
+   [maybe-paired-square ; FIXME risk of matching whole footnotes?
+    (if (regexp-match #rx"\\[" (substring lexeme 1))
+        (token 'NOT-INLINE-FOOTNOTE lexeme) ; FIXME obvious failure with [fn::[fn::]] case
+        (token 'PAIRED-SQUARE lexeme))
+    ]
 
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]
 
+   ["[" (token 'LSB lexeme)]
    ["]" (token 'RSB lexeme)]
 
    #;
@@ -334,6 +355,25 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["?" (token 'QM lexeme)]
 
    ))
+
+(module+ test-paragraph
+  ; FIXME terminal double newline never makes it through the top level lexer
+  (paragraph-lexer (open-input-string "[fn::a[fn::b]]"))
+
+  (paragraph-lexer (open-input-string "[fn:: sigh\n\nmore"))
+
+  (let ([port (open-input-string "\n[fn:: sigh\n\nmore")])
+    (list
+     (paragraph-lexer port)
+     (paragraph-lexer port)
+     (paragraph-lexer port)
+     ))
+
+  (let* ([port (open-input-string "[fn::sigh\nmore")] ; here's our problem, \n\n never shows up
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token)))
+
+  )
 
 (define table-lexer
   (lexer-srcloc
@@ -480,7 +520,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                 ))
       )]
 
-   [paragraph (token 'PARAGRAPH lexeme)] ; needed for performance reasons to mitigate quadratic behavior around short tokens
+   [paragraph ; FIXME don't return PARAGRAPH-MALFORMED here
+    (token-stop-before-heading-foot-def-double-blank-line 'PARAGRAPH lexeme input-port start-pos)
+    ] ; needed for performance reasons to mitigate quadratic behavior around short tokens
+   [paragraph-1 (token 'PARAGRAPH-1 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
    ["*" (token 'ASTERISK lexeme)]
@@ -502,7 +545,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #; ; eaten by paragraph in nearly all cases I think
    [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
    [footnote-definition (token-stop-before-heading-foot-def-double-blank-line
-                         'FOOTNOTE-DEFINITION lexeme input-port start-pos)] ; FIXME needs stop-before backtracking
+                         'FOOTNOTE-DEFINITION lexeme input-port start-pos)]
    #;
    ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
 

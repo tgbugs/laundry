@@ -99,7 +99,14 @@ empty-line : newline
 ; it back together in post
 
 ; FIXME do we allow newline? before PARAGRAPH?
-paragraph-node : ( PARAGRAPH @not-newline? | hyperlink @not-newline? | @paragraph-line )+ ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
+; FIXME pretty sure that the @not-newline? after PARAGRAPH-1 never matches anything ?
+; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
+; FIXME PARAGRAPH-EOF ambiguity
+paragraph-node : PARAGRAPH
+               | PARAGRAPH-EOF
+               | PARAGRAPH-MALFORMED
+               | ( PARAGRAPH-1 @not-newline? | hyperlink @not-newline? | paragraph-line )+ PARAGRAPH-EOF?
+
 paragraph-line : newline parl-lines
                | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers

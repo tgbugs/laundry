@@ -105,16 +105,19 @@ empty-line : newline
 paragraph-node : PARAGRAPH
                | PARAGRAPH-EOF
                | PARAGRAPH-MALFORMED
-               | ( PARAGRAPH-1 @not-newline? | hyperlink @not-newline? | paragraph-line )+ PARAGRAPH-EOF?
+               | ( PARAGRAPH-2 @not-newline?
+                 ; | ( LINK | LINK-AB ) @not-newline?
+                 ; | hyperlink @not-newline? ; XXX moved to paragraph parser for consistency, double parsing an issue for now
+                 | paragraph-line )+ PARAGRAPH-EOF?
 
 paragraph-line : newline parl-lines
                | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
 ; citation : CITATION ; don't use this here, handle only in paragraph
-hyperlink : link-regular | link-angle
-link-regular : LINK
-link-angle : LINK-AB ; we don't actually use this here
+;hyperlink : link-regular | link-angle
+;link-regular : LINK
+;link-angle : LINK-AB ; we don't actually use this here
 
 paragraph-f-in : @paragraph-line-f-in+
 paragraph-line-f-in : newline ( parl-lines | misplaced-footnote-definition )

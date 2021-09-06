@@ -18,12 +18,16 @@
          ;heading-make-tokenizer
          bind-runtime-todo-keywords
 
-         heading
-         hyperlink
-         comment-element
-         drawer-ish
+         #; ; colorer needs its own
+         token-stop-for-paragraph
 
-         paragraph
+         ;heading
+         ;hyperlink
+         ;hyperlink-ab
+         ;comment-element
+         ;drawer-ish
+
+         ;paragraph
          #|
          markup-*
          markup-/
@@ -60,6 +64,17 @@
      (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
      (and p (sub1 p))))
   (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
+
+(define (set-port-position! input-port offset)
+  "do it in string chars not in bytes"
+  (let-values ([(l c p) (port-next-location input-port)])
+    (set-port-next-location!
+     input-port
+     l
+     c
+     p
+     ))
+  )
 
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
   "Encapsulates the machinery needed to correctly reset the location of input-port when
@@ -147,6 +162,20 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (let ([TOKEN-MALFORMED (string->symbol (format "~a-MALFORMED" TOKEN))])
         (token-stop-before TOKEN-MALFORMED TOKEN-MALFORMED lexeme #\newline input-port start-pos))
       (-stop-before-alt-branch TOKEN lexeme input-port)))
+
+(define (token-stop-for-paragraph TOKEN lexeme input-port start-pos)
+  (if (string-suffix? lexeme "*")
+      (token-stop-before-heading TOKEN lexeme input-port start-pos)
+      (if (or (and (memq (peek-char input-port) '(#\+ #\space)) (string-suffix? lexeme "#"))
+              ; FIXME this will hit false positives
+              (and (string-suffix? lexeme ":")
+                   (eq? (peek-char input-port) #\newline) ; FIXME isn't this nearly always going to be true?
+                   (regexp-match #rx"\n[ \t]*:[A-Za-z0-9_-]+:[ \t]*$" lexeme) ; FIXME sigh reparse
+                   ))
+          (token-stop-before TOKEN TOKEN lexeme #\newline input-port start-pos)
+          (if (eq? (peek-char input-port) #\])
+              (token-stop-before-foot-def TOKEN lexeme input-port start-pos)
+              (-stop-before-alt-branch TOKEN lexeme input-port)))))
 
 (define (token-stop-before-heading-foot-def-double-blank-line TOKEN lexeme input-port start-pos)
   ; we don't have to do anything for the double-blank-line case
@@ -490,7 +519,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                                 sigh)
                   (regexp-match #rx"\n\\*+[ \t]$" lexeme))
         ; TODO proper next steps when a mismatch is detected
-        (error "mismatch" sigh suffix))
+        ; FIXME elisp can deal with nested cases ... at least for example blocks
+        (error "mismatch" sigh suffix start-pos))
       (if (member suffix '("_src" "_SRC"))
           (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos #:eof #f) ; FIXME workaround ...
           (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)
@@ -522,7 +552,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       )]
 
    [paragraph ; FIXME don't return PARAGRAPH-MALFORMED here
-    (token-stop-before-heading-foot-def-double-blank-line 'PARAGRAPH lexeme input-port start-pos)
+    (token-stop-for-paragraph 'PARAGRAPH lexeme input-port start-pos)
     ] ; needed for performance reasons to mitigate quadratic behavior around short tokens
    [paragraph-1 (token 'PARAGRAPH-1 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
 

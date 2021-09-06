@@ -52,6 +52,7 @@
                 #:nte [nte #f] #:node-type-expanded [node-type-expanded nte]
                 #:quiet [quiet #f]
                 #:parse-to-datum [parse-to-datum #f]
+                #:port-count-lines? [port-count-lines #t]
                 ; FIXME parameterize do-expand (define test-expand (make-parameter #t))
                 #:expand? [do-expand #t])
   (define test-value-inner
@@ -59,7 +60,11 @@
           [s (dotest-suffix)])
       (let ([prepended (if p (string-append p test-value) test-value)])
         (if s (string-append prepended s) prepended))))
-  (define (t) ((testing-token) (open-input-string test-value-inner)))
+  (define (t) ((testing-token)
+               (let ([port (open-input-string test-value-inner)])
+                 (when port-count-lines
+                   (port-count-lines! port))
+                 port)))
   (define hrm ((if parse-to-datum ; used for debug
                    parse-to-datum
                    (compose syntax->datum (testing-parse)))
@@ -788,37 +793,28 @@
 
 (module+ test-paragraphs
   (current-module-path)
-  (dotest "aaaaaaaaa paragraph")
+  (define nte 'paragraph)
+  (dotest "aaaaaaaaa paragraph" #:nte nte)
 
-  (dotest "p1-1\np1-2\n\np2-1")
+  (dotest "p11\np12\n\np21"
+          #:eq-root
+          '(org-file (paragraph "p11" "\n" "p12" "\n") (paragraph "\n" "p21")))
 
-  (dotest "\nIf nothing else this is a paragraph.")
-  ; (dotest "p") ; sigh bof
+  (dotest "\nIf nothing else this is a paragraph." #:nte nte)
+  (dotest "p" #:nte nte) ; sigh bof
   (dotest "\np")
   (dotest "\np\n")
   (dotest "\np a r a g p\n")
 
-  ; what the heck ; resolved now, issue identified see note at top of file in impl approach and no backtracking optimization
-  ; (dotest "p a r a g p") ; ok 
-  (dotest "\np a r a g p") ; totally broken !??!?!?!
-  (dotest "\naaaaaaaaaaa") ; also totally broken ... wat
-  ;(dotest "aaaaaaaaaaa")
-  ;(dotest "aaaaaaaaaaaa")
-  (dotest "\n0123456789") ; ok
-  (dotest "\n0123456789A") ; broken
-  (dotest "\n01234567890") ; broken
-  (dotest "\n0123456789\n") ; ok
-  (dotest "\n0123456789A\n") ; broken
-  #; ; this is so fooing slow that I'm commenting it out what the foo
-  (dotest
-   ; FIXME this takes an astoundlingly long time to parse if paragraph-line : @not-newline+
-   ; it takes a stupidly long time even if it is just defined as not-newline ... wtf
-   ; it totally poops the bed with the newline but is just fine without it ...
-   "\nI'm sorry I really just do not understand what the issue is here.") 
-
-  (dotest
-   ; and this one runs just fine ... sort of, still slower than desired
-   "\nI'm sorry I really just do not understand what the issue is here.")
+  (dotest "p a r a g p")
+  (dotest "aaaaaaaaaaa")
+  (dotest "aaaaaaaaaaaa")
+  (dotest "0123456789")
+  (dotest "0123456789A")
+  (dotest "01234567890")
+  (dotest "0123456789")
+  (dotest "0123456789A")
+  (dotest "I'm sorry I really just do not understand what the issue is here.")
 
   (dotest "
 * I don't get it
@@ -838,11 +834,10 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
   ; the parser reads everything twice the only difference in the token stream
   ; is whether or not the newline is there what the foo?
-  (dotest "p") ; broken again due to BOF issues
   (dotest "\n\np\n\n")
   (dotest "\n0123456789A")
-  (dotest "0123456789A") ; broken BOF
-  (dotest "paragraph\n") ; broken BOF
+  (dotest "0123456789A")
+  (dotest "paragraph\n")
 
   )
 
@@ -940,6 +935,12 @@ AAAAAAAAAAAAAAAAAAAAAAA
 (module+ test-comments
   (current-module-path)
 
+  (dotest "hrm a paragraph
+# then a comment
+# another comment
+then another paragraph
+")
+
   (dotest "35934")
   (dotest "35934" #:eq-root '(org-file (paragraph "\n" "35934")))
   (dotest "# 35934")
@@ -967,6 +968,30 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
 (module+ test-rando
   (current-module-path)
+
+  (dotest
+   "* w
+w1 [[* w][w]]
+")
+
+  (dotest
+   "* w
+[[* w][w]] w2
+")
+
+  (dotest
+   "* w
+[[* w][w]]
+")
+
+  ; port-count-lines! related issue
+  ; the knights who say ni!
+  (dotest "হিনী \nx =s=\n* \n" #:port-count-lines? #f)
+  (dotest "হিনী \nx =s=\n* \n")
+  (dotest "হিনী ")
+
+  (dotest "* \n <x")
+  (dotest "=emerge --onlydeps ${packagename}=")
   (dotest "* Headline")
   (dotest "1.")
 
@@ -1020,6 +1045,30 @@ OH NO
  (+ 1 2)
 #+end_src
 WHEEEEEEEEEE
+" #:nte 'blk-src) ; FIXME now broken
+
+  (dotest "
+BEF PAR
+:drawer:
+lol
+:end:
+AFT PAR
+" #:nte 'drawer)
+
+  (dotest "lolololol")
+
+  (dotest "
+trolololol
+watch this ::
+
+
+")
+
+  (dotest "
+tralalalaala the
+watch this ::
+
+
 ")
 
   (dotest "\n#+NAME: lol\nare you fooing kidding me!")
@@ -1938,6 +1987,14 @@ echo oops a block
   (current-module-path)
 
   ; things that work and should continue to work
+
+  (dotest "99." #:nte 'ordered-list-line) ; -> ordered list
+
+  (dotest "p 1
+# c 1
+# c 2
+p 2
+" #:nte 'comment-element)
 
   (dotest "* ")
   (dotest "* " #:eq-root h-l1)

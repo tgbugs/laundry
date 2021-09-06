@@ -91,7 +91,7 @@
 
 ;;; keywords
 
-(define-lex-abbrev keyword-element
+(define-lex-abbrev keyword-element ; FIXME broken for #+begin_: I think but also consider that maybe keyword should take precendence in this case?
   (from/stop-before
    (:seq "\n"
          (:* " " "\t")
@@ -139,14 +139,21 @@
 
 ;;;; blocks
 
+(define-lex-abbrev src-block-line-begin
+  (:seq "\n"
+        (:* " " "\t")
+        (:or "#+begin_src" "#+BEGIN_SRC")
+        (:* (:~ "\n"))))
+
+(define-lex-abbrev src-block-line-end
+  (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t")))
+
 (define-lex-abbrev src-block
-  (:seq (from/stop-before (:seq "\n"
-                                (:* " " "\t")
-                                (:or "#+begin_src" "#+BEGIN_SRC")
-                                (:* (:~ "\n")))
-                          (:or
-                           stop-before-heading
-                           (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t") "\n")))))
+  (:seq (from/stop-before
+         src-block-line-begin
+         (:or
+          stop-before-heading
+          (:seq src-block-line-end "\n")))))
 
 (module+ test-block
   (define src-lexer
@@ -185,44 +192,53 @@
 ; src
 ; verse
 
+(define-lex-abbrev unknown-block-line-begin
+  (:seq "\n"
+        (:* " " "\t")
+        (:or (:seq "#+begin_"
+                   (:+ (:~ " " "\t" "\n"))
+                   (:?
+                    (:seq
+                     (:or " " "\t")
+                     (:+ (:~ "\n")))))
+             (:seq "#+BEGIN_"
+                   (:+ (:~ " " "\t" "\n"))
+                   (:?
+                    (:seq
+                     (:or " " "\t")
+                     (:+ (:~ "\n"))))))))
+
+(define-lex-abbrev unknown-block-line-end
+  (:seq "\n"
+        (:* " " "\t")
+        (:or (:seq "#+end_"
+                   (:+ (:~ " " "\t" "\n"))
+                   (:? (:seq
+                        (:or " " "\t")
+                        (:* (:~ "\n")))))
+             (:seq "#+END_"
+                   (:+ (:~ " " "\t" "\n"))
+                   (:? (:seq
+                        (:or " " "\t")
+                        (:* (:~ "\n"))))
+                   ))
+        (:* " " "\t")))
+
 (define-lex-abbrev unknown-block
   ; this parses to headings or to the next #+end_
   ; we cannot do the matching at this stage, so nested blocks will terminate
   ; early so we will have to detect mismatched suffixes in a second step
   ; OR we will have to terminate if we hit another #+begin_ block before
   ; finding an end, which might make more sense, but will have to test
-  (:seq (from/stop-before (:seq "\n"
-                                (:* " " "\t")
-                                (:or (:seq "#+begin_"
-                                           (:+ (:~ " " "\t" "\n"))
-                                           (:or " " "\t")
-                                           (:+ (:~ "\n")))
-                                     (:seq "#+BEGIN_"
-                                           (:+ (:~ " " "\t" "\n"))
-                                           (:or " " "\t")
-                                           (:+ (:~ "\n")))))
+  (:seq (from/stop-before unknown-block-line-begin
                           (:or
                            stop-before-heading
-                           (:seq "\n"
-                                 (:* " " "\t")
-                                 (:or (:seq "#+end_"
-                                            (:+ (:~ " " "\t" "\n"))
-                                            (:? (:seq
-                                                 (:or " " "\t")
-                                                 (:* (:~ "\n")))))
-                                      (:seq "#+END_"
-                                            (:+ (:~ " " "\t" "\n"))
-                                            (:? (:seq
-                                                 (:or " " "\t")
-                                                 (:* (:~ "\n"))))
-                                            ))
-                                 (:* " " "\t")
-                                 "\n")))))
+                           (:seq unknown-block-line-end "\n")))))
 
 ;;;; drawers
 
 (define-lex-abbrev drawer-props
-  (:or (from/stop-before (:seq "\n" (:* " " "\t") ":properties:")
+  (:or (from/stop-before (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") "\n")
                          ; FIXME NOTE there are cases where the pattern in the
                          ; names of the property values for a draw cause it to NO
                          ; LONGER BE a property drawer, this is almost certainly a
@@ -234,20 +250,47 @@
                          (:or stop-before-heading
                               (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
        ; sigh legacy support for this
-       (from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:") ; FIXME does the case have to match?
+       (from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") "\n") ; FIXME does the case have to match?
                          (:or stop-before-heading
                               (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))))
+
+(define-lex-abbrev drawer-start-line
+  (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t")))
+
+(define-lex-abbrev drawer-start
+  (:seq drawer-start-line "\n"))
+
+(define-lex-abbrev drawer-end-line
+  (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t")))
+
+(define-lex-abbrev drawer-end
+  (:seq drawer-end-line "\n"))
 
 (define-lex-abbrev drawer-ish
   ; FIXME this is not right, check the spec to see
   (from/stop-before
-   (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":")
+   drawer-start
    (:or stop-before-heading
-        (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n"))))
+        drawer-end)))
 
-;; paragraphs
+(module+ test-drawer
+  (define d-lexer
+    (lexer-srcloc
+     [drawer-ish (token 'DRAWER lexeme)]))
+
+  (d-lexer (open-input-string "\n:b:\n:end:\n"))
+
+  )
+
+;; plain lists
 
 (define-lex-abbrev bullet-marker (:or "." ")"))
+
+(define-lex-abbrev plain-list-start
+  ; can't eat the newline :/
+  (:seq (:* (:or " " "\t")) (:or (:+ A-Z) (:+ a-z) (:+ 0-9)) bullet-marker (:or " " "\t")))
+
+;; paragraphs
 
 ; parsing paragraph here in this way is an optimization that is absolutely necessary for performance
 ; in order to avoid some quadratic algorithm lurking somewhere in the grammar or in brag or in parser-tools
@@ -261,12 +304,17 @@
   ; #\+
   ; :[A-Za-z]+:
   (from/stop-before
-   paragraph-1
+   paragraph-2
+   ;(:or paragraph-2 paragraph-1)
    (:or "\n\n"
+        ; FIXME this is broken because we have to look WAY ahead e.g. all the way to an #+end_src
         stop-before-heading
         stop-before-footnote-def
+        ;stop-before-drawer-start
+        drawer-start
+        (:seq "\n" (:* (:or " " "\t")) "#+") ; keyword
+        (:seq "\n" (:* (:or " " "\t")) "# ") ; comment
         ))
-
   #;
   (:+ (:seq "\n" (:seq (:* " " "\t")
                        (:+ (:or
@@ -277,11 +325,25 @@
                        (:& (:~ "." ")") par-rest-ok)
                        (:+ par-rest-ok)))))
 
+(define-lex-abbrev paragraph-2
+  ; cases where we can safely match whole lines because they are followed by paragraph-1
+  (:seq
+   (:* ; this allows us to subsume paragraph-1
+    (:seq
+     "\n"
+     (:+
+      (:or
+       (:+ (:or " " "\t"))
+       (:+ lower-case)
+       (:+ upper-case)
+       (:+ 0-9)))))
+   paragraph-1))
+
 (define-lex-abbrev paragraph-1
   (:+ (from/stop-before
        (:seq "\n"
              ;(:~ "*" "")
-             (:* (:or " " "\t"))
+             (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
              (:or
               (:or
                "'"
@@ -303,9 +365,9 @@
               ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
               ; FIXME TODO how to handle cases like \n123456789\n
               (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
-              (:seq (:+ a-z) (:~ bullet-marker a-z "\n"))
-              (:seq (:+ A-Z) (:~ bullet-marker A-Z "\n"))
-              (:seq (:+ 0-9) (:~ bullet-marker 0-9 "\n"))
+              (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
+              (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
+              (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))
               (:seq
                (:or 
                 (:+ lower-case)
@@ -315,6 +377,24 @@
                (:~ whitespace))))
        ; FIXME somehow keep the first of two newlines at the end? (per the spec trailing newlines go with the previous element)
        "\n")))
+
+(module+ test-par-1
+  (define p-lexer
+    (lexer-srcloc
+     #;
+     [paragraph-1 (token 'PARAGRAPH-1 lexeme)]
+     [paragraph-2 (token 'PARAGRAPH-2 lexeme)]
+     ))
+
+  #; ; correctly fails
+  (p-lexer (open-input-string "\n99.\n"))
+
+  (p-lexer (open-input-string "\naaaaaaaaaaaaaaaaaaaaa\nx \n"))
+
+  (p-lexer (open-input-string "\nHello how are you?\n"))
+  (p-lexer (open-input-string "\nHello. How are you?\n"))
+
+  )
 
 ;; paragraph parts
 

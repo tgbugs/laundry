@@ -1,20 +1,8 @@
 #lang racket/base
 
 (require brag/support
-         (only-in "tokenizer.rkt"
-                  comment-element
-                  drawer-ish
-                  heading
-                  hyperlink
-                  #|
-                  markup-*
-                  markup-/
-                  markup-_
-                  markup-+
-                  markup-=
-                  markup-~
-                  |#
-                  paragraph))
+         "lex-abbrev.rkt"
+         (only-in racket/string string-split))
 
 (provide colorer)
 
@@ -37,36 +25,68 @@
                                       "" ; wob
                                       ))
 
+(define (heading-cycle lexeme)
+  (let ([level (string-length (car (string-split lexeme " " #:trim? #t)))]
+        [cycle-length 9])
+    #;
+    (log-error "lexeme: ~a heading level: ~a cycle: ~a" lexeme level cycle-length)
+    (string->symbol (format "org-level-~a" (add1 (modulo (- level 2) cycle-length))))))
+
 (define laundry-color-lexer
   ; this is a line oriented lexer that can't capture all nuance
-  #| we're going to need more than these types, I wonder if it is possible to extend/modify the setup ...
-  'symbol
-  'keyword
-  'comment
-  'string
-  'constant
-  'parenthesis
-  'error
-  'other
-  |#
   (lexer
    [(eof) (values lexeme 'eof #f #f #f)]
-   [heading (values lexeme 'symbol #f (pos lexeme-start) (pos lexeme-end))]
+   [heading ; TODO look into how to chain lexers for this
+    (values lexeme (heading-cycle lexeme) #f (pos lexeme-start) (pos lexeme-end))]
+   [comment-element
+    (values lexeme 'comment #f (pos lexeme-start) (pos lexeme-end))]
+   [(:or (:seq "\n" plain-list-start)
+         (:seq "\n"
+               (:* (:or " " "\t"))
+               ; TODO " * variant" requires :+ on the leading whitespace
+               (:or "-")
+               (:+ (:or " " "\t")) ))
+    (values lexeme 'org-bullet #f (pos lexeme-start) (pos lexeme-end))]
+   [(:seq "\n" (:* (:or " " "\t"))
+          (:or
+           (:seq (:or (:+ A-Z) (:+ a-z) (:+ 0-9)) bullet-marker)
+           ; TODO " * variant" requires :+ on the leading whitespace
+           (:seq (:or "-"))))
+    (if (eq? (peek-char input-port) #\newline) ; ugh it hurts me that we have to do this in here
+        (values lexeme 'org-bullet #f (pos lexeme-start) (pos lexeme-end))
+        (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end)))]
    [(from/stop-before (:seq (:* (:or " " "\t")) "|") "\n")
     ; table rows
-    (values lexeme 'constant #f (pos lexeme-start) (pos lexeme-end))]
-   [hyperlink (values lexeme 'constant #f (pos lexeme-start) (pos lexeme-end))]
-   [comment-element (values lexeme 'comment #f (pos lexeme-start) (pos lexeme-end))]
-   [drawer-ish (values lexeme 'symbol #f (pos lexeme-start) (pos lexeme-end))]
+    (values lexeme 'org-table #f (pos lexeme-start) (pos lexeme-end))]
+   [(:or hyperlink hyperlink-ab)
+    (values lexeme 'org-link #f (pos lexeme-start) (pos lexeme-end))]
+   [(:or drawer-start-line drawer-end-line)
+    (if (eq? (peek-char input-port) #\newline)
+        (values lexeme 'org-drawer #f (pos lexeme-start) (pos lexeme-end))
+        (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end)))]
    #; ; not right
    [(:seq (from/stop-before (:seq (:* (:or " " "\t")) ":" (:~ (:or ":" "\n")))
                             (:seq ":" (:* (:or " " "\t")) "\n")) ":")
     ; putative drawer bits
     (values lexeme 'symbol #f (pos lexeme-start) (pos lexeme-end))]
-   [(from/to  "#+" (:seq ":" (:or " " "\t")))
-    ; affiliated keywords and friends
-    (values lexeme 'keyword #f (pos lexeme-start) (pos lexeme-end))]
-   [any-char (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end))]))
+   [keyword-element ; affiliated keywords and friends XXX broken for #+begin_:
+    (values lexeme 'org-meta-line #f (pos lexeme-start) (pos lexeme-end))]
+   [paragraph-2 (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end))]
+   [(from/to "@@comment:" "@@") ; FIXME line limit issues
+    (values lexeme 'comment #f (pos lexeme-start) (pos lexeme-end))]
+   #; ; overruns and lexeme-start/lexeme-end need to be adjusted, not just file-position
+   [paragraph
+    (begin
+      (token-stop-for-paragraph 'PARAGRAPH lexeme input-port start-pos) ; XXX not sure we want this in this context who knows
+      (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end)))]
+   [(:or src-block-line-begin unknown-block-line-begin)
+    (values lexeme 'org-block-begin-line #f (pos lexeme-start) (pos lexeme-end))]
+   [(:or src-block-line-end unknown-block-line-end)
+    (values lexeme 'org-block-end-line #f (pos lexeme-start) (pos lexeme-end))]
+   [stop-before-footnote-def
+    (values lexeme 'org-footnote #f (pos lexeme-start) (pos lexeme-end))]
+   [any-char
+    (values lexeme 'other #f (pos lexeme-start) (pos lexeme-end))]))
 
 ; https://docs.racket-lang.org/framework/Color.html see start-colorer get-token
 (define (colorer input-port offset dont-stop-thing)

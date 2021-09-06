@@ -204,3 +204,6 @@ You can't set =#+options: broken-footnotes:t= like you can with =#+options: brok
 #+begin_src elisp
 (+ 1 2)
 #+end_src
+
+* timestamps
+  <2018-09-04 Tue>

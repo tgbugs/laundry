@@ -89,6 +89,24 @@
 
 (define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
 
+;;; export snip
+
+(define-lex-abbrev export-snip-start
+  (:seq "@@" (:+ (:or alpha 0-9 "-")) ":"))
+
+(define-lex-abbrev export-snip
+  (from/to export-snip-start "@@")
+  #;
+  (from/stop-before
+   export-snip-start
+   (:or ; FIXME TODO interaction and priority relative to other
+    ; elements, see the note on objects in the spec
+    ; FIXME on review I think that our "paragraph" parser
+    ; is actually a "may contain objects" parser and that
+    ; export snips go in there
+    stop-before-heading
+    (:seq (:seq "@@" any-char)))))
+
 ;;; keywords
 
 (define-lex-abbrev keyword-element ; FIXME broken for #+begin_: I think but also consider that maybe keyword should take precendence in this case?
@@ -255,7 +273,8 @@
                               (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))))
 
 (define-lex-abbrev drawer-start-line
-  (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t")))
+  (:& (complement (:seq "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t")))
+      (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t"))))
 
 (define-lex-abbrev drawer-start
   (:seq drawer-start-line "\n"))
@@ -340,43 +359,47 @@
    paragraph-1))
 
 (define-lex-abbrev paragraph-1
-  (:+ (from/stop-before
-       (:seq "\n"
-             ;(:~ "*" "")
-             (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
+  (:+
+   (:or
+    hyperlink
+    hyperlink-ab
+    (from/stop-before
+     (:seq "\n"
+           ;(:~ "*" "")
+           (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
+           (:or
+            (:or
+             "'"
+             "\""
+             "("
+             ")"
+             "]"
+             ","
+             "!"
+             "?"
+             "%"
+             "$"
+             "^"
+             "&"
+             ".")
+            (:seq (:or "+" "-") (:~ whitespace))
+            #; ; broken ? or something else is wrong?
+            (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
+            ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
+            ; FIXME TODO how to handle cases like \n123456789\n
+            (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
+            (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
+            (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
+            (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))
+            (:seq
              (:or
-              (:or
-               "'"
-               "\""
-               "("
-               ")"
-               "]"
-               ","
-               "!"
-               "?"
-               "%"
-               "$"
-               "^"
-               "&"
-               ".")
-              (:seq (:or "+" "-") (:~ whitespace))
-              #; ; broken ? or something else is wrong?
-              (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
-              ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
-              ; FIXME TODO how to handle cases like \n123456789\n
-              (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
-              (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
-              (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
-              (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))
-              (:seq
-               (:or 
-                (:+ lower-case)
-                (:+ upper-case)
-                (:+ 0-9))
-               bullet-marker
-               (:~ whitespace))))
-       ; FIXME somehow keep the first of two newlines at the end? (per the spec trailing newlines go with the previous element)
-       "\n")))
+              (:+ lower-case)
+              (:+ upper-case)
+              (:+ 0-9))
+             bullet-marker
+             (:~ whitespace))))
+     ; FIXME somehow keep the first of two newlines at the end? (per the spec trailing newlines go with the previous element)
+     "\n"))))
 
 (module+ test-par-1
   (define p-lexer

@@ -403,6 +403,17 @@ lol highlighting error boys org-element is correct in this case
 #+begin_a
 #+end_a
 
+#+begin_a
+asdf
+#+begin_b
+asdf
+#+end_b
+asdf
+#+end_a
+
+#+begin_c
+#+end_d
+
 * TODO COMMENT asdf (lol foo me breaking comment is beyond insane) AND THIS LINE ISN'T EVEN THE ISSUE
 ** asdf ::tag:asdf:
 ** asdf :::

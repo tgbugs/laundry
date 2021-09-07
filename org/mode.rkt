@@ -31,6 +31,7 @@
 (define org-faces ; see org-faces.el
   '(
     bullet
+    malformed
 
     #|
     agenda-calendar-event

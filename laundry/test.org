@@ -4,9 +4,15 @@
 # [[file:test.html]]
 # [[file:test.pdf]]
 
+:drawer:
+hello
+:end:
+
 #+latex_header: \usepackage{bigfoot}
 
 #+keyword: hello
+
+
 
 # (((( rainbow delims or my version of it is dumb
 
@@ -204,6 +210,13 @@ You can't set =#+options: broken-footnotes:t= like you can with =#+options: brok
 #+begin_src elisp
 (+ 1 2)
 #+end_src
+
+* block issues
+#+begin_h
+#+end_h
+
+#+begin_h
+#+end_h
 
 * timestamps
   <2018-09-04 Tue>

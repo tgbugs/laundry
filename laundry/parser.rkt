@@ -203,6 +203,7 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XX
           | babel-call-no-colon
           ;| detached-drawer
           | end-drawer
+          | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place
 
 parl-tokens-with-newline : malformed-nl
 malformed-nl : detached-drawer | detached-block

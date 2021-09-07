@@ -25,7 +25,9 @@
 (define slate-blue-2 #(#x7a #x67 #xee))
 (define light-sky-blue #(#x87 #xce #xfa))
 (define deep-pink #(#xff #x14 #x93))
+(define red #(#xff #x00 #x00))
 (define cyan #(#x00 #xff #xff))
+(define gold #(#xff #xd7 #x00))
 
 (define framework:color-schemes
   `(#hash((name . "Org")
@@ -34,10 +36,11 @@
            .
            ((framework:syntax-color:scheme:comment     ,deep-pink)
             (framework:syntax-color:scheme:constant    #(211 72 255))
-            (framework:syntax-color:scheme:error       #(211 72 255))
+            (framework:syntax-color:scheme:error       ,red)
             (framework:syntax-color:scheme:parenthesis #(0 150 255))
             (framework:syntax-color:scheme:string      ,cyan)
 
+            (framework:syntax-color:scheme:org-malformed    ,gold)
             (framework:syntax-color:scheme:org-level-1 bold ,dark-green)
             (framework:syntax-color:scheme:org-level-2 bold ,better-blue)
             (framework:syntax-color:scheme:org-level-3 bold ,purple)

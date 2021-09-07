@@ -18,6 +18,10 @@
          ;heading-make-tokenizer
          bind-runtime-todo-keywords
 
+         #;
+         find-last
+         get-block-type
+
          #; ; colorer needs its own
          token-stop-for-paragraph
 
@@ -54,6 +58,16 @@
                          (search (sub1 look-at))))])
     (search (sub1 (string-length str)))))
 
+;(regexp-match #rx"^\n#\\+(begin|BEGIN)_([^ \t\n]+)[ \t\n]" "\n#+begin_:\n#+end_:\n")
+
+(define (get-block-type lexeme)
+  ; TODO use the actual block line parser for this once we have it
+  (define matched (regexp-match #rx"^\n#\\+(begin|BEGIN)_([^ \t\n]+)[ \t\n]" lexeme))
+  (if matched
+      (last matched)
+      (error lexeme)
+      ))
+
 (define (token-back-1 TOKEN lexeme input-port)
   ; FIXME multi-byte case
   (file-position input-port (sub1 (file-position input-port)))
@@ -65,14 +79,14 @@
      (and p (sub1 p))))
   (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
 
-(define (set-port-position! input-port offset)
+(define (set-port-position! input-port offset #:back-line [back-line #f])
   "do it in string chars not in bytes"
   (let-values ([(l c p) (port-next-location input-port)])
     (set-port-next-location!
      input-port
-     l
-     c
-     p
+     (if back-line (sub1 l) l)
+     (if back-line #f (- c offset))
+     (- p offset)
      ))
   )
 
@@ -479,6 +493,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 ; used to be invoked only inside a function call ?
 ; ah foo, but it could still be compiled ahead of time
 
+(define-namespace-anchor nsa)
+
 (define laundry-lexer
   (lexer-srcloc
 
@@ -508,7 +524,42 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
    ; XXX we can't do start-after on a heading to find a random end_src
    [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
+   [unknown-block
+    (let* ([block-type (get-block-type lexeme)]
+           [make-lexer
+            (λ ()
+              (eval-syntax
+               #`(lexer
+                  [(from/stop-before
+                    "\n"
+                    (:or stop-before-heading
+                         (:seq "\n" (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t"))
+                         ))
+                   ; FIXME may need a few more values out of this
+                   lexeme])
+               (namespace-anchor->namespace nsa)))]
+           [block-lexer (make-lexer)]
+           [lexeme-more (block-lexer input-port)]
+           [lexeme-combined (string-append lexeme lexeme-more)]
+           [was-heading (regexp-match #rx"\n[*]+$" lexeme-more)]
+           )
+      (if was-heading
+          (let ([offset (sub1 (string-length (car was-heading)))])
+            (file-position input-port (- (file-position input-port) offset))
+            (set-port-position! input-port offset #:back-line #t)
+            #;
+            (error was-heading)
+            (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset))))
+          (token 'UNKNOWN-BLOCK lexeme-combined)))]
+   #;
    [unknown-block ; FIXME somehow this is taking priority over src-block? or what?
+    ; TODO we should be able to rework this by detecting #+begin_pattern, extracting pattern
+    ; and then doing (from/stop-before "\n" "#+end_pattern") and synthesizing the lexeme
+    ; it is not clear that this approach is the best since it means that a different approach
+    ; will likely have to be taken if you are using a less powerful tokenizer that can't
+    ; to aribtrary things ... actually, this matches very will with what tree sitter provides
+    ; in terms of external scanners, their examples include heredocs etc. which are a classic
+    ; example of context sensitivity
     (let* (#;[test-lexeme (string-downcase lexeme)] ; FIXME case folding is evil, we should not support this
            [suffix (string-trim (car (regexp-match "_[^ \t]+[ \t]" lexeme)) #:repeat? #t)]
            [sigh (last (string-split (string-trim lexeme "\n" #:repeat? #t) "\n"))]
@@ -523,15 +574,15 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (error "mismatch" sigh suffix start-pos))
       (if (member suffix '("_src" "_SRC"))
           (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos #:eof #f) ; FIXME workaround ...
-          (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)
-          )
-      )]
+          (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)))]
 
    [table-element
     ; FIXME this still has issues where the newline following the last | is dropped
     (token-stop-before-table-double-blank-line 'TABLE-ELEMENT lexeme input-port start-pos)]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
+   #;
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
+   #;
    [hyperlink-ab (token 'LINK-AB lexeme)]
    ; in theory it should be possible to scan for headlines and then parse all the sections
    ; in parallel
@@ -575,8 +626,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
    #; ; eaten by paragraph in nearly all cases I think
    [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
-   [footnote-definition (token-stop-before-heading-foot-def-double-blank-line
-                         'FOOTNOTE-DEFINITION lexeme input-port start-pos)]
+   [footnote-definition
+    (token-stop-before-heading-foot-def-double-blank-line
+     'FOOTNOTE-DEFINITION lexeme input-port start-pos)]
    #;
    ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
 

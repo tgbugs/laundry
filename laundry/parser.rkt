@@ -67,7 +67,6 @@ empty-line : newline
                         ; | detached-block-node ; still causing too many issues for well formed blocks
 
 @org-nbe-less-df : block-less-dyn
-                 | block-begin-line
                  ;| block-end-line
                  | babel-call
                  ;| keyword ; lol yep you can affiliate keywords to keywords
@@ -78,13 +77,6 @@ empty-line : newline
 
 @org-nbe-less-d : @org-nbe-less-df
                 | footnote-definition
-
-@org-nbe-less-f : @org-nbe-less-df
-                | paragraph-node ; FIXME paragraph-line doesn't know about footnotes yet
-
-@org-nbe-f-in : @org-nbe-less-df
-              | paragraph-f-in ; FIXME I'm pretty sure we need org-node-footnote just like org-node-dyn
-              | comment-element ; XXX I think comments can be part of footnotes ...
 
 ;;;; everything else
 
@@ -118,11 +110,6 @@ paragraph-line-d : newline ( parl-lines )
 ;hyperlink : link-regular | link-angle
 ;link-regular : LINK
 ;link-angle : LINK-AB ; we don't actually use this here
-
-paragraph-f-in : @paragraph-line-f-in+
-paragraph-line-f-in : newline ( parl-lines | misplaced-footnote-definition )
-
-misplaced-footnote-definition : footnote-definition-line
 
 parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing plain lists ; FIXME does this needs to be * not + so that zero indent is straight forward?
 @parl-lines : parl-start not-newline?
@@ -196,15 +183,13 @@ parl-wsnn : @bt-chars ; XXX this branch is very rarely hit
           | L-PAREN
           | R-PAREN ; FIXME maybe also need some others of not-pl-start-whitespace1 ??
 
-malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XXX indeed, it introduces ambiguity so that source blocks fail to match
-          | blk-greater-malformed
-          | planning-dissociated
+malformed : planning-dissociated
           | ak-key-no-colon
           | babel-call-no-colon
           ;| detached-drawer
           | end-drawer
           | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place XXX variants that start with a newline do not match here
-          | block-end-line ; FIXME remove once this is handled in the lexer
+          ;| block-end-line ; FIXME remove once this is handled in the lexer
 
 parl-tokens-with-newline : malformed-nl
 malformed-nl : detached-drawer | detached-block | UNKNOWN-BLOCK-MALFORMED
@@ -401,36 +386,7 @@ attr-backend : @wordhyus
 ; of an org-file from just its syntax because you need
 ; a stack to keep track of which block you are in
 
-@block-less-dyn : ( blk-src | blk-unknown | /newline blk-ex ) ; FIXME do we really / the newline here? I guess?
-
-; NOTE greater blocks that do not have a special status e.g. src blocks for babel
-; can only be determined to be malformed during a later pass, not by the grammar alone
-block-begin-line : /newline wsnn* blk-greater-begin
-block-end-line : /newline wsnn* blk-greater-end ; FIXME paragraph vs out of place end line
-
-blk-ex : blk-ex-begin blk-ex-contents nlpws blk-ex-end
-blk-ex-begin : BEGIN-EX wsnn blk-line-contents | BEGIN-EX
-blk-ex-end : END-EX ; wsnn*? or we deal with that elsewhere ?
-blk-ex-contents : no-headlines ; XXX watch out for greedy ?
-
-
-; XXX NOTE these WILL mispair and have to be processed in a second step
-; if this happens, the parse results up to the start of next heading cannot
-; be trusted and should be considered to be incorrect
-blk-greater-begin : blk-greater-type wsnn blk-line-contents | blk-greater-type
-
-blk-greater-end : END-BLOCK block-type-name | bg-end-special
-bg-end-special : END-SRC block-type-rest ; these are for things like #+end_srclol
-               | END-EX block-type-rest
-
-blk-greater-type : BEGIN-BLOCK block-type-name | bg-type-special
-bg-type-special : BEGIN-SRC block-type-rest ; these are for things like #+begin_srclol
-                | BEGIN-EX block-type-rest
-
-blk-greater-malformed : ( END-BLOCK | BEGIN-BLOCK ) /wsnn* ; if this occures alone
-block-type-name : @not-whitespace ;| CHARS-COMMENT | CHARS-ARCHIVE ; CHARS- are in not-whitespace via big-tokes
-block-type-rest : @not-whitespace
-
+@block-less-dyn : ( blk-src | blk-unknown )
 
 blk-dyn : /newline blk-dyn-begin blk-dyn-contents newline blk-dyn-end
 ; XXX elisp impl requires at least wsnn after #+begin: to work
@@ -464,17 +420,7 @@ org-node-dyn : drawer | org-nbe-less-d | paragraph-line | newline
 blk-line-contents : @not-newline
 blk-line-rest : @not-newline
 
-detached-block-node : det-blk-src-begin ; FIXME this definition is wrong, and ideally we would be able to peek and see that it is wrong e.g. because there is a headline before an endblock is encountered
-                    | det-blk-src-end
-                    | det-blk-ex-begin
-                    | det-blk-ex-end
-                    | blk-src-malformed
-
 blk-src-malformed : SRC-BLOCK-MALFORMED
-det-blk-src-begin : blk-src-begin
-det-blk-src-end : blk-src-end ; basically all of these now that the tokenizer is behaving
-det-blk-ex-begin : blk-ex-begin
-det-blk-ex-end : blk-ex-end
 
 blk-src : blk-src-whole ;| /newline blk-src-begin blk-src-contents? nlpws blk-src-end
 blk-src-whole : SRC-BLOCK ; XXX requires a nested parser OR chaining the positions of input port in the lexer to produce more than one token i.e. checking in next-token for a list
@@ -633,43 +579,9 @@ pl-tag-end : COLON COLON
 footnote-definition : FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-DEFINITION-MALFORMED
 ;footnote-inline : FOOTNOTE-START-INLINE org-node? RSB ; FIXME this is really org-node-less-fd probably
 
-; XXX impl note: these bind the paragraph that follow them ... but they do it
-; differently than other elements, probably due to ... who knows? what differences
-; in the implementation, actually they bind all elements that follow them except for
-; a double blank line
--footnote-definition : footnote-definition-line org-node-f*
-
-@org-node-f : org-nbe-less-f | blank-line
-@org-node-f-in : org-nbe-f-in  | blank-line
-
-footnote-definition-line : newline FOOTNOTE-START fn-label RSB fn-def
-
-fn-def : @not-newline? org-node-f
-
-footnote-anchor : -footnote-inline | footnote-marker
-; NOTE fn-defs must start at column 0, not 100% sure what that means
--footnote-inline : FOOTNOTE-START-INLINE fn-def-inline RSB ; FIXME the tokenizer for this is :/ [fn:: !?
-;ootnote-contents : not-rsb ; FIXME I'm pretty sure there is a nasty bug in the elisp impl where
-                            ; footnotes don't do shortest match, they do longest match
-                            ; FIXME this naieve definition also fails to correctly manage
-                            ; unbalanced parents
-fn-def-inline : @not-newline? org-node-f-in ; FIXME actually this might just be org-node-basic ?? but what the heck would it mean to have a footnote definition typeset INSIDE a footnote definition? I bet it just won't render and there will be no warning?
-footnote-marker : FOOTNOTE-START fn-label RSB
-fn-label : wordhyus
-
 ;;;; <[
 
 timestamp : TIMESTAMP
-
-;;;; @
-
-;;; export snippets
-
-export-snippet : at-at esnip-name COLON esnip-value at-at
-esnip-name : wordhy
-esnip-value : not-at-at
-at-at : AT AT
-not-at-at : ( @not-at1 | ( AT @not-at1 ) )+
 
 ;;;;
 

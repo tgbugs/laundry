@@ -390,6 +390,7 @@
   hyperlink ; FIXME needs to be an sa alt probably
   link-angle
   link-regular
+  timestamp ; TODO deeper parsing
 
   bof
   digits

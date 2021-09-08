@@ -6,6 +6,7 @@ paragraph : markup? ( mu-pre markup
                     | citation
                     | footnote-reference ; FIXME can this be inside markup?
                     | hyperlink
+                    | timestamp
                     ;| malformed ; XXX note that if malformed is placed here it MUST terminate the paragraph
                     ;| sigh
                     )* footnote-inline-malformed-eof? newline ; markup-eof? ; markup-eof no longer needed and no tokens are being produced
@@ -40,6 +41,7 @@ paragraph-inline-safe : markup? ( mu-pre markup
                     | citation
                     | footnote-reference
                     | hyperlink
+                    | timestamp
                     ;| malformed
                     )*
 
@@ -59,6 +61,10 @@ footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnote
 hyperlink : link-regular | link-angle
 link-regular : LINK
 link-angle : LINK-AB
+
+;;; timestamp
+
+timestamp : TIMESTAMP
 
 ;;; markup
 

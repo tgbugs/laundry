@@ -7,6 +7,7 @@
          racket/string
          laundry/parser
          (only-in laundry/tokenizer
+                  org-tokenizer-debug
                   laundry-make-tokenizer
                   bind-runtime-todo-keywords)
          #;
@@ -968,6 +969,11 @@ then another paragraph
 
 (module+ test-rando
   (current-module-path)
+  (org-tokenizer-debug #t)
+
+  (dotest "“
+(k)
+* h")
 
   (dotest
    "* w

@@ -22,6 +22,8 @@
          find-last
          get-block-type
 
+         (rename-out [debug org-tokenizer-debug])
+
          #; ; colorer needs its own
          token-stop-for-paragraph
 
@@ -41,6 +43,8 @@
          markup-~
          |#
          )
+
+(define debug (make-parameter #f))
 
 (define (find-last char str)
   ; we don't want to do string reverse because it is slow we just want
@@ -62,7 +66,7 @@
 
 (define (get-block-type lexeme)
   ; TODO use the actual block line parser for this once we have it
-  (define matched (regexp-match #rx"^\n#\\+(:?begin|BEGIN)_([^ \t\n]+)(?:[ \t]|$)" lexeme)) ; from/stop-before means we never actually see \n
+  (define matched (regexp-match #rx"^\n(?:[ \t]*)#\\+(?:begin|BEGIN)_([^ \t\n]+)(?:[ \t]|$)" lexeme)) ; from/stop-before means we never actually see \n
   (if matched
       (last matched)
       ; have to add the string because apparently racket-mode still loses the context
@@ -269,8 +273,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (define heading-lexer (eval-syntax heading-lexer-src))
     (define (next-token)
       (let ([out (heading-lexer port)])
-        #;
-        (begin
+        (when (debug)
           (displayln 'heading-tok:)
           (pretty-print out))
         out))
@@ -300,7 +303,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
 (define paragraph-lexer
   (lexer-srcloc
-   [(from/to (:seq "{{{" alpha) "}}}") (token 'MACRO lexeme)]
+   [macro-invocation (token 'MACRO lexeme)]
    #; ; the spec for macro reads like it can be multi-line
    [(:seq "{{{" alpha (:+ (:or alpha 0-9 "-" "_")) (:? (:seq "(" ")")) "}}}") (token 'MACRO lexeme)]
    [(:+ (:~ mu-pre-1 mu-marker mu-post-1 "]")) (token 'STUFF-B lexeme)]
@@ -366,6 +369,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]
+   [timestamp (token 'TIMESTAMP lexeme)]
 
    ["[" (token 'LSB lexeme)]
    ["]" (token 'RSB lexeme)]
@@ -452,8 +456,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 (define (paragraph-make-tokenizer port)
   (define (next-token)
     (let ([out (paragraph-lexer port)])
-      #;
-      (begin
+      (when (debug)
         (println ':paragraph-make-tokenizer)
         (pretty-print out))
       out))
@@ -643,7 +646,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [paragraph ; FIXME don't return PARAGRAPH-MALFORMED here
     (token-stop-for-paragraph 'PARAGRAPH lexeme input-port start-pos)
     ] ; needed for performance reasons to mitigate quadratic behavior around short tokens
-   [paragraph-1 (token 'PARAGRAPH-1 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
+   [paragraph-2 (token 'PARAGRAPH-2 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
    ["*" (token 'ASTERISK lexeme)]
@@ -1102,8 +1105,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                      (set! bof #f)
                      (process-first port))
                    (process-rest port))])
-      #;
-      (pretty-print out)
+      (when (debug)
+        (pretty-print out))
       out))
   next-token)
 

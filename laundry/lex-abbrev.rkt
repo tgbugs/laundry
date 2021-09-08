@@ -52,6 +52,10 @@
 #; ;
 (define-lex-abbrev whitespace (:or "\n" "\t" " ")) ; pretty sure this is complete
 
+(define-lex-abbrev wsnn (:& whitespace (:~ "\n")))
+(define-lex-abbrev wsnn* (:* wsnn))
+(define-lex-abbrev wsnn+ (:+ wsnn))
+
 (define-lex-abbrev negated-set
   (:~ ; NOT any of these
    " "
@@ -88,24 +92,6 @@
   (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
 
 (define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
-
-;;; export snip
-
-(define-lex-abbrev export-snip-start
-  (:seq "@@" (:+ (:or alpha 0-9 "-")) ":"))
-
-(define-lex-abbrev export-snip
-  (from/to export-snip-start "@@")
-  #;
-  (from/stop-before
-   export-snip-start
-   (:or ; FIXME TODO interaction and priority relative to other
-    ; elements, see the note on objects in the spec
-    ; FIXME on review I think that our "paragraph" parser
-    ; is actually a "may contain objects" parser and that
-    ; export snips go in there
-    stop-before-heading
-    (:seq (:seq "@@" any-char)))))
 
 ;;; keywords
 
@@ -396,12 +382,14 @@ c
    (:or
     hyperlink
     hyperlink-ab
+    ;timestamp ; FIXME including this here massively increases compile times and runtime and we don't need it at this stage
     (from/stop-before
      (:seq "\n"
            ;(:~ "*" "")
            (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
            (:or
             (:or
+             "<" ">" ; anything that would collide here will be parsed in the nested paragraph parser
              "'"
              "\""
              "("
@@ -452,7 +440,82 @@ c
 
   )
 
-;; paragraph parts
+;; org objects
+
+;;; latex entities and fragments TODO there is more here that I have not implemented yet
+
+(define-lex-abbrev latex-name
+  (:seq "\\" (:+ alpha)))
+
+(define-lex-abbrev latex-entity
+  (:or
+   (:seq latex-name "{}")
+   (from/stop-before latex-name "\n")))
+
+(define-lex-abbrev latext-$$ ; so the spec claims but I'm not sure I buy it
+  (from/to "$$" "$$"))
+
+(define-lex-abbrev latex-char
+  (:~ (:or "." "," "?" ";" "'" "\"")))
+
+(define-lex-abbrev latext-$
+  (:or
+   (from/stop-before
+    "" (:seq (:or "\n" (:~ "$")) "$" latex-char "$" "\n"))
+       (:seq (:or "\n" (:~ "$")) "$" latex-char "$" (:or "(){}[].,!\"\' "))))
+
+(define-lex-abbrev latex-brackets
+  (:*
+   (:or
+    (:seq "[" (:* (:~ (:or "\n" "[" "]" "{" "}"))) "]")
+    (:seq "{" (:* (:~ (:or "\n" "{" "}"))) "}"))))
+
+;;; export snippets
+
+(define-lex-abbrev export-snip-start
+  (:seq "@@" (:+ (:or alpha 0-9 "-")) ":"))
+
+(define-lex-abbrev export-snip
+  (from/to export-snip-start "@@")
+  #;
+  (from/stop-before
+   export-snip-start
+   (:or ; FIXME TODO interaction and priority relative to other
+    ; elements, see the note on objects in the spec
+    ; FIXME on review I think that our "paragraph" parser
+    ; is actually a "may contain objects" parser and that
+    ; export snips go in there
+    stop-before-heading
+    (:seq (:seq "@@" any-char)))))
+
+;;; inline call
+
+(define-lex-abbrev inline-call-header
+  (:seq "[" (:* (:~ (:or "]" "\n"))) "]"))
+(define-lex-abbrev inline-call-args
+  (:seq "(" (:* (:~ (:or ")" "\n"))) ")"))
+
+(define-lex-abbrev inline-call
+  (:seq "call_"
+        (:+ (:~ (:or "(" ")" "\n")))
+        (:? inline-call-header)
+        inline-call-args
+        (:? inline-call-header)))
+
+;;; inline src-block
+
+(define-lex-abbrev inline-src-block ; XXX this seems underspecified in the spec
+  ; e.g. what happens with src_name[oops I have more ]{of these}]{oh no!} src_name2[very oh no]  ]{echo lol}
+  ; maybe that is ok
+  (:seq "src_"
+        (:+ (:~ whitespace))
+        (:? (:seq "[" (:* (:~ "\n")) "]"))
+        (:seq "{" (:* (:~ "\n")) "}")))
+
+;;; line break
+
+(define-lex-abbrev line-break ; otherwise non-empty ? that is a nasty lookbehind that we can't do here
+  (from/stop-before "" (:seq #;(:~ "\n") "\\" "\\" (:* (:or " " "\t")) "\n")))
 
 ;;; citation
 
@@ -618,6 +681,109 @@ c
         ">"))
 
 ;;; macro
+
+(define-lex-abbrev macro-invocation
+  ; as opposed to macro definition via keywords
+  ; FIXME the spec is clearly at divergence from elisp behavior because it allows newlines
+  ; XXX divergece
+  ; the closest pair of triple parents always parse as a macro regardless of whether their contents are well formed
+  ; if their contents are NOT well formed then it should probably expand to be a malformed macro
+  ; then we can determine whether default for that is to render as paragraph or render as nothing, paragraph probably better ...
+  (from/to "{{{" "}}}"))
+
+;;; target
+
+(define-lex-abbrev target ; TODO further restrictions
+  (:seq "<<" (:* (:~ "<" ">" "\n")) ">>"))
+
+;;; radio target
+
+(define-lex-abbrev radio-target ; TODO futher restrictions
+  (:seq "<<<" (:* (:~ "<" ">" "\n")) ">>>"))
+
+;;; stats cookies
+
+; TODO decimal percent ? I'm unfamliar with this part of org
+(define-lex-abbrev stats-percent (:seq "[" (:* 0-9) "%" "]"))
+
+(define-lex-abbrev stats-quotient (:seq "[" (:* 0-9) "/" (:* 0-9) "]")) ; what the heck is [/0] or [0/] supposed to mean?
+
+;;; subscript
+
+(define-lex-abbrev subscript ; TODO
+  "_")
+
+;;; superscript
+
+(define-lex-abbrev superscript ; TODO
+  "^")
+
+;;; timestamps ; FIXME somehow timestamp makes compile time long and runtime slow !?? (only if it is in paragraph-1 ???)
+               ; FIXME in fact ... I wonder whether the grammar version of it was slowing down the grammar as well ...
+               ; it works just fine as a standalone token but adds a bit of complexity to the grammar
+
+(define-lex-abbrev year (:= 4 0-9))
+(define-lex-abbrev year-ex (:seq (:or "+" "-") (:+ 0-9))) ; XXX divergence
+(define-lex-abbrev month (:= 2 0-9))
+(define-lex-abbrev day (:= 2 0-9))
+(define-lex-abbrev day-abbrev (:+ (:~ (:or "+" "-" 0-9 "]" ">" "\n"))))
+
+(define-lex-abbrev hour (:** 1 2 0-9)) ; spec says support for 1 digit hours, so we do, but always produce with leading zero
+(define-lex-abbrev minute (:= 2 0-9))
+(define-lex-abbrev second (:= 2 0-9))
+(define-lex-abbrev subsecond (:+ 0-9)) ; don't bother limiting precision in the grammar
+
+(define-lex-abbrev zoneoffset
+  (:or "Z" ; you really really shouldn't use Z for auto-inserted, you should always use zoneoffset, Z is supported for other use cases
+       (:seq (:or "+" "-") (:seq hour (:? ":") minute))))
+
+(define-lex-abbrev date-suffix (:seq "-" month "-" day (:? (:seq (:+ (:or " " "\t")) day-abbrev))))
+(define-lex-abbrev date-normal (:seq year date-suffix))
+(define-lex-abbrev date-ex (:seq year-ex date-suffix))
+(define-lex-abbrev date (:or date-normal date-ex))
+
+(define-lex-abbrev time-normal (:seq hour ":" minute))
+(define-lex-abbrev time-ex
+  (:seq
+   time-normal ; FIXME not happy about zoneoffset being optional, also not happy about earth/mars/moon/space issues
+   ; FIXME EVEN MORE unhappy that hyphen minus was used as the separator because it is reused for negative zoneoffsets
+   (:? (:seq ":" second (:? (:seq "," subsecond))))
+   (:? zoneoffset)))
+(define-lex-abbrev time (:or time-normal time-ex))
+
+(define-lex-abbrev date?time (:seq date (:? (:seq wsnn+ time))))
+(define-lex-abbrev datetime (:seq date wsnn+ time))
+
+(define-lex-abbrev ts-rod-mark (:or "+" "++" ".+" "-" "--"))
+(define-lex-abbrev ts-rod-value (:+ 0-9))
+(define-lex-abbrev ts-rod-unit (char-set "hdwmy"))
+(define-lex-abbrev ts-rod (:seq ts-rod-mark ts-rod-value ts-rod-unit))
+
+(define-lex-abbrev ts-rod-02 (:** 0 2 ts-rod))
+
+(define-lex-abbrev ts-diary
+  (:seq "<%%(" (:* (:~ (:or ">" "\n")))")>"))
+(define-lex-abbrev ts-active (:seq "<" date?time ts-rod-02 ">"))
+(define-lex-abbrev ts-inactive (:seq "[" date?time ts-rod-02 "]"))
+(define-lex-abbrev ts-range-active
+  (:or (:seq ts-active "--" ts-active)
+       (:seq "<" date wsnn+ time "-" time wsnn+ ts-rod-02 ">")))
+(define-lex-abbrev ts-range-inactive
+  (:or (:seq ts-inactive "--" ts-inactive)
+       (:seq "[" date wsnn+ time "-" time wsnn+ ts-rod-02 "]")))
+
+(define-lex-abbrev timestamp ; we use this at the top level since we will have to parse timestamps again later
+  (:or ts-diary ts-active ts-inactive ts-range-active ts-range-inactive))
+
+(module+ test-timestamp
+  (define t-lexer
+    (lexer-srcloc
+     [timestamp (token 'TIMESTAMP lexeme)]))
+
+  (t-lexer (open-input-string "<+01-01-01>"))
+  (t-lexer (open-input-string "[+01-01-01]"))
+
+  )
 
 ;;; markup
 

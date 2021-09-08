@@ -179,13 +179,24 @@
      [src-block (token 'SRC-BLOCK lexeme)]))
   (src-lexer (open-input-string "\n#+begin_src\n#+end_src\n#+end_src\n"))
   (src-lexer (open-input-string "\n#+begin_src\nin\n#+end_src\n#+end_src\n"))
+
+  (src-lexer (open-input-string "
+#+begin_src
+a
+#+end_src
+b
+#+begin_src
+c
+#+end_src
+"))
+
   (src-lexer (open-input-string "
 #+begin_src elisp
 'lol
 #+end_src
 #+end_src"))
 
-(define unk-lexer
+  (define unk-lexer
     (lexer-srcloc
      [src-block (token 'SRC-BLOCK lexeme)]
      [unknown-block (token 'UNK-BLOCK lexeme)]
@@ -198,6 +209,28 @@
 'lol
 #+end_src
 #+end_src"))
+
+  (unk-lexer (open-input-string "
+#+begin_h
+a
+#+end_h
+b
+#+begin_h
+c
+#+end_h
+"))
+
+  (define us-lexer
+    (lexer-srcloc
+     [(from/stop-before unknown-block-line-begin "\n")
+      lexeme]
+     ))
+
+  (us-lexer (open-input-string "
+#+begin_h
+#+end_h
+"))
+
 
   )
 

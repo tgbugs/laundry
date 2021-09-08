@@ -68,7 +68,7 @@ empty-line : newline
 
 @org-nbe-less-df : block-less-dyn
                  | block-begin-line
-                 | block-end-line
+                 ;| block-end-line
                  | babel-call
                  ;| keyword ; lol yep you can affiliate keywords to keywords
                  | keyword-node
@@ -203,10 +203,11 @@ malformed : detached-block-node /wsnn* ; XXX this is a risky thing to do :/ ; XX
           | babel-call-no-colon
           ;| detached-drawer
           | end-drawer
-          | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place
+          | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place XXX variants that start with a newline do not match here
+          | block-end-line ; FIXME remove once this is handled in the lexer
 
 parl-tokens-with-newline : malformed-nl
-malformed-nl : detached-drawer | detached-block
+malformed-nl : detached-drawer | detached-block | UNKNOWN-BLOCK-MALFORMED
 detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME distinguish maybe?
 ; due to changes in the tokenizer the detached blocks always carry their own newline
 ; however if you are testing from the start of a file you may not see the newline there

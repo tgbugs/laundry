@@ -62,11 +62,11 @@
 
 (define (get-block-type lexeme)
   ; TODO use the actual block line parser for this once we have it
-  (define matched (regexp-match #rx"^\n#\\+(begin|BEGIN)_([^ \t\n]+)[ \t\n]" lexeme))
+  (define matched (regexp-match #rx"^\n#\\+(:?begin|BEGIN)_([^ \t\n]+)(?:[ \t]|$)" lexeme)) ; from/stop-before means we never actually see \n
   (if matched
       (last matched)
-      (error lexeme)
-      ))
+      ; have to add the string because apparently racket-mode still loses the context
+      (error "get-block-type:" lexeme)))
 
 (define (token-back-1 TOKEN lexeme input-port)
   ; FIXME multi-byte case
@@ -523,34 +523,72 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                       (:seq "\n" (:+ "*") (:or " " "\t")))
     (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
    ; XXX we can't do start-after on a heading to find a random end_src
+   #; ; easier to dispatch all blocks from the same patterns and issue tokesn based on block-type
    [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
-   [unknown-block
+   [(from/stop-before unknown-block-line-end "\n") ; if we run into one of these by itself it is malformed because it is disconnect
+    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
+   [(from/stop-before unknown-block-line-begin "\n")
     (let* ([block-type (get-block-type lexeme)]
+           [token-name
+            (case block-type
+              ; the only blocks that are differentiated here are types
+              ; that are differentiated here because they are the only
+              ; ones that have parsing impliciations at runtime
+
+              ; note that without smuggling in some state to this
+              ; lexer we can't really lookahead and then parse a
+              ; separate language in here
+              [("src" "SRC") 'SRC-BLOCK]
+              #; ; TODO example, verbatim, etc. that need special fontification
+              [("example" "EXAMPLE") 'EXAMPLE-BLOCK]
+              [else 'UNKNOWN-BLOCK])]
            [make-lexer
             (λ ()
-              (eval-syntax
-               #`(lexer
-                  [(from/stop-before
-                    "\n"
-                    (:or stop-before-heading
-                         (:seq "\n" (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t"))
-                         ))
-                   ; FIXME may need a few more values out of this
-                   lexeme])
-               (namespace-anchor->namespace nsa)))]
+              (let ([stx
+                     #`(lexer
+                        [(from/stop-before
+                          "" ; optional to handle the case where the end line is immediate
+                          (:or stop-before-heading
+                               ; FIXME need an :& to ensure that #+end_block-type is actually in the match
+                               (:seq "\n"
+                                     (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t")
+                                     "\n")))
+                         ; FIXME may need a few more values out of this
+                         lexeme])])
+                #;
+                (log-error "make-lexer stx: ~a" stx)
+                (eval-syntax stx (namespace-anchor->namespace nsa))))]
            [block-lexer (make-lexer)]
            [lexeme-more (block-lexer input-port)]
            [lexeme-combined (string-append lexeme lexeme-more)]
            [was-heading (regexp-match #rx"\n[*]+$" lexeme-more)]
            )
+      #;
+      (println (list "eeeeeeee:" block-type lexeme lexeme-more lexeme-combined))
       (if was-heading
-          (let ([offset (sub1 (string-length (car was-heading)))])
-            (file-position input-port (- (file-position input-port) offset))
-            (set-port-position! input-port offset #:back-line #t)
+          (let* ([offset (string-length (car was-heading))]
+                 [tok (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset)))]
+                 [comb (λ (in)
+                         (file-position in (- (file-position in) offset))
+                         (set-port-position! in offset #:back-line #t))])
+            #;
+            (log-error "was-heading: ~a" offset)
+            ; FIXME backtrack at bof and eof has to be done outside this function TODO put this in a function
+            (if (or (file-stream-port? input-port)
+                 (string-port? input-port))
+                (begin
+                  (comb input-port)
+                  tok)
+                ; XXX resolved down in -stt below FIXME naming and action at a distance
+                (cons tok comb))
             #;
             (error was-heading)
+            ; XXX note that if we hit malformed all the rest of the
+            ; text to the next headline is marked as malformed, the
+            ; elisp implementation has different behavior
+            #;
             (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset))))
-          (token 'UNKNOWN-BLOCK lexeme-combined)))]
+          (token token-name lexeme-combined)))]
    #;
    [unknown-block ; FIXME somehow this is taking priority over src-block? or what?
     ; TODO we should be able to rework this by detecting #+begin_pattern, extracting pattern
@@ -917,8 +955,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
          [shifty (cons? -stt)]
          [stt (if shifty
                   (begin
-                    ; FIXME pretty sure this is broken
-                    (file-position port (sub1 (cdr -stt)))
+                    (if (procedure? (cdr -stt)) ; this is where we resolve the offset combinator
+                        ((cdr -stt) port)
+                        ; FIXME pretty sure this is broken
+                        (file-position port (sub1 (cdr -stt))))
                     (car -stt))
                   -stt)]
          [value (token-struct-val stt)]

@@ -1342,6 +1342,34 @@ drawer contents
   (current-module-path)
 
   (dotest "
+#+begin_h
+* h
+#+end_h
+")
+
+  (dotest "
+#+begin_h
+#+end_h
+")
+
+  (dotest "
+#+begin_h
+#+end_h
+#+begin_c
+#+end_c
+")
+
+  (dotest "
+#+begin_h
+asdf
+#+end_h
+
+#+begin_h
+hrm
+#+end_h
+")
+
+  (dotest "
 #+begin_example org
 ,#+begin_src bash -r -l :noweb yes
 (+ 1 2)
@@ -1995,6 +2023,10 @@ echo oops a block
 # c 2
 p 2
 " #:nte 'comment-element)
+
+  (dotest "#+begin_x
+* h
+#+end_x" #:nte 'heading)
 
   (dotest "* ")
   (dotest "* " #:eq-root h-l1)

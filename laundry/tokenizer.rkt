@@ -599,7 +599,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
               ; FIXME this is the result of stop/before matching
               (token 'UNKNOWN-BLOCK-MALFORMED lexeme-combined) ; eof case or immediate heading case
               (begin
-                ;#;
+                #;
                 (println (list 'aaaaaaaaaaaaaaaaaaa lexeme lexeme-combined))
                 (token token-name lexeme-combined)))))]
    #;
@@ -797,16 +797,22 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ;["#+" (token 'HASH-PLUS)] ; do not want
    ;[(from/to "#" "\n") (token 'COMMENT lexeme)] ; lol can't use this
    ;[whitespace (token 'WS lexeme)]
-   ["." (token 'PERIOD lexeme)]
-   [":" (token 'COLON lexeme)]
-   ["[" (token 'LSB lexeme)]
-   ["]" (token 'RSB lexeme)]
 
-   ["_" (token 'UNDERSCORE lexeme)]
-   ["-" (token 'HYPHEN lexeme)]
-   ["+" (token 'PLUS lexeme)]
+   [":" (token 'COLON lexeme)] ; XXX not sure what needs this but it is related to drawer tests
+   ["_" (token 'UNDERSCORE lexeme)] ; XXX something in test keywords needs this
+
+   ; the keyword failures FIXME keyword failures should probably parse as that directly?
+   ["+" (token 'PLUS lexeme)] ; #+ needs this apparently? ; FIXME
+   ["[" (token 'LSB lexeme)]  ; #+x[ ]x: ; FIXME
+   ["]" (token 'RSB lexeme)]  ; #+x[ ]x: ; FIXME
+   ["." (token 'PERIOD lexeme)] ; needed for ordered lists  ; FIXME lex those lines
+   [")" (token 'R-PAREN lexeme)] ; needed for ordered lists  ; FIXME lex those lines
+   ["-" (token 'HYPHEN lexeme)] ; needed for unordred lists ?? ; FIXME
+   ["@" (token 'AT lexeme)] ; needed for the list start [@99]
+
+   #| ; I'm pretty sure we can drop all of this now
+
    ["#" (token 'HASH lexeme)]
-   ["@" (token 'AT lexeme)]
    ["%" (token 'PERCENT lexeme)]
 
    ["|" (token 'PIPE lexeme)]
@@ -817,19 +823,21 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["'" (token 'SQ lexeme)]
    ["\"" (token 'DQ lexeme)]
    ["\\" (token 'BS lexeme)]
+
+   ["(" (token 'L-PAREN lexeme)]
+   |#
    
    ; strings don't work because longest match means we can never detect the escape sequence
    ;[(from/to "\"" "\\") (token 'DQ-TO-ESC lexeme)]
    ;[(from/to "\"" "\"") (token 'DQ-TO-DQ lexeme)] ; ARGH longest match kills us here again :/
 
-   ["(" (token 'L-PAREN lexeme)]
-   [")" (token 'R-PAREN lexeme)]
-
    [0-9 (token 'DIGIT lexeme)]
+   #|
    [(:= 2 0-9) (token 'DIGIT-2 lexeme)] ; dates
    [(:= 3 0-9) (token 'DIGIT-3 lexeme)] ; dates
    [(:= 4 0-9) (token 'DIGIT-4 lexeme)] ; dates
-   [(:>= 5 0-9) (token 'DIGIT-N lexeme)]
+   |#
+   [(:>= 2 0-9) (token 'DIGIT-N lexeme)]
    ;["l" (token 'CHAR-LOWER-L lexeme)] ; HAH BEGONE FOUL INSTANCE OF A THING
    ["X" (token 'CHAR-UPPER-X lexeme)] ; FOO
    [alpha (token 'ALPHA lexeme)] ; FIXME TODO alpha+ ?

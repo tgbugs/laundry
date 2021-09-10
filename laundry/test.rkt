@@ -421,7 +421,8 @@
   (dotest "#lang org\n:end:\n*** \n|\nx|") ; can't repro
   (dotest "* \n:end:\n* \n|\nx|") ; can't repro
 
-  (dotest ":a:\n* \n:b:\n* ") ; cant' seem to repro
+  (dotest ":a:\n* \n:b:\n* ") ; XXX this repros now
+
   (dotest "\n:a:\n* \n:b:\n* ") ; cant' seem to repro
 
   (dotest "
@@ -441,8 +442,6 @@
 :e:
 * f
 ")
-
-
 
   )
 
@@ -732,7 +731,7 @@
   (dotest " *")
   (dotest " * ")
 
-  (dotest "  #" #:node-type 'comment) ; -> comment
+  (dotest "  #" #:node-type 'comment) ; -> comment XXX FIXME broken comment element should be matching this
   (dotest "#" #:node-type 'comment) ; -> comment
   (dotest "# " #:node-type 'comment) ; -> comment
   (dotest "  #a" #:node-type 'paragraph)
@@ -2265,6 +2264,7 @@ a
 
 (module+ test-not-markup
   (current-module-path)
+  (laundry-tokenizer-debug #f)
 
   (dotest "+wat" #:node-type 'paragraph)
   (dotest " +wat" #:node-type 'paragraph)
@@ -2309,14 +2309,13 @@ a
    (submod ".." test-npnn)
    (submod ".." test-cell)
    (submod ".." test-row)
-   (submod ".." test-table)
+   (submod ".." test-table) ; XXX
    (submod ".." test-planning)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
    (submod ".." test-markup)
    (submod ".." test-macros)
-   (submod ".." test-comments)
-   #;
+   (submod ".." test-comments) ; XXX
    (submod ".." test-rando)
    (submod ".." test-drawers)
    (submod ".." test-string)

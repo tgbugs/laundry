@@ -100,9 +100,15 @@ paragraph-node : PARAGRAPH
                | ( PARAGRAPH-2 @not-newline?
                  ; | ( LINK | LINK-AB ) @not-newline?
                  ; | hyperlink @not-newline? ; XXX moved to paragraph parser for consistency, double parsing an issue for now
-                 | paragraph-line )+ PARAGRAPH-EOF?
+                 | paragraph-line
+                 )+ PARAGRAPH-EOF?
 
-paragraph-line : newline parl-lines
+; this only needs to handle the single line cases that are ambiguous for the tokenizer
+; note stars is safe here because headlines don't use the standalone stars token
+paragraph-line : newline ( LSB | RSB | HASH | PLUS | UNDERSCORE | NEGATED-SET | wsnn | ALPHA | ALPHA-N | END-DB | COLON | malformed | stars )+
+               | parl-tokens-with-newline
+
+-paragraph-line : newline parl-lines
                | parl-tokens-with-newline
 ; paragraph-line-d is used in drawers
 paragraph-line-d : newline ( parl-lines )
@@ -230,7 +236,7 @@ nc-start : parl-ncln-bt-l-d
 headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
 headline : HEADING
 
-stars : ASTERISK | STARS ; ASTERISK+ destorys performance
+stars : STARS ; ASTERISK+ destorys performance
 
 ;;; planning
 

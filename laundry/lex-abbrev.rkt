@@ -437,8 +437,10 @@ c
              ")"
              "]"
              ","
+             ";" ; pretty sure this one is safe
              "!"
              "?"
+             "@"
              "%"
              "$"
              "^"
@@ -447,9 +449,13 @@ c
             (:seq (:or "+" "-") (:~ whitespace))
             #; ; broken ? or something else is wrong?
             (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
+            (:seq (:+ "*") (:~ (:or whitespace "*")))
             ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
             ; FIXME TODO how to handle cases like \n123456789\n
             (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
+            (:seq "[" (:~ "f"))
+            (:seq "[f" (:~ "n"))
+            (:seq "[fn" (:~ ":")) ; TODO see if we can get the actual complement of footnote label?
             (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
             (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
             (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))

@@ -68,7 +68,7 @@ empty-line : newline
 
 @org-nbe-less-df : block-less-dyn
                  ;| block-end-line
-                 | babel-call
+                 ;| babel-call
                  ;| keyword ; lol yep you can affiliate keywords to keywords
                  | keyword-node
                  | comment-element
@@ -108,94 +108,8 @@ paragraph-node : PARAGRAPH
 paragraph-line : newline ( LSB | RSB | HASH | PLUS | UNDERSCORE | NEGATED-SET | wsnn | ALPHA | ALPHA-N | END-DB | COLON | malformed | stars )+
                | parl-tokens-with-newline
 
--paragraph-line : newline parl-lines
-               | parl-tokens-with-newline
-; paragraph-line-d is used in drawers
-paragraph-line-d : newline ( parl-lines )
-; citation : CITATION ; don't use this here, handle only in paragraph
-;hyperlink : link-regular | link-angle
-;link-regular : LINK
-;link-angle : LINK-AB ; we don't actually use this here
-
-parl-indent : @wsnn* ; XXX needed to determine alignment when reconstructing plain lists ; FIXME does this needs to be * not + so that zero indent is straight forward?
-@parl-lines : parl-start not-newline?
-            ;| parl-indent parl-wsnn
-            | parl-indent parl-se-wsnn ; FIXME this has got to be wrong ...
-            | parl-indent malformed not-newline?
-            | stars ; just stars with nothing else is a paragraph
-            | wsnn* STARS wsnn*
-            | wsnn+
-
-; to prevent keywords this one cannot end with not-newline? has to go all the way to the end
-parl-se-wsnn : @digits
-              | @alphas
-              | COLON
-              ;| HASH PLUS not-whitespace? not-colon-whitespace ( @wsnn+ not-newline )? ; #+a:b:c case ; XXX insanely these are actually keywords
-              ;| HASH PLUS COLON not-colon-newline ; XXX now a keyword
-              ;| HASH PLUS COLON ; yeah, I tested this, it can't be empty so this is ok XXX changing the behavior so this is a keyword now
-              | HASH PLUS not-colon-newline
-              ;                                             #+x[ : ] style case
-              | HASH PLUS not-colon-whitespace? wsnn+ COLON ( not-rsb-newline not-colon-newline? )? ; XXX I think we may still be missing some possible cases
-              | HASH PLUS not-colon-whitespace? wsnn+ COLON RSB not-colon-newline? ( wsnn+ not-newline )?
-              | HASH PLUS ; by itself
-              | big-tokes-less-d-s-blk ; TODO the not-colon bits eg ak-key parl-ncn-bt-l-d
-              ;| malformed-wsnn ; the only member here is un-affiliated keyword, which is not a paragraph, but a keyword
-
-parl-start : not-pl-start-whitespace1 ; no wsnn char and we're ok XXX surely this is overly broad?
-           | stars ( not-asterisk-whitespace1 | word-char-n ) ; not-whitespace1 would match another asterisk >_< ; XXX NOTE word-char-n is not word char it is alpha numeric (duh)
-           | parl-indent parl-wsnn
-           ; | alpha ; pretty sure this is wrong due to parl-start not-newline? above !? elisp impl doesn't match spec
-           ; | alpha-n ; is this ok due to the lists being broken or what?
-           ; not-pl-start-newline1 wsnn* not-pl-start-newline1 ; I'm forgetting why we needed to duplicate here?
-           ; I think this was just some incorrect late night thinking
-
-parl-ws-bt : not-whitespace1 | big-tokes ; XXX big-tokes-stars ...
-parl-ws-bt-l-s : not-whitespace1 | word-char-n | big-tokes-less-s
-parl-ncn-bt-l-d : not-colon-newline1 | big-tokes-less-d
-parl-prp-bt : not-prp-newline1 | big-tokes
-parl-pw-bt : not-plus-whitespace1 | big-tokes | word-char-n ; FIXME word-char vs word-char-n probably can be collapsed into one
-
-;                     [:                             [:
-parl-sigh : HASH PLUS not-colon-lsb-whitespace? wsnn+ not-colon-lsb-whitespace? COLON ; not-newline?
-          ;           LSB not tech req            only a colon in options if space first  if space           anything after rsb except rsb is paragraph even another LSB RSB pair
-          | HASH PLUS not-colon-whitespace? LSB ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? RSB not-colon-rsb-newline COLON ; not-newline?
-          | HASH PLUS not-colon-whitespace? ( not-colon-newline? wsnn+ not-newline )? wsnn+ not-newline? not-colon-rsb-newline COLON ; implicit LSB RSB variants
-          | HASH PLUS not-colon-lsb-whitespace? wsnn+ COLON
-
-parl-wsnn : @bt-chars ; XXX this branch is very rarely hit
-          | parl-sigh
-          ; alpha-n ; can't have alpha-n here because not-newline? will -> aa) at some point
-          ; TODO I think markup has to go here?
-          ; TODO don't gobble footnote-definition, the intersection of so many complements
-          | ( ASTERISK | PLUS | HYPHEN ) parl-ws-bt-l-s
-          | wsnn+ STARS ; have to have wsnn+ for disjointness with headings
-          | ( @digits | @alphas ) parl-prp-bt
-          | ( @digits | @alphas ) ( PERIOD | R-PAREN ) parl-ws-bt
-          | HASH parl-pw-bt ; #+ and # are claimed but #anythingelse is paragraph ; this was broken due to word-char vs word-char-n issues
-          ; FIXME the #+ part of this is a nightmare (not surprisingly)
-          ; | malformed ; FIXME this will kill parl-wsnn which is a sa node right now
-          ; I think the right answer here is any whitespace before a colon
-          ; or no colon, because no whitespace and ANY colon on the line -> keyword
-          ; badly broken for a variety of reason
-          ; | HASH PLUS not-whitespace-l-d? wsnn+ not-newline? COLON ; FIXME broken for #+:end: lol: oops XXX also broken for #+k[: ]: c
-          ; | not-colon-newline COLON not-colon-newline ; FIXME quite broken
-          ; the explicit LSB is not required in this line, but it is included for clarity since it is the only addition at the start
-          | COLON not-colon-newline
-          | NEGATED-SET ; FIXME not sure why these are not being picked up in some other way ...
-          | UNDERSCORE ; FIXME WAT WAT WAT
-          | AT
-          | PERCENT
-          | PERIOD
-          | L-PAREN
-          | R-PAREN ; FIXME maybe also need some others of not-pl-start-whitespace1 ??
-
 malformed : planning-dissociated
-          | ak-key-no-colon
-          | babel-call-no-colon
-          ;| detached-drawer
-          | end-drawer
           | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place XXX variants that start with a newline do not match here
-          ;| block-end-line ; FIXME remove once this is handled in the lexer
 
 parl-tokens-with-newline : malformed-nl
 malformed-nl : detached-drawer | detached-block | UNKNOWN-BLOCK-MALFORMED
@@ -204,22 +118,6 @@ detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME disti
 ; however if you are testing from the start of a file you may not see the newline there
 ; because it is stripped as an imlementation detail
 detached-block : SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED
-
-;malformed-wsnn : un-affiliated-keyword ; doubling up on not-newline causes issues
-
-;; TODO need to complete the negation of additional forms that can
-;; appear at the start of paragraphs
-
-; FIXME and no options
-ak-key-no-colon : ak-key parl-ncn-bt-l-d
-babel-call-no-colon : CALL parl-ncn-bt-l-d
-
-; TODO negate
-no-colon-no-keywords : CALL nc-start
-parl-ncln-bt-l-d : not-colon-lsb-newline1 | big-tokes-less-d
-nc-start : parl-ncln-bt-l-d
-         | LSB not-rsb-newline1
-         | COLON
 
 ;;;; *
 
@@ -271,8 +169,8 @@ plan-sep : /wsnn*
 
 planning-malformed : plan-mal-info+
 plan-mal-info : plan-mal-sep? plan-keyword /COLON plan-mal-sep? ; XXX will gobble?
-plan-mal-sep : not-plan-keyword-timestamp-newline
-             | plan-keyword not-colon-newline
+plan-mal-sep : plan-keyword ; not-colon-newline
+             ;| not-plan-keyword-timestamp-newline ; FIXME do it in the lexer
 
 plan-info : plan-keyword /COLON /wsnn* plan-timestamp?
 plan-keyword : plan-dead | plan-sched | plan-open | plan-close
@@ -311,17 +209,16 @@ property-drawer : pdrawer-unparsed ;| newline wsnn* properties node-property* /n
 ; NOTE when this fails to parse, it WILL parse as a regular drawer
 pdrawer-unparsed : DRAWER-PROPS | DRAWER-PROPS-EOF
 properties : PROPERTIES-D ; COLON "properties" COLON
-end-drawer : END-D ; COLON "end" COLON
-plus : PLUS
-node-property : /newline wsnn* /COLON property-name plus? /COLON [ property-value ] ; the spec does not say it but the implementation allows value to be empty
+;plus : PLUS
+;node-property : /newline wsnn* /COLON property-name plus? /COLON [ property-value ] ; the spec does not say it but the implementation allows value to be empty
 ; the spec for node-property and the implementation are different
 ; the second wsnn is not documented but is required
 ; plus is optional but the spec says that empty names are not allowed
 ; this is false :+: will produce a property whose value is the empty string
 ; our implementation _will_ break in the case where the elisp one succeeds
 ; note also that elisp org upcases all property values
-property-name : @not-whitespace* @not-plus-whitespace1
-property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newline will matchs wsnn{2,}
+;property-name : @not-whitespace* @not-plus-whitespace1
+;property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newline will matchs wsnn{2,}
 
 ; NOTE you cannot nest drawers, an internal drawer heading inside another drawer
 ; is just text, though it does highlight incorrectly
@@ -334,52 +231,54 @@ drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues he
 
 ;;; comments
 
-comment-element : ( COMMENT-ELEMENT | comment-line)+ ; remember kids one-or-more != one-and-maybe-more?
-comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
+comment-element : ( COMMENT-ELEMENT
+                    ; | comment-line
+                    )+ ; remember kids one-or-more != one-and-maybe-more?
+; comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
 
 ;;; keywords
 
 @nlwsnn : /newline wsnn*
-babel-call : nlwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
+;babel-call : nlwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
 ; todo-spec-line : TODO-SPEC-LINE
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
-keyword-node : /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
-             | keyword-whole-line
+keyword-node : keyword-whole-line
+             ; | /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
 keyword-whole-line : KEYWORD-ELEMENT
 ;keyword-whole-line : KEYWORD-LINE ; XXX this isn't quite working for some reason but that may be ok
 ; XXX in order to get consistent behavior the keyword grammar needs to be a subparser
 ; kw-options here is required to handle cases with whitespace, it needs a post-processing pass
-kw-key-options : @kw-key @keyword-options? ; splice out because we have to reparse
+; kw-key-options : @kw-key @keyword-options? ; splice out because we have to reparse
 
-kw-key : not-whitespace ; XXX there is a tradeoff here between implementation complexity and ambiguity
+; kw-key : not-whitespace ; XXX there is a tradeoff here between implementation complexity and ambiguity
 ;kw-value : not-colon-whitespace not-colon-newline* ; ensure that the value does not gobble leading whitespace
-kw-value : not-newline ; but ambiguity ...
+; kw-value : not-newline ; but ambiguity ...
 
 ; keyword : todo-spec-line | nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-keyword : nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
-             | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
+; keyword : nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
+;keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
+;             | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
 
-kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably FIXME END-DB and BEGIN-DB are only keywords if there is no trailing whitespace ?! this is a messy bit
-keyword-options : LSB not-newline? RSB ; FIXME this is almost certainly incorrectly specified
+; kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably FIXME END-DB and BEGIN-DB are only keywords if there is no trailing whitespace ?! this is a messy bit
+; keyword-options : LSB not-newline? RSB ; FIXME this is almost certainly incorrectly specified
 
 ; last colon not followed by whitespace is what we expect here
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
 ;keyword-key : not-sb-colon-whitespace ; XXX paragraph is not set up to handle this, and they need to be keywords
-keyword-key : not-whitespace ; FIXME this should include author date and title surely? ; XXX will match #+k[x]:
-keyword-value : not-colon-newline
+; keyword-key : not-whitespace ; FIXME this should include author date and title surely? ; XXX will match #+k[x]:
+; keyword-value : not-colon-newline
 
-keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
-keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
-                   | not-whitespace-l-d? /wsnn* not-newline? COLON not-newline? ; FIXME this seems wrong
+; keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
+; keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
+;                   | not-whitespace-l-d? /wsnn* not-newline? COLON not-newline? ; FIXME this seems wrong
 
 ;;; affiliated keywords (do not implement as part of the grammar)
 
-ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
-ak-key-attr : ATTR-PREFIX attr-backend
-attr-backend : @wordhyus
+; ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
+; ak-key-attr : ATTR-PREFIX attr-backend
+; attr-backend : @wordhyus
 
 ;;; blocks
 
@@ -407,8 +306,8 @@ blk-dyn-contents : org-node-dyn* ;anything except #+end: basically
 ;org-node-dyn : affiliated-keyword* ( drawer | org-nbe-less-d | paragraph-line | newline )
 org-node-dyn : drawer | org-nbe-less-d | paragraph-line | newline
 
-@no-headlines : ( PARAGRAPH @not-newline? | line-not-headline)+
-@line-not-headline : newline+ @start-not-headline @not-newline?
+;@no-headlines : ( PARAGRAPH @not-newline? | line-not-headline)+
+; @line-not-headline : newline+ @start-not-headline @not-newline?
                   ; | paragraph ; XXX pretty sure that paragraph should not be needed here and that #+end_ forms should never be parl
                   ;| newline ; XXX not-newline? other elements? XXX cannot have newline by itself it will eat incorrectly
 ; not clear what order to do this in, parse to the end of the drawer in one go and then
@@ -432,13 +331,13 @@ blk-src-malformed : SRC-BLOCK-MALFORMED
 blk-src : blk-src-whole ;| /newline blk-src-begin blk-src-contents? nlpws blk-src-end
 blk-src-whole : SRC-BLOCK ; XXX requires a nested parser OR chaining the positions of input port in the lexer to produce more than one token i.e. checking in next-token for a list
 ;blk-src : blk-src-begin newline blk-src-contents? wsnn* blk-src-end
-blk-src-begin : ( BEGIN-SRC wsnn blk-src-line-contents | BEGIN-SRC ) /wsnn*
+;blk-src-begin : ( BEGIN-SRC wsnn blk-src-line-contents | BEGIN-SRC ) /wsnn*
 ;blk-src-begin-malformed : BEGIN-SRC /wsnn* newline ; FIXME newline first grammar issues :/
-blk-src-end : END-SRC /wsnn*
-blk-src-contents : no-headlines ; FIXME we just need the bounds for the contents of the block for 2nd pass?
+;blk-src-end : END-SRC /wsnn*
+;blk-src-contents : no-headlines ; FIXME we just need the bounds for the contents of the block for 2nd pass?
 ;blk-src-contents : no-headlines-hungry-no-src-end ; this is a version that eats newlines
-blk-src-line-contents : language wsnn blk-src-line-rest-alt | language wsnn*
-language : @not-whitespace ; FIXME
+;blk-src-line-contents : language wsnn blk-src-line-rest-alt | language wsnn*
+;language : @not-whitespace ; FIXME
 
 blk-unknown : UNKNOWN-BLOCK
 
@@ -459,45 +358,45 @@ blk-unknown : UNKNOWN-BLOCK
 ; ideally with header arguments which are general and extensible
 ; before that can happen there needs to be an upgrade path for existing users
 
-blk-src-line-rest-alt : switches-sane /wsnn blk-src-args-after-switches-sane
-                      | switches-sane
-                      | @not-switch @not-newline?
+;blk-src-line-rest-alt : switches-sane /wsnn blk-src-args-after-switches-sane
+                      ;| switches-sane
+                      ;| @not-switch @not-newline?
 
-@--test--switches-sane : switches-sane
-switches-sane : ( switch-sane ( /wsnn format-string )? /wsnn )* switch-sane ( /wsnn format-string )?
-switch-sane : switch-sign alpha
-last-switch-string : wsnn format-string
+;@--test--switches-sane : switches-sane
+;switches-sane : ( switch-sane ( /wsnn format-string )? /wsnn )* switch-sane ( /wsnn format-string )?
+;switch-sane : switch-sign alpha
+;last-switch-string : wsnn format-string
 
-@switch-sign : PLUS | HYPHEN
+;@switch-sign : PLUS | HYPHEN
 
-not-switch : @not-plus-hyphen1
-| PLUS   @not-alpha-newline1
-| HYPHEN @not-alpha-newline1
-| PLUS   @alpha @not-whitespace1
-| HYPHEN @alpha @not-whitespace1
+;not-switch : @not-plus-hyphen1
+;| PLUS   @not-alpha-newline1
+;| HYPHEN @not-alpha-newline1
+;| PLUS   @alpha @not-whitespace1
+;| HYPHEN @alpha @not-whitespace1
 
-blk-src-parameters : COLON not-newline ; TODO
+;blk-src-parameters : COLON not-newline ; TODO
 ; NOTE the correct parameters grammar is a subset of
 ; the not-a-format-string grammar since it starts with colon
-                   | wsnn+ COLON not-newline ; TODO
+                   ;| wsnn+ COLON not-newline ; TODO
 
-@blk-src-args-after-switches-sane : blk-src-parameters
-                                  | @not-dq-ph-newline not-newline? ; TODO not-dq-ph-colon-newline for params
-                                  | switch-sign not-alpha-newline1 not-newline?
-                                  | switch-sign ( @alpha @not-whitespace | @word-char-n ) @not-newline?
-                                  | blk-src-args-broken ; XXX user done goofed
+;@blk-src-args-after-switches-sane : blk-src-parameters
+;                                  | @not-dq-ph-newline not-newline? ; TODO not-dq-ph-colon-newline for params
+;                                  | switch-sign not-alpha-newline1 not-newline?
+;                                  | switch-sign ( @alpha @not-whitespace | @word-char-n ) @not-newline?
+;                                  | blk-src-args-broken ; XXX user done goofed
 
 ; you may have a dq there but then no more dq at all on the line
 ; this will be extremely weird, but could happen
-blk-src-args-broken : DQ @not-dq-newline?
+;blk-src-args-broken : DQ @not-dq-newline?
 
-format-string : /DQ format-string-contents /DQ
+;format-string : /DQ format-string-contents /DQ
 ; TODO other escape sequences
-format-string-contents : ( @not-bs-dq-newline | /BS DQ | BS )+
+;format-string-contents : ( @not-bs-dq-newline | /BS DQ | BS )+
 
-string : DQ string-contents DQ
+;string : DQ string-contents DQ
 ; TODO other escape sequences
-string-contents : ( @not-bs-dq | /BS DQ | BS )+
+;string-contents : ( @not-bs-dq | /BS DQ | BS )+
 
 ;;;; |
 

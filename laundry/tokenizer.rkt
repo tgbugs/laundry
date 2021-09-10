@@ -785,6 +785,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    
    ; the call ... not actually keyword and not actually associated
    ; XXX TODO but should be
+   #;
    [(:or "#+CALL" "#+call") (token 'CALL lexeme)] ; FIXME move to the keyword module of the expander
 
    ;[(from/to "@@" "@@" (token 'EXPORT-SNIPPET lexeme))] ;; TODO this might actually work ... except for nested blocks

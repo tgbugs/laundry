@@ -114,6 +114,7 @@
          (:* (:~ "\n")))
    "\n"))
 
+#;
 (define-lex-abbrev todo-spec-line ; XXX FIXME remove as overly complex
   ; XXX TODO FIXME BOF issues >_<
   (from/stop-before (:seq "\n"
@@ -274,22 +275,47 @@ c
 
 ;;;; drawers
 
+(define-lex-abbrev drawer-end-comp
+  (complement (:seq any-string (:or ":end:" ":END:") (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+
+(define-lex-abbrev drawer-prop-comp
+  (complement (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+
+(define-lex-abbrev drawer-PROP-comp
+  (complement (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+
 (define-lex-abbrev drawer-props
-  (:or (from/stop-before (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") "\n")
-                         ; FIXME NOTE there are cases where the pattern in the
-                         ; names of the property values for a draw cause it to NO
-                         ; LONGER BE a property drawer, this is almost certainly a
-                         ; design flaw in org mode which makes it difficult to
-                         ; parse the property drawers correctly and efficiently in
-                         ; this way, the other possibility is to accept the more
-                         ; complex grammar that we already wrote which more or
-                         ; less works as expected at the expense of performance
-                         (:or stop-before-heading
-                              (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
+  (:or (:& (from/stop-before
+            (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t"))
+            ; FIXME NOTE there are cases where the pattern in the
+            ; names of the property values for a draw cause it to NO
+            ; LONGER BE a property drawer, this is almost certainly a
+            ; design flaw in org mode which makes it difficult to
+            ; parse the property drawers correctly and efficiently in
+            ; this way, the other possibility is to accept the more
+            ; complex grammar that we already wrote which more or
+            ; less works as expected at the expense of performance
+            (:or stop-before-heading
+                 (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
+           ; I don't understand how the variant above matches things where :end: has 
+           ; something other than whitespace in front of it :/
+           drawer-prop-comp
+           (:or (:seq any-string "\n" (:+ "*"))
+                (:seq any-string "\n" (:* " " "\t") ":end:" (:* " " "\t"))))
        ; sigh legacy support for this
-       (from/stop-before (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") "\n") ; FIXME does the case have to match?
-                         (:or stop-before-heading
-                              (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))))
+       (:& (from/stop-before
+            (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t"))
+            (:or stop-before-heading
+                 (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))
+           drawer-PROP-comp
+           (:or (:seq any-string "\n" (:+ "*"))
+                (:seq any-string "\n" (:* " " "\t") ":END:" (:* " " "\t"))))
+       (:& drawer-end-comp
+        (from/stop-before
+         (:or
+          (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") "\n" (:* " " "\t") ":end:" (:* " " "\t"))
+          (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") "\n" (:* " " "\t") ":END:" (:* " " "\t")))
+         "\n"))))
 
 (define-lex-abbrev drawer-start-line
   (:& (complement (:seq "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t")))
@@ -304,12 +330,27 @@ c
 (define-lex-abbrev drawer-end
   (:seq drawer-end-line "\n"))
 
+(define-lex-abbrev drawer-ish-comp-begin
+  ; FIXME seq this any-string?
+  (complement (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t")
+                    (:+ (:~ (:or " " "\t" "\n"))))))
+
+(define-lex-abbrev drawer-ish-comp-end
+  (:or (:seq any-string "\n" (:+ "*"))
+       (:seq any-string "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t"))))
+
 (define-lex-abbrev drawer-ish
   ; FIXME this is not right, check the spec to see
-  (from/stop-before
-   drawer-start
-   (:or stop-before-heading
-        drawer-end)))
+  (:or
+   (:&
+    (from/stop-before
+     drawer-start-line
+     (:or stop-before-heading
+          drawer-end))
+    drawer-ish-comp-begin
+    drawer-ish-comp-end)
+   (:& (complement (:seq any-string (:or ":end:" ":END:") (:* " " "\t") (:+ (:~ (:or " " "\t" "\n")))))
+       (from/stop-before (:seq drawer-start-line drawer-end-line) "\n"))))
 
 (module+ test-drawer
   (define d-lexer
@@ -515,6 +556,7 @@ c
 ;;; line break
 
 (define-lex-abbrev line-break ; otherwise non-empty ? that is a nasty lookbehind that we can't do here
+  ; FIXME stop-before "" does not work
   (from/stop-before "" (:seq #;(:~ "\n") "\\" "\\" (:* (:or " " "\t")) "\n")))
 
 ;;; citation

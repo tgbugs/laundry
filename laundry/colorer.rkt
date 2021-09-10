@@ -8,6 +8,21 @@
 
 (provide colorer)
 
+(define todo-keywords (make-parameter '("TODO" "DONE")))
+
+(define (todo-keyword-line? line)
+  ; TODO factor out so that this is shared with the bit in the expander
+  (when (regexp-match #rx"^#\\+(todo|TODO):" line)
+    (let* ([groups (regexp-split #px"\\s+" (regexp-replace #px"(^\\s+|\\s+$)" "" (substring line 7)))]
+           [new-todo-keywords (remove "|" groups)]
+           [regroups (reverse groups)]
+           [_ (println (list 'todo-list-groups groups))]
+           [dones? (member "|" groups)] ; FIXME use a grammar so we can error on multiple pipes
+           [dones (if dones? (cdr dones?) (list (car regroups)))]
+           [todos (reverse (if dones? (cdr (member "|" regroups)) (cdr regroups)))])
+      (todo-keywords (append new-todo-keywords (todo-keywords)))
+      (void))))
+
 #;
 (module+ sigh ; not sure where to put this to get it to not cause errors in drr
   (require
@@ -82,6 +97,10 @@
     #;
     (log-error "lc cat: ~a" category)
     (case category
+      [(heading-line)
+       (proc-heading peek-port
+                     lexeme composite-category paren start-pos end-pos backup-distance mode)
+       ]
      [(org-drawer-start)
       (proc-drawer peek-port
                    lexeme composite-category paren start-pos end-pos backup-distance mode)]
@@ -105,6 +124,12 @@
      (car next)
      (cdr next))))
 
+
+(define (proc-heading peek-port
+                      lexeme composite-category paren start-pos end-pos backup-distance mode)
+  (let ([cycle (heading-cycle lexeme)])
+    (values lexeme cycle paren start-pos end-pos backup-distance
+            (cons (cons 'heading cycle) mode))))
 
 (define (proc-drawer peek-port
                      lexeme composite-category paren start-pos end-pos backup-distance mode
@@ -225,7 +250,11 @@
    [(from/stop-before "\n#lang org" "\n")
     (values lexeme 'comment #f #f (pos lexeme-start) (pos lexeme-end))]
    [heading ; TODO look into how to chain lexers for this
-    (values lexeme (heading-cycle lexeme) 'comp #f (pos lexeme-start) (pos lexeme-end))]
+    #; ; TODO this is the solution, but we need the heading lexer to make it work
+    (:& (:seq "\n" (:+ "*"))
+     (from/stop-before ""
+      stop-before-heading))
+    (values lexeme 'heading-line  'comp #f (pos lexeme-start) (pos lexeme-end))]
    [comment-element
     (values lexeme 'comment #f #f (pos lexeme-start) (pos lexeme-end))]
    [(:or (:seq "\n" plain-list-start)
@@ -266,7 +295,9 @@
     ; putative drawer bits
     (values lexeme 'symbol #f (pos lexeme-start) (pos lexeme-end))]
    [keyword-element ; affiliated keywords and friends XXX broken for #+begin_:
-    (values lexeme 'org-meta-line 'comp #f (pos lexeme-start) (pos lexeme-end))]
+    (begin
+      (todo-keyword-line? lexeme)
+      (values lexeme 'org-meta-line 'comp #f (pos lexeme-start) (pos lexeme-end)))]
    [paragraph-2
     (begin
       #;
@@ -320,6 +351,11 @@
       ; best case it searches backward to the previous heading in reasonably
       ; sized chunks, and then once found it parses that section to the next
       ; heading, and probably uses a cache of the parse tree to keep it fast
+
+      #; ; TODO heading lexer
+      (and (not (null? mode))
+           (eq? (caar mode) 'heading))
+
       (if (null? token-stack)
           (let ([lexeme 'lol]
                 [category 'other]
@@ -378,7 +414,12 @@
                               (eq? (caar mode) 'block)
                               (eq? category 'org-block-end-line)
                               (string=? (get-block-type lexeme) (cdar mode))
-                              )]
+                              )
+                         ; FIXME return value ??
+                         ]
+                        #; ; FIXME this is handled earlier?
+                        [(and (not (null? mode))
+                              (eq? (caar mode) 'heading))]
                         [else
                          (values
                           lexeme

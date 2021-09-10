@@ -22,7 +22,8 @@
          find-last
          get-block-type
 
-         (rename-out [debug org-tokenizer-debug])
+         (rename-out [debug laundry-tokenizer-debug]
+                     [final-port laundry-final-port])
 
          #; ; colorer needs its own
          token-stop-for-paragraph
@@ -72,17 +73,6 @@
       ; have to add the string because apparently racket-mode still loses the context
       (error "get-block-type:" lexeme)))
 
-(define (token-back-1 TOKEN lexeme input-port)
-  ; FIXME multi-byte case
-  (file-position input-port (sub1 (file-position input-port)))
-  (let-values ([(l c p) (port-next-location input-port)])
-    (set-port-next-location!
-     input-port
-     l ; TODO newline case
-     (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
-     (and p (sub1 p))))
-  (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
-
 (define (set-port-position! input-port offset #:back-line [back-line #f])
   "do it in string chars not in bytes"
   (let-values ([(l c p) (port-next-location input-port)])
@@ -94,11 +84,22 @@
      ))
   )
 
+(define (token-back-1 TOKEN lexeme input-port)
+  ; FIXME multi-byte case
+  (file-position input-port (sub1 (file-position input-port)))
+  (let-values ([(l c p) (port-next-location input-port)])
+    (set-port-next-location!
+     input-port
+     l ; TODO newline case
+     (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
+     (and p (sub1 p))))
+  (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
+
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
   "Encapsulates the machinery needed to correctly reset the location of input-port when
 using from/stop-before where the stop-before pattern contains multiple charachters."
-  #;
-  (print (list 'lexeme-original lexeme))
+  (when (debug)
+    (print (list 'token-stop-before 'lexeme-original lexeme)))
   (if (and eof-ok (eq? (peek-char input-port) eof))
       (token TOKEN-EOF lexeme)
       (let*-values ([(lexeme-correct offset) (find-last char lexeme)]
@@ -108,16 +109,14 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                                 offset))]
                     #;
                     [(this-offset) (- (add1 (file-position input-port)) position-correct)])
-        #;
-        (println (list 'ooooooo lexeme-correct offset (position-offset start-pos) position-correct))
+        (when (debug)
+          (println (list 'ooooooo lexeme-correct offset (position-offset start-pos) position-correct)))
         (if (or (file-stream-port? input-port)
                 (string-port? input-port)) ; cooperate with laundry lexer first-port
             (begin
-              #;
-              (begin
+              (when (debug)
                 (println (list 'p0: (file-position input-port)))
                 (println (list 'pnl0: (let-values ([(l c p) (port-next-location input-port)]) (list l c p)))))
-
               (let-values ([(l c p) (port-next-location input-port)])
                 ; TODO we need to transition from file-position over to port-next-location for this probably
                 (set-port-next-location! ; FIXME TODO this might be our culprit yep!
@@ -128,8 +127,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                  ; note that this is NEXT location, not current location
                  (add1 position-correct)))
               (file-position input-port position-correct)
-              #;
-              (begin
+              (when (debug)
                 #;
                 (cumulative-offset (+ this-offset (cumulative-offset)))
                 (println (list 'p1: (file-position input-port)))
@@ -213,6 +211,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
           (sigh next-token (cons t accum)))))
   (reverse (sigh tokenizer)))
 
+#; ; TODO buffer local somehow? needed for efficient reparsing
+(define heading-lexer (make-parameter #f))
+
 (define (bind-runtime-todo-keywords [keywords #f])
   ; FIXME I swear this is as close to absolutely having to use
   ; eval as I have ever come, and it is because brag and agg
@@ -247,7 +248,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
        ; functionality itself, but since we have fixed the issue and are using stop-before, we don't need
        ; this anymore
        [":ARCHIVE:" (token 'ARCHIVE lexeme)] ; we keep this so we can catch lone archive tags more easily
+       #;
        [runtime-todo-keyword (token 'RUNTIME-TODO-KEYWORD lexeme)]
+       [(:or #,@keywords) (token 'RUNTIME-TODO-KEYWORD lexeme)]
        [(:seq "[#" upper-case "]") (token 'PRIORITY lexeme)]
        #;
        [":" (token 'COLON lexeme)]
@@ -267,10 +270,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         any-char
         #;(:~ "*")
         (token 'OOPS lexeme)]))
+  (define heading-lexer (eval-syntax heading-lexer-src (namespace-anchor->namespace nsa)))
   ; FIXME apparently this is incredibly slow, taking up nearly a quarter of our runtime !?
   (define (heading-make-tokenizer port)
     ; FIXME can't run compile-syntax due to use of eval above probably?
-    (define heading-lexer (eval-syntax heading-lexer-src))
     (define (next-token)
       (let ([out (heading-lexer port)])
         (when (debug)
@@ -552,10 +555,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                         [(from/stop-before
                           "" ; optional to handle the case where the end line is immediate
                           (:or stop-before-heading
-                               ; FIXME need an :& to ensure that #+end_block-type is actually in the match
-                               (:seq "\n"
-                                     (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t")
-                                     "\n")))
+                               (:& (:seq "\n"
+                                         (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t")
+                                         "\n")
+                                   (:seq any-string (:or "#+end_" "#+END_") #,block-type any-string))))
                          ; FIXME may need a few more values out of this
                          lexeme])])
                 #;
@@ -566,11 +569,12 @@ using from/stop-before where the stop-before pattern contains multiple charachte
            [lexeme-combined (string-append lexeme lexeme-more)]
            [was-heading (regexp-match #rx"\n[*]+$" lexeme-more)]
            )
-      #;
-      (println (list "eeeeeeee:" block-type lexeme lexeme-more lexeme-combined))
+      (when (debug)
+        (println (list "eeeeeeee:" block-type lexeme lexeme-more lexeme-combined)))
       (if was-heading
           (let* ([offset (string-length (car was-heading))]
-                 [tok (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset)))]
+                 [tok (token 'UNKNOWN-BLOCK-MALFORMED
+                             (substring lexeme-combined 0 (- (string-length lexeme-combined) offset)))]
                  [comb (λ (in)
                          (file-position in (- (file-position in) offset))
                          (set-port-position! in offset #:back-line #t))])
@@ -591,7 +595,13 @@ using from/stop-before where the stop-before pattern contains multiple charachte
             ; elisp implementation has different behavior
             #;
             (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset))))
-          (token token-name lexeme-combined)))]
+          (if (string=? (string-append lexeme "\n") lexeme-combined)
+              ; FIXME this is the result of stop/before matching
+              (token 'UNKNOWN-BLOCK-MALFORMED lexeme-combined) ; eof case or immediate heading case
+              (begin
+                ;#;
+                (println (list 'aaaaaaaaaaaaaaaaaaa lexeme lexeme-combined))
+                (token token-name lexeme-combined)))))]
    #;
    [unknown-block ; FIXME somehow this is taking priority over src-block? or what?
     ; TODO we should be able to rework this by detecting #+begin_pattern, extracting pattern
@@ -696,17 +706,25 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ;[runtime-todo-keyword (token 'CHARS-TODO-KEYWORD lexeme)]
    ;[hrm (token 'CHARS-TODO-KEYWORD lexeme)]
 
+   #;
    [(:or ":PROPERTIES:" ":properties:") (token 'PROPERTIES-D lexeme)] ; sigh
+   #;
    [(:or ":END:" ":end:") (token 'END-D lexeme)] ; sigh
 
    ; FIXME yeah, this is is a pain
+   #;
    [(:or "#+begin_src" "#+BEGIN_SRC") (token 'BEGIN-SRC lexeme)]
+   #;
    [(:or "#+end_src" "#+END_SRC") (token 'END-SRC lexeme)]
+   #;
    [(:or "#+begin_example" "#+BEGIN_EXAMPLE") (token 'BEGIN-EX lexeme)]
+   #;
    [(:or "#+end_example" "#+END_EXAMPLE") (token 'END-EX lexeme)]
 
-   [(:or "#+begin_" "#+BEGIN_") (token 'BEGIN-BLOCK lexeme)]
-   [(:or "#+end_" "#+END_") (token 'END-BLOCK lexeme)]
+   [(from/stop-before (:or "#+begin_" "#+BEGIN_") whitespace)
+    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
+   [(from/stop-before (:or "#+end_" "#+END_") whitespace)
+    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
 
    [(:or "#+begin" "#+BEGIN") (token 'BEGIN-DB lexeme)]
    [(:or "#+end" "#+END") (token 'END-DB lexeme)]
@@ -753,6 +771,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(:or "#+ATTR_" "#+attr_") (token 'ATTR-PREFIX lexeme)]
    |#
 
+   #; ; we can handle this more cleanly in the keyword module of the expander
    [todo-spec-line (token 'TODO-SPEC-LINE lexeme)]
 
    #;
@@ -766,7 +785,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    
    ; the call ... not actually keyword and not actually associated
    ; XXX TODO but should be
-   [(:or "#+CALL" "#+call") (token 'CALL lexeme)]
+   [(:or "#+CALL" "#+call") (token 'CALL lexeme)] ; FIXME move to the keyword module of the expander
 
    ;[(from/to "@@" "@@" (token 'EXPORT-SNIPPET lexeme))] ;; TODO this might actually work ... except for nested blocks
    ;[month-major-digit (token 'MMD)]
@@ -814,8 +833,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ;["l" (token 'CHAR-LOWER-L lexeme)] ; HAH BEGONE FOUL INSTANCE OF A THING
    ["X" (token 'CHAR-UPPER-X lexeme)] ; FOO
    [alpha (token 'ALPHA lexeme)] ; FIXME TODO alpha+ ?
-   ;[(:>= 2 alpha) (token 'ALPHA-N lexeme)] ; XXX longest match kills this for COMMENT and ARCHIVE
+   [(:>= 2 alpha) (token 'ALPHA-N lexeme)]
+   #;
    [(:>= 2 lower-case) (token 'ALPHA-LOWER-N lexeme)]
+   #; ; given the rework of the parsing hierarchy we don't need these to be top level tokens
    [(:** 2 7 upper-case) (token 'ALPHA-UPPER-N lexeme)] ; XXX stop at 7 to avoid gobbling COMMENT and ARCHIVE
    ; TODO with ARCHIVE it might be possible to match against :ARCHIVE
    ; for COMMENT it is trickier ~* COMMENT~ ~]COMMENT~ but then we're back to where we started
@@ -871,8 +892,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                       (begin
                         (cumulative-offset (+ (cumulative-offset) (- span actual-span)))
                         actual-span)
-                      span))])
-    (make-srcloc-token token srcloc)))
+                      span))]
+         [srcloc-token-out (make-srcloc-token token srcloc)])
+    (when (debug)
+      (println (list "fix-srcloc-mod out:" srcloc-token-out)))
+    srcloc-token-out))
 
 (define (fix-srcloc-eof srcloc-token-instance actual-start end-consumed)
   (let* ([stt (srcloc-token-token srcloc-token-instance)]
@@ -891,8 +915,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                   actual-start
                   (if nl-end?
                       (sub1 (srcloc-span sl))
-                      (srcloc-span sl)))])
-    (make-srcloc-token token srcloc)))
+                      (srcloc-span sl)))]
+         [srcloc-token-out (make-srcloc-token token srcloc)])
+    (when (debug)
+      (println (list "fix-srcloc-eof out:" srcloc-token-out)))
+    srcloc-token-out))
 
 (define (fix-srcloc-bof -first-out port)
   (let* ([shift 1]
@@ -905,6 +932,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                           ; FIXME this is a hack, we need to have a variant of
                           ; input-port-append that seeks the second stream
                           (file-position port (- (cdr first-token) shift))
+                          ;(set-port-position! port shift) ; XXX not clear we need this
                           (car first-token))
                         first-token)]
          [out-raw
@@ -943,8 +971,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                     ;;(sub1 (srcloc-span sl))
                     ;#; ; FIXME something is broken here for the shifty case
                     (- (srcloc-span sl) shift))])
-             #;
-             (println (cons 'eeeeeeeeeeeeeeeeeee srcloc-correct))
+             (when (debug)
+               (println (cons 'eeeeeeeeeeeeeeeeeee srcloc-correct)))
              srcloc-correct
              ))])
     #;
@@ -1010,6 +1038,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       (pretty-print out)
       out)))
 
+(define final-port (make-parameter #f)) ; use for any tokenizer that needs a final-port
+
 (define (internal-rest port out-raw)
   (if (and (not (eq? out-raw eof)) ; not eof and not newline AND eof is next
            (not (let ([t (srcloc-token-token out-raw)])
@@ -1020,7 +1050,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                         (and v (string-suffix? v "\n"))))))
            ; TODO might be able to add checks to limit cases where we need to reparse
            (eq? (peek-char port) eof)) ; TODO and lexeme end != newline
+      out-raw
+      #; ; FIXME this is so badly broken that sometimes you wind up with a token that ends before it starts
       (begin
+        (println "internal-rest should have hit eof")
         ; FIXME we know the length of these files so there is no reason to peek?! these
         ; files are not things that should be appended to while we are reading them and
         ; while I guess you could have an org file that wouldn't fit into memory that's
@@ -1029,19 +1062,22 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (file-position port
                        (- (file-position port) ; XXX check this
                           (srcloc-span (srcloc-token-srcloc out-raw))))
-        #;
-        (println (cons 'sfsfsfsfsfsfsfsfs (file-position port)))
+        (when (debug)
+          (println (cons 'sfsfsfsfsfsfsfsfs (file-position port))))
         (let* ([actual-start
                 ; not sure exactly why we need add1 here, but we do to
                 ; keep things aligned, I may be stepping back too far?
                 (add1 (file-position port))]
                [port-end (open-input-string "\n")]
-               [-final-out
-                (laundry-lexer
-                 (input-port-append #f
-                                    port
-                                    port-end))]
-
+               [this-final-port
+                (input-port-append #f
+                                   port
+                                   port-end)]
+               [-final-out ; FIXME we need a way to emit a final newline even if the last token does not need it, because the grammar does
+                ; this is because we cannot terminate various parts of the grammar without knowing that we are at eol
+                (laundry-lexer this-final-port)]
+               #;
+               [_ (pretty-print (list '-final-out: -final-out))]
                [final-out
                 ;#;
                 (fix-srcloc-eof -final-out actual-start (file-position port-end))
@@ -1050,19 +1086,28 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                             (token-struct-val (srcloc-token-token -final-out)))
                     out-raw
                     (fix-srcloc-eof -final-out actual-start))])
-          #;
-          (pretty-print final-out)
-          #;
-          (println (list 'fffffffffffffffffff
-                         (srcloc-token-srcloc out-raw)
-                         (srcloc-token-srcloc final-out)
-                         ))
+          (when (debug)
+            (pretty-print (list 'final-out final-out))
+            (println (list 'fffffffffffffffffff
+                           (srcloc-token-srcloc out-raw)
+                           (srcloc-token-srcloc final-out)
+                           )))
+          ; nearly final out
+          (final-port this-final-port)
           final-out))
       (begin
         #;
-        (println (cons 'lll-src-loc-source-line-column-position-span out-raw))
+        (when (debug)
+          (println (cons 'lll-src-loc-source-line-column-position-span out-raw)))
         (if (eq? out-raw eof)
-            out-raw
+            (let ([fp (final-port)])
+              (if fp
+                  (let ([out-raw-fp (laundry-lexer fp)])
+                    (if (eq? out-raw-fp eof)
+                        out-raw-fp
+                        (parameterize ([final-port #f]) ; prevent infinite recursion
+                          (internal-rest fp out-raw-fp))))
+                  out-raw))
             (fix-srcloc-mod out-raw)))))
 
 (define (process-rest port)
@@ -1071,7 +1116,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
          [__ (println (cons 'aaaaaaaaaaa out-raw))]
          [out (internal-rest port out-raw)])
     #;
-    (pretty-print out)
+    (when (debug)
+      (pretty-print (list 'process-rest: out)))
     out))
 
 (define (laundry-make-tokenizer port)
@@ -1106,7 +1152,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                      (process-first port))
                    (process-rest port))])
       (when (debug)
-        (pretty-print out))
+        (pretty-print (list "laundry next-token:" out)))
       out))
   next-token)
 
@@ -1114,8 +1160,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   (define port (open-input-string "sigh\nhello\n* there"))
   (define prefix-port (open-input-string "\n"))
   (define first-time-port (input-port-append #f prefix-port prefix-port port))
-  (define tport (open-input-string "* Hello world\nand now for"))
+  (define tport (open-input-string "* Hello world\nand now for\n\nsomething")) ; need to end with a paragraph that is not safe
   (define ll (laundry-make-tokenizer #;make-laundry-lexer tport))
+  (ll) (ll) (ll) (ll) (ll)
   )
 
 (define section-lexer

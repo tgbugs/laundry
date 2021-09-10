@@ -10,8 +10,9 @@
 (define (read-syntax source-name input-port)
   ; why is this called more than once???
   (define parse-tree
-    (parse source-name
-           (laundry-make-tokenizer input-port)))
+    (parameterize ([laundry-final-port #f])
+      (parse source-name
+             (laundry-make-tokenizer input-port))))
   (define output-syntax
     (strip-context
      #`(module org-module laundry/expander

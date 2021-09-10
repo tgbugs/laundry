@@ -5,21 +5,29 @@
          racket/path
          racket/pretty
          racket/string
+         ;errortrace ; FIXME this is useless for debugging the parser
+         ; also VERY slow, profile was spending 95% of its time there
+         ; the only other thing that even comes close is something from stxparam
+         ; ah, the slowness in racket-mode is because error-trace is enabled by default
+         ; FIXME consider (compile-context-preservation-enabled) ??
          laundry/parser
          (only-in laundry/tokenizer
-                  org-tokenizer-debug
+                  laundry-tokenizer-debug
                   laundry-make-tokenizer
+                  laundry-final-port
                   bind-runtime-todo-keywords)
          #;
          (except-in laundry/expander #%module-begin)
          (rename-in (only-in laundry/heading make-rule-parser)
                     [make-rule-parser heading-rule-parser])
+         syntax/strip-context
          (for-syntax
           racket/base
           (only-in racket/port with-output-to-string)
           syntax/parse))
 
 (provide dotest dotest-q dotest-file dotest-quiet)
+
 (define testing-parse (make-parameter parse))
 (define testing-token (make-parameter laundry-make-tokenizer))
 (define dotest-prefix (make-parameter #f))
@@ -82,17 +90,23 @@
       (when (or do-expand node-type-expanded) ; LOL when x vs begin ...
         (define modname (string->symbol (format "org-module-~a" (gensym))))
         (define hrms
-          #`(module #,modname laundry/expander
-              #,((testing-parse) ; watch out for the 2 arity case in the case-lambda here
-                 #; ; NAH just a completely insane case-lambda
-                 ; that causes the call to revert to the full grammar
-                 (format "test-source ~s" test-value-inner)
-                 (t))))
+          (strip-context ; required to avoid hygene errors in expand and eval-syntax below
+           ; for some reason raco make doesn't seem to care
+           #`(module #,modname laundry/expander
+               #,(parameterize ([laundry-final-port #f])
+                   ((testing-parse) ; watch out for the 2 arity case in the case-lambda here
+                    #; ; NAH just a completely insane case-lambda
+                    ; that causes the call to revert to the full grammar
+                    (format "test-source ~s" test-value-inner)
+                    (t))))))
         (parameterize ([current-namespace ns-test])
           (unless (or quiet (dotest-quiet)) ; FIXME this logic is broken
-            (pretty-write (list 'expanded: (syntax->datum (expand hrms)))) ; FIXME xpand borken in drracket as well
-            )
-          (eval-syntax hrms ns-test) ; FIXME this is broken in drracket
+            (pretty-write (list 'expanded:
+                                (syntax->datum (expand hrms)))))
+          #; ; FIXME for whatever reason drracket cannot manage to use eval-syntax here
+          ; so we use eval syntax->datum instead, sigh
+          (eval-syntax hrms)
+          (eval (syntax->datum hrms))
           (define root (dynamic-require (list 'quote modname) 'root))
           (when (and node-type-expanded (not (rec-cont root node-type-expanded)))
             (error (format "expansion of ~s does not contain ~s" test-value node-type-expanded)))
@@ -122,12 +136,13 @@
     (with-input-from-file (expand-user-path (string->path path))
       (λ ()
         (port-count-lines! (current-input-port)) ; XXXXXXXXXXXXXX YAY this is what causes our backtracking issues :D :D
-        (let ([t (laundry-make-tokenizer (current-input-port))])
-          ((if parse-to-datum
-               parse-to-datum
-               (compose syntax->datum (testing-parse)))
-           path
-           t)))
+        (parameterize ([laundry-final-port #f])
+          (let ([t (laundry-make-tokenizer (current-input-port))])
+            ((if parse-to-datum
+                 parse-to-datum
+                 (compose syntax->datum (testing-parse)))
+             path
+             t))))
       #:mode 'text))
   (if eq
       (unless (equal? eq hrm)
@@ -268,16 +283,42 @@
 
   )
 
+(module+ test-span-misalignment
+  ; FIXME I think I'm triggering a bug in brag
+  ; but it is happened because somehow the newline at eof is not triggering
+  ; not a bug in brag, it was a -1 file position
+
+  ; so I thik that this is happening because start-pos and end-pos are
+  ; not in order resulting in a negative span, this is in brag-lib/codegen.rkt
+  ; whole-rule-loc
+  ; positions->srcloc
+  ; rule-components->syntax
+
+  (dotest   "|\nq") ; oooh that's bad
+  (dotest   "|\nqq") ; oooh that's bad
+  (dotest   "|\nq\n")
+  (dotest   "|\nqq\n")
+
+  (dotest "xx")
+  (dotest "\n|\nyy\n")
+  (dotest   "|\nzz\n")
+  (dotest "\n|\npp")
+  )
+
 (module+ test-table
   (current-module-path)
 
   (dotest "|\nx ")
   (dotest "|\n\nx")
-  (dotest "|\nxx")
+
+  (dotest "|\nxx") ; oooh that's bad XXX 99% that this is a newline at eof related issue
+  (dotest "|\nxx\n")
+  (dotest "|\nx x")
 
   ; test to make sure that the stop before clause does zero or more not newlines
   (dotest "   |\nx")
   (dotest "|\nx")
+
   (dotest " |\nx\n")
   (dotest "|\nx\n")
   (dotest "\n |\n x\n")
@@ -411,7 +452,8 @@
   (parameterize ([testing-parse
                   ; XXX watch out for the 2 arg part of case-lambda produced by make-rule-parser
                   (heading-rule-parser --test--heading-rest)]
-                 [testing-token (bind-runtime-todo-keywords)]
+                 [testing-token (bind-runtime-todo-keywords '("TODO" "DONE" "FUTURE"))]
+                 [laundry-tokenizer-debug #f]
                  [dotest-prefix " "]
                  [dotest-suffix "\n"])
     (dotest "")
@@ -421,6 +463,7 @@
     (dotest ":n: :t:") ;
     (dotest "TODO")
     (dotest "DONE")
+    (dotest "FUTURE")
 
     (dotest "DONE :t:")
     (dotest "DONE:t:") ;
@@ -645,6 +688,7 @@
 
 (module+ test-paragraph-start
   (current-module-path)
+  (laundry-tokenizer-debug #f)
 
   (dotest "  #+begin_src")
   (dotest "  #+begin_srclol" #:node-type 'paragraph)
@@ -665,7 +709,7 @@
   (dotest "#+end")
   (dotest "  #+end_")
   (dotest "#+end_")
-  (dotest "#+end_srclol" #:node-type 'bg-end-special) ; -> block
+  (dotest "#+end_srclol" #:nte 'paragraph)
 
   (dotest "#+:end::properties::end: lol" #:node-type 'keyword) ; -> keyword
   (dotest "#+:end:" #:node-type 'keyword) ; -> keyword
@@ -969,11 +1013,11 @@ then another paragraph
 
 (module+ test-rando
   (current-module-path)
-  (org-tokenizer-debug #t)
+  (laundry-tokenizer-debug #f)
 
   (dotest "“
 (k)
-* h")
+* h") ; very broken
 
   (dotest
    "* w
@@ -1083,6 +1127,15 @@ watch this ::
 
 (module+ test-drawers
   (current-module-path)
+  (laundry-tokenizer-debug #f)
+
+  (dotest "\n:drawer:\n:end:")
+
+  (dotest ":d:\n:end:" #:nte 'drawer)
+  (dotest ":d:\n* \n:end:"
+          #:nte 'heading) ; foo yeah it works ; FIXME malformed ?
+
+  (dotest ":ARCHIVE:\n:end:" #:nte 'drawer)
 
   (dotest "
 * Headline 1
@@ -1219,13 +1272,6 @@ you called?
 ") ; ok
 
   (dotest "\n:drawer:\n\n:end:")
-
-  (dotest "\n:drawer:\n:end:")
-
-  (dotest ":d:\n:end:" #:nte 'drawer)
-  (dotest ":d:\n* \n:end:" #:nte 'heading) ; foo yeah it works ; FIXME malformed ?
-
-  (dotest ":ARCHIVE:\n:end:" #:nte 'drawer)
 
   )
 
@@ -2019,6 +2065,7 @@ echo oops a block
 
 (module+ test-sentinel
   (current-module-path)
+  (laundry-tokenizer-debug #f)
 
   ; things that work and should continue to work
 
@@ -2033,6 +2080,10 @@ p 2
   (dotest "#+begin_x
 * h
 #+end_x" #:nte 'heading)
+
+
+  (dotest "|\nxx" #:nte 'table)
+  (dotest "|\nxx" #:nte 'paragraph)
 
   (dotest "* ")
   (dotest "* " #:eq-root h-l1)
@@ -2265,6 +2316,7 @@ a
    (submod ".." test-markup)
    (submod ".." test-macros)
    (submod ".." test-comments)
+   #;
    (submod ".." test-rando)
    (submod ".." test-drawers)
    (submod ".." test-string)

@@ -37,14 +37,21 @@
  (except-out (all-from-out racket/base) #%module-begin)
  (except-out (all-defined-out) laundry-module-begin))
 
-; FIXME someone let me bind this stuff at runtime and then
-; parameterize it later basically I want to be able to parse the first
-; section of the file, bind the runtime values, and then parse the
-; rest of the syntax, I probably have to do that with a syntax local
-; variable or something like that though to make the macros cooperate
-; rather than trying to pass it in
-; XXX possibly via syntax-local-value or something? so that #+todo: statements expand the syntax value?
-(define-for-syntax runtime-todo-keywords (make-parameter '("TODO" "DEFAULT"))) ; FIXME centralize?
+(define-for-syntax debug (make-parameter #f))
+
+; TODO I think this technically already IS module local because when each module is expanded
+; as a module written in the laundry/expander language this parameter should be redefined!
+; however, I'm not 100% sure on this
+; FIXME check on what the behavior is for changing the default todo cycle from #+todo: TODO DONE
+; I think the right way to do this is to have a check when we hit the first heading? maybe?
+; XXX the only restriction that this implementation has on the relative position of
+; #+todo: lines and use of todo keywords is that the #+todo: line must always occure
+; before use IN THE file NOT JUST in time, i.e. you cannot just refresh the setup
+; of a file, the setup is refreshed automatically if certain modifications are moade
+; currently at the expense of performance, but hopefully not necessarily so
+; FIXME rather obviously in hindsight, these are actually expand-time-todo-keywords
+(define-for-syntax runtime-todo-keywords (make-parameter '("TODO" "DONE")))
+(define-for-syntax runtime-todo-keywords-changed (make-parameter #f))
 
 (define-syntax (laundry-module-begin stx)
   (syntax-parse stx
@@ -58,16 +65,24 @@
         ; apparently the root binding can only be accessed inside here
         ; but not if the module is executed directly? not sure if this
         ; is a racket-mode issue or what?
-        (require racket/pretty)
         #;
-        (pretty-write root)
+        (begin
+          (require racket/pretty)
+          (pretty-write root))
         (module+ main
           root)))))
 
-#;
+#; ; TODO I think this is where we set syntax time parameters
+   ; XXX no there is a place you can customize expansion explicitly I think
 (define-syntax (org-file stx)
   (syntax-parse stx
     ([_ body ...]
+     (parameterize ([runtime-todo-keywords (runtime-todo-keywords)])
+       (syntax-local-expand-expression
+        #'(identity body ...)
+        ))
+     #'(cons 'org-file body ...)
+     #;
      #'(define root (cons 'org-file body ...))
      #;
      #'(define root (quote (org-file body ...))))))
@@ -79,7 +94,7 @@
      #'(define-syntax (name stx)
          (syntax-parse stx
            [(_ body elipsis)
-            ;#:do [(println (syntax->datum #'(body elipsis)))]
+            #:do [(when (debug) (println (list 'define-node #'name (syntax->datum #'(body elipsis)))))]
             #'(cons 'name (list body elipsis))])))))
 
 (define-syntax (define-nodes stx)
@@ -124,6 +139,7 @@
     [(_ body)
      (local-expand #'body 'expression #f)]
     [(_ body ...+)
+     #:do [(when (debug) (println (list 'sa-node (syntax->datum #'(body ...)))))]
      (datum->syntax
       #'(body ...)
       (apply string-append
@@ -546,6 +562,7 @@
   (syntax-parse stx
     [(_ body ...)
      ;#:do [(define int-ctx (syntax-local-make-definition-context))]
+     #:do [(when (debug) (println (list 'headline (syntax->datum #'(body ...)))))]
      (datum->syntax
       #'(body ...)
       (let ([heading-input-raw
@@ -631,18 +648,31 @@
         prepended
         (string-append prepended "\n"))))
 
+(define-for-syntax heading-make-tokenizer (make-parameter #f))
+
 (define-for-syntax (do-headline str [original-syntax #f])
+  (when (debug)
+    (println (list "do-headline runtime-todo-keywords:" (runtime-todo-keywords))))
   (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
                                (raise-syntax-error #f "happened in" original-syntax))])
-    (let* ([heading-make-tokenizer (bind-runtime-todo-keywords (runtime-todo-keywords))]
+    (let* ([heading-make-tokenizer
+            (let ([hmt (heading-make-tokenizer)])
+              (if (or (not hmt) (runtime-todo-keywords-changed))
+                  ; avoid waisting cycles making a new heading tokenizer
+                  ; if todo keywords have not changed
+                  (let ([hmt-new (bind-runtime-todo-keywords (runtime-todo-keywords))])
+                    (heading-make-tokenizer hmt-new)
+                    (runtime-todo-keywords-changed #f)
+                    hmt-new)
+                  hmt))]
            [heading-input (with-newlines str)]
            #;
            [__ (displayln (format "heading-input: ~s" heading-input))]
            [out (parse-heading-to-datum
                  (heading-make-tokenizer
                   (open-input-string heading-input)))])
-      #;
-      (pretty-write (list 'do-heading-out: out))
+      (when (debug)
+        (pretty-write (list 'do-heading-out: out)))
       out)))
 
 ; paragraph
@@ -707,6 +737,7 @@
 (define-syntax (malformed stx)
   (syntax-parse stx
     [(_ body ...)
+     #:do [(when (debug) (println (list 'malformed (syntax->datum #'(body ...)))))]
      (define-values (transparent opaque)
        (syntax-local-expand-expression
         ; we can't bind the mrt part as a variable?
@@ -872,7 +903,7 @@
 (define-syntax (paragraph-node stx)
   (syntax-parse stx
     [(_ body ...)
-     ;#:do [(pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...))))]
+     #:do [(when (debug) (pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...)))))]
      #:with (expanded ...)
      ; FIXME for malformed patterns we will need to flag that they are
      ; malformed, record their locations, and add them to syntax warn
@@ -892,8 +923,7 @@
      (let ([out #'(list 'paragraph expanded ...)])
        #;
        (pretty-write (cons 'p1p1p1: (syntax->datum out)))
-       out)
-     ]))
+       out)]))
 
 (define-for-syntax (do-paragraph str [original-syntax #f])
   ; FIXME this is gonna be a bit of work
@@ -961,8 +991,49 @@
   ; process keyword line
   (syntax-parse stx
     [(_ line:str)
+     #;
+     (println (list 'keyword-whole-line #'line))
      ; TODO
-     #'(list 'keyword-line line)]))
+     (let ([line-str (string-trim (syntax-e #'line))]) ; TODO refactor to share with colorer?
+       ; FIXME this is a horrible quickly hacked implementation
+       ; keyword lines need to be parsed, and I still don't have a
+       ; complete grasp of what the regularized
+       ; #+key[options]:rest-no-colon-no-rsb looks like, especially
+       ; with regard to nesting brackets
+       (cond
+         [(regexp-match #rx"^#\\+(todo|TODO):" line-str) ; FIXME sigh case sensitivity
+          ; see the docstring for org-todo-keywords, these are NOT simple
+          (let* ([groups (regexp-split #px"\\s+" (string-trim (substring line-str 7)))]
+                 [todo-keywords (remove "|" groups)]
+                 ; NOTE we DO handle the split into todos and dones here because
+                 ; we are already looking at it, even though the only thing we are
+                 ; going to do at compile time is collect the definitions for use
+                 ; at runtime
+                 [regroups (reverse groups)]
+                 #;
+                 [_ (println (list 'todo-list-groups groups))]
+                 [dones? (member "|" groups)] ; FIXME use a grammar so we can error on multiple pipes
+                 [dones (if dones? (cdr dones?) (list (car regroups)))]
+                 [todos (reverse (if dones? (cdr (member "|" regroups)) (cdr regroups)))])
+            ; FIXME do we need to error on duplicate keywords? probably?
+            ; FIXME I think we also want a place to lookup the todo
+            ; category so that we can embed it in the ast?
+            ; FIXME not clear we need to remove duplicates for the heading parser
+            (runtime-todo-keywords (remove-duplicates (append todo-keywords (runtime-todo-keywords))))
+            (runtime-todo-keywords-changed #t)
+            #;
+            (println (list 'todo-line-stuff groups dones todos))
+            #`(todo-cycle
+               #:todo '#,todos ; FIXME preserve the syntax location
+               #:done '#,dones))]
+         [else #'(list 'keyword-line line)]))
+     ]))
+
+(define (todo-cycle #:todo [todo '()]
+                    #:done [done '()])
+  ; TODO this needs to expand to populate a runtime value, even if we also do it at syntax time?
+  ; XXX changing todo keywords would necessitate a reparse, but I think only of the headings?
+  (void))
 
 (define-syntax (kw-prefix stx)
   ; XXX temporary implementation detail to compensate for e.g. #+title being a token
@@ -971,10 +1042,14 @@
      #:with without-prefix (datum->syntax #'with-prefix (substring (syntax-e #'with-prefix) 2))
      #'(keyword-key without-prefix)]))
 
+#;
 (define-syntax (todo-spec-line stx)
   ; XXX TODO this is where we have to bind the runtime todo keywords
   (syntax-parse stx
     [(_ line:str)
+     (println #'line)
+     ; at this phase we only need
+     (runtime-todo-keywords (cons (runtime-todo-keywords)))
      #'(cons 'todo-spec-line line) ; XXX TODO
      ]))
 
@@ -987,13 +1062,14 @@
          [out (parse-table-to-datum ; TODO fixup srcloc in errors errors here probably?
                (table-make-tokenizer
                 (open-input-string table-input)))])
-    #;
-    (pretty-write (cons 'do-table: out))
+    (when (debug)
+      (pretty-write (cons 'do-table: out)))
     out))
 
 (define-syntax (table-element stx)
   (syntax-parse stx
     [(_ table-string:str)
+     #:do [(when (debug) (println (list "table-element in:" (syntax-e #'table-string))))]
      #:with table
      (local-expand
       (datum->syntax
@@ -1002,8 +1078,8 @@
       'expression
       #f)
      (let ([out #'table])
-       #;
-       (pretty-write (cons 'table: (syntax->datum out)))
+       (when (debug)
+         (pretty-write (cons 'table: (syntax->datum out))))
        out)
      ])
   )
@@ -1011,7 +1087,8 @@
 (define-syntax (table-cell stx) ; FIXME abstract along with h-title
   (syntax-parse stx
     [(_ body ...)
-     #:do [(define table-cell-input
+     #:do [(when (debug) (println (list "table-cell in:" (syntax-e #'(body ...)))))
+           (define table-cell-input
              (apply string-append
                     (map (λ (e)
                            (syntax->datum

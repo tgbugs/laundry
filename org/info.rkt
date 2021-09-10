@@ -28,6 +28,8 @@
 (define red #(#xff #x00 #x00))
 (define cyan #(#x00 #xff #xff))
 (define gold #(#xff #xd7 #x00))
+(define pink #(#xff #xc0 #xcb))
+(define pale-green #(#x98 #xfb #x98))
 
 (define framework:color-schemes
   `(#hash((name . "Org")
@@ -57,6 +59,8 @@
             (framework:syntax-color:scheme:org-block-begin-line ,dark-orchid-1)
             (framework:syntax-color:scheme:org-block-end-line   ,dark-orchid-1)
             (framework:syntax-color:scheme:org-link             ,cyan)
+            (framework:syntax-color:scheme:org-todo             ,pink)
+            (framework:syntax-color:scheme:org-done             ,pale-green)
 
             (framework:syntax-color:scheme:org-bullet           ,light-sky-blue) ; XXX not in org-faces.el
 

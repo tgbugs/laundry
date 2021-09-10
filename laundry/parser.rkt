@@ -303,7 +303,7 @@ planning-dissociated : planning
 ; this is EXTREMELY annoying and there is no way around it
 property-drawer : pdrawer-unparsed ;| newline wsnn* properties node-property* /nlws end-drawer
 ; NOTE when this fails to parse, it WILL parse as a regular drawer
-pdrawer-unparsed : DRAWER-PROPS
+pdrawer-unparsed : DRAWER-PROPS | DRAWER-PROPS-EOF
 properties : PROPERTIES-D ; COLON "properties" COLON
 end-drawer : END-D ; COLON "end" COLON
 plus : PLUS
@@ -322,7 +322,7 @@ property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newli
 ; XXX the grammer becomes more complicated because regular drawers are allowed to match properties
 ; this means that we have to fully specify how drawers and property drawers because the ambiguity
 ; in the grammar is exploited by the parser to increase performance
-drawer : DRAWER | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
+drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues here
 
 ;;;; #
 
@@ -335,7 +335,7 @@ comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
 
 @nlwsnn : /newline wsnn*
 babel-call : nlwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
-todo-spec-line : TODO-SPEC-LINE
+; todo-spec-line : TODO-SPEC-LINE
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
@@ -351,7 +351,8 @@ kw-key : not-whitespace ; XXX there is a tradeoff here between implementation co
 ;kw-value : not-colon-whitespace not-colon-newline* ; ensure that the value does not gobble leading whitespace
 kw-value : not-newline ; but ambiguity ...
 
-keyword : todo-spec-line | nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
+; keyword : todo-spec-line | nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
+keyword : nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
 keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
              | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
 
@@ -706,7 +707,7 @@ big-tokes : bt-asterisk
 ;;; individuals
 
 @alpha : ALPHA | CHAR-UPPER-X ; CHAR-LOWER-L ; XXX complexity
-alpha-n : ALPHA-LOWER-N | ALPHA-UPPER-N
+alpha-n : ALPHA-N ; ALPHA-LOWER-N | ALPHA-UPPER-N
 digit-n : DIGIT-2 | DIGIT-3 | DIGIT-4 | DIGIT-N ; FIXME in roughly 7979 years will need DIGIT-5
 digits : DIGIT | @digit-n ; FIXME +?
 alphas : ( alpha | alpha-n )+ ; need the + here due to mixed case

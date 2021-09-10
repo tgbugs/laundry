@@ -1,0 +1,8 @@
+#lang org
+#+todo: TODO FUTURE | EXPIRED DONE
+#+todo: T F D
+#+todo: A | B C
+#+todo: X Y | Z
+* DONE test that runtime todo keywords work
+* FUTURE colorer
+* Z free at last

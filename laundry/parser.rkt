@@ -94,7 +94,7 @@ empty-line : newline
 ; FIXME pretty sure that the @not-newline? after PARAGRAPH-1 never matches anything ?
 ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 ; FIXME PARAGRAPH-EOF ambiguity
-paragraph-node : PARAGRAPH
+paragraph-node : ( PARAGRAPH
                | PARAGRAPH-EOF
                | PARAGRAPH-MALFORMED
                | ( PARAGRAPH-2 @not-newline?
@@ -102,6 +102,7 @@ paragraph-node : PARAGRAPH
                  ; | hyperlink @not-newline? ; XXX moved to paragraph parser for consistency, double parsing an issue for now
                  | paragraph-line
                  )+ PARAGRAPH-EOF?
+               ) @empty-line? ; spec says empty lines should associate with the preceeding paragraph
 
 ; this only needs to handle the single line cases that are ambiguous for the tokenizer
 ; note stars is safe here because headlines don't use the standalone stars token
@@ -252,6 +253,7 @@ drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues he
 comment-element : ( COMMENT-ELEMENT
                     ; | comment-line
                     )+ ; remember kids one-or-more != one-and-maybe-more?
+                    @empty-line?
 ; comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
 
 ;;; keywords
@@ -262,7 +264,7 @@ comment-element : ( COMMENT-ELEMENT
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
-keyword-node : keyword-whole-line
+keyword-node : keyword-whole-line @empty-line?
              ; | /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
 keyword-whole-line : KEYWORD-ELEMENT
 ;keyword-whole-line : KEYWORD-LINE ; XXX this isn't quite working for some reason but that may be ok
@@ -310,7 +312,7 @@ keyword-whole-line : KEYWORD-ELEMENT
 ; of an org-file from just its syntax because you need
 ; a stack to keep track of which block you are in
 
-@block-less-dyn : ( blk-src | blk-unknown )
+@block-less-dyn : ( blk-src | blk-unknown ) @empty-line?
 
 blk-dyn : /newline blk-dyn-begin blk-dyn-contents newline blk-dyn-end
 ; XXX elisp impl requires at least wsnn after #+begin: to work
@@ -422,7 +424,9 @@ blk-unknown : UNKNOWN-BLOCK
 
 ;table : ( table-row | table-row-rule )+
 ;table : ( /newline /wsnn* ( table-row | table-row-rule ) )+ | table-node
-table-element : TABLE-ELEMENT
+
+table-element : ( TABLE-ELEMENT )+ ; @empty-line? ; XXX technically the tokenizer manages the + here ; FIXME newline is not being handled correctly here yet
+
 ;table-dumb : /newline /PIPE @not-newline ; as a matter of last resort
 ;table-row : table-cell+ /PIPE?
 ;table-cell : /PIPE @not-pipe-not-newline? ; this is NOT ambiguous the minimal match is /PIPE+ PIPE? !??!?!
@@ -433,7 +437,7 @@ table-element : TABLE-ELEMENT
 
 ;;; plain lists
 
-plain-list-line : ordered-list-line | descriptive-list-line
+plain-list-line : ( ordered-list-line | descriptive-list-line ) @empty-line?
 ordered-list-line : ORDERED-LIST-LINE
 descriptive-list-line : DESCRIPTIVE-LIST-LINE
 
@@ -504,7 +508,8 @@ pl-tag-end : COLON COLON
 ; FIXME there isn't really any such thing as a malformed or eof footnote defintion in the way
 ; that there can be for blocks or drawers, but because we are reusing some of the internal
 ; machinery they show up here, there is a TODO to refactor so that this is clear
-footnote-definition : FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-DEFINITION-MALFORMED
+footnote-definition : FOOTNOTE-DEFINITION @empty-line?
+;footnote-definition : ( FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-DEFINITION-MALFORMED)
 ;footnote-inline : FOOTNOTE-START-INLINE org-node? RSB ; FIXME this is really org-node-less-fd probably
 
 ;;;; <[

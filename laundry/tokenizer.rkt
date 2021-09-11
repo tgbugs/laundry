@@ -1,4 +1,5 @@
 #lang racket/base
+(define debug (make-parameter #f))
 (require racket/pretty)
 (require brag/support
          "lex-abbrev.rkt"
@@ -45,8 +46,6 @@
          markup-~
          |#
          )
-
-(define debug (make-parameter #f))
 
 (define (find-last char str)
   ; we don't want to do string reverse because it is slow we just want
@@ -736,6 +735,12 @@ using from/stop-before where the stop-before pattern contains multiple charachte
           (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos #:eof #f) ; FIXME workaround ...
           (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)))]
 
+   [dynamic-block
+    ; FIXME the failure mode for dynamic block separation produces well formed keywords
+    ; which probably means that there needs to be a way to define keywords so that if they
+    ; appear as keywords they indicate an error, dynamic definitions for pairing keywords
+    ; might be of interest as part of the self defining keyword spec
+    (token 'DYNAMIC-BLOCK lexeme)]
    [table-element
     ; FIXME this still has issues where the newline following the last | is dropped
     (token 'TABLE-ELEMENT lexeme)

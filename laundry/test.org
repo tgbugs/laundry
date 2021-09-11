@@ -118,6 +118,21 @@ contents?!?
 :end:
 
 :end:
+
+* dynamic blocks
+#+begin: block
+:hello:
+asdf
+:end:
+#+end:
+
+#+begin:
+#+end:
+
+#+begin: not a dynamic block
+** oops
+#+end:
+
 * asdf
 :oHnoThISiSadrAweR:
 :eNd:

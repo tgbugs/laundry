@@ -32,12 +32,12 @@
   (only-in racket/string string-trim string-split string-join string-contains?)
   (only-in racket/list last remove-duplicates)))
 
+(define-for-syntax debug (make-parameter #f))
+
 (provide
  (rename-out [laundry-module-begin #%module-begin])
  (except-out (all-from-out racket/base) #%module-begin)
  (except-out (all-defined-out) laundry-module-begin))
-
-(define-for-syntax debug (make-parameter #f))
 
 ; TODO I think this technically already IS module local because when each module is expanded
 ; as a module written in the laundry/expander language this parameter should be redefined!
@@ -497,6 +497,9 @@
   pl-indent
   bullet-counter
   bullet-plain
+
+  dynamic-block
+
   drawer
   drawer-name
   #;

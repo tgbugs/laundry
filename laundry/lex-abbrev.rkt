@@ -86,10 +86,10 @@
 ; fast heading detection since we can't parse them in one pass in a newline first grammar anyway
 ; note that this can't match a bof heading again due to the newline first design
 ; from/stop-before could also be used here, but negating the newline is probably ok
-(define-lex-abbrev heading (:seq "\n" (:+ "*") (:or " " "\t") (:* (:~ "\n"))))
+(define-lex-abbrev heading (:seq "\n" (:+ "*") wsnn (:* (:~ "\n"))))
 
 (define-lex-abbrev comment-element
-  (:+ (:seq "\n" (:* " " "\t") "#" (:seq (:or " " "\t") (:* (:~ "\n"))))))
+  (:+ (:seq "\n" wsnn* "#" (:seq wsnn (:* (:~ "\n"))))))
 
 (define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
 
@@ -98,7 +98,7 @@
 (define-lex-abbrev keyword-element ; FIXME broken for #+begin_: I think but also consider that maybe keyword should take precendence in this case?
   (from/stop-before
    (:seq "\n"
-         (:* " " "\t")
+         wsnn*
          "#+"
          (:or
           (:* (:~ whitespace))
@@ -154,15 +154,15 @@
       (complement
        (:seq
         "\n"
-        (:* " " "\t")
+        wsnn*
         "#+"
         (:or "begin" "BEGIN" "end" "END")
         "_"
-        (:~ (:or " " "\t"))
+        (:~ wsnn)
         any-string))
       (:seq
        "\n"
-       (:* " " "\t")
+       wsnn*
        "#+"
        ; the malformed options cases ??
        ; [ whitespace missing ] :
@@ -265,18 +265,18 @@
 
 ;;; elements that cannot contain headings 
 
-(define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") (:or " " "\t")))
+(define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") wsnn))
 
 ;;;; blocks
 
 (define-lex-abbrev src-block-line-begin
   (:seq "\n"
-        (:* " " "\t")
+        wsnn*
         (:or "#+begin_src" "#+BEGIN_SRC")
         (:* (:~ "\n"))))
 
 (define-lex-abbrev src-block-line-end
-  (:seq "\n" (:* " " "\t") (:or "#+end_src" "#+END_SRC") (:* " " "\t")))
+  (:seq "\n" wsnn* (:or "#+end_src" "#+END_SRC") wsnn*))
 
 (define-lex-abbrev src-block
   (:seq (from/stop-before
@@ -357,35 +357,35 @@ c
 
 (define-lex-abbrev unknown-block-line-begin
   (:seq "\n"
-        (:* " " "\t")
+        wsnn*
         (:or (:seq "#+begin_"
-                   (:+ (:~ " " "\t" "\n"))
+                   (:+ (:~ whitespace))
                    (:?
                     (:seq
-                     (:or " " "\t")
+                     wsnn
                      (:+ (:~ "\n")))))
              (:seq "#+BEGIN_"
-                   (:+ (:~ " " "\t" "\n"))
+                   (:+ (:~ whitespace))
                    (:?
                     (:seq
-                     (:or " " "\t")
+                     wsnn
                      (:+ (:~ "\n"))))))))
 
 (define-lex-abbrev unknown-block-line-end
   (:seq "\n"
-        (:* " " "\t")
+        wsnn*
         (:or (:seq "#+end_"
-                   (:+ (:~ " " "\t" "\n"))
+                   (:+ (:~ whitespace))
                    (:? (:seq
-                        (:or " " "\t")
+                        wsnn
                         (:* (:~ "\n")))))
              (:seq "#+END_"
-                   (:+ (:~ " " "\t" "\n"))
+                   (:+ (:~ whitespace))
                    (:? (:seq
-                        (:or " " "\t")
+                        wsnn
                         (:* (:~ "\n"))))
                    ))
-        (:* " " "\t")))
+        wsnn*))
 
 (define-lex-abbrev unknown-block
   ; this parses to headings or to the next #+end_
@@ -399,20 +399,55 @@ c
                             stop-before-heading
                             (:seq unknown-block-line-end "\n"))))))
 
+;;;; dynamic blocks
+
+(define-lex-abbrev dynamic-block-start-line
+  (:seq "\n" wsnn* "#+" (:or "begin" "BEGIN") ":" ))
+
+(define-lex-abbrev dynamic-block-start
+  (:seq dynamic-block-start-line "\n"))
+
+(define-lex-abbrev dynamic-block-end-line
+  (:seq "\n" wsnn* "#+" (:or "end" "END") ":" wsnn*))
+
+(define-lex-abbrev dynamic-block-end
+  (:seq dynamic-block-end-line "\n"))
+
+(define-lex-abbrev dynamic-block-comp-begin
+  (complement (:seq dynamic-block-start-line wsnn* (:+ (:~ whitespace)))))
+
+(define-lex-abbrev dynamic-block-comp-end
+  (complement (:seq any-string "\n" wsnn* (:or "#+end:" "#+END:") wsnn* (:+ (:~ whitespace)))))
+
+(define-lex-abbrev dynamic-block
+  (:or
+   (:&
+    (from/stop-before
+     dynamic-block-start-line
+     (:or stop-before-heading
+          dynamic-block-end))
+    (complement (:seq any-string "\n"))
+    (complement (:seq any-string "\n" (:+ "*")))
+    dynamic-block-comp-begin
+    dynamic-block-comp-end)
+   (:& (complement (:seq any-string (:or "#+end:" "#+END:") wsnn* (:+ (:~ whitespace))))
+       (from/stop-before (:seq dynamic-block-start-line dynamic-block-end-line) "\n"))))
+
 ;;;; drawers
 
+
 (define-lex-abbrev drawer-end-comp
-  (complement (:seq any-string (:or ":end:" ":END:") (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+  (complement (:seq any-string (:or ":end:" ":END:") wsnn* (:+ (:~ whitespace)))))
 
 (define-lex-abbrev drawer-prop-comp
-  (complement (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+  (complement (:seq "\n" wsnn* ":properties:" wsnn* (:+ (:~ whitespace)))))
 
 (define-lex-abbrev drawer-PROP-comp
-  (complement (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") (:+ (:~ (:or " " "\t" "\n"))))))
+  (complement (:seq "\n" wsnn* ":PROPERTIES:" wsnn* (:+ (:~ whitespace)))))
 
 (define-lex-abbrev drawer-props
   (:or (:& (from/stop-before
-            (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t"))
+            (:seq "\n" wsnn* ":properties:" wsnn*)
             ; FIXME NOTE there are cases where the pattern in the
             ; names of the property values for a draw cause it to NO
             ; LONGER BE a property drawer, this is almost certainly a
@@ -422,30 +457,28 @@ c
             ; complex grammar that we already wrote which more or
             ; less works as expected at the expense of performance
             (:or stop-before-heading
-                 (:seq "\n" (:* " " "\t") ":end:" (:* " " "\t") "\n")))
+                 (:seq "\n" wsnn* ":end:" wsnn* "\n")))
            ; I don't understand how the variant above matches things where :end: has 
            ; something other than whitespace in front of it :/
            drawer-prop-comp
-           (:or #; (:seq any-string "\n" (:+ "*"))
-                (:seq any-string "\n" (:* " " "\t") ":end:" (:* " " "\t"))))
+           (:seq any-string "\n" wsnn* ":end:" wsnn*))
        ; sigh legacy support for this
        (:& (from/stop-before
-            (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t"))
+            (:seq "\n" wsnn* ":PROPERTIES:" wsnn*)
             (:or stop-before-heading
-                 (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))
+                 (:seq "\n" wsnn* ":END:" wsnn* "\n")))
            drawer-PROP-comp
-           (:or #; (:seq any-string "\n" (:+ "*"))
-                (:seq any-string "\n" (:* " " "\t") ":END:" (:* " " "\t"))))
+           (:seq any-string "\n" wsnn* ":END:" wsnn*))
        (:& drawer-end-comp
         (from/stop-before
          (:or
-          (:seq "\n" (:* " " "\t") ":properties:" (:* " " "\t") "\n" (:* " " "\t") ":end:" (:* " " "\t"))
-          (:seq "\n" (:* " " "\t") ":PROPERTIES:" (:* " " "\t") "\n" (:* " " "\t") ":END:" (:* " " "\t")))
+          (:seq "\n" wsnn* ":properties:" wsnn* "\n" wsnn* ":end:" wsnn*)
+          (:seq "\n" wsnn* ":PROPERTIES:" wsnn* "\n" wsnn* ":END:" wsnn*))
          "\n"))))
 
 (define-lex-abbrev drawer-start-line
-  (:& (complement (:seq "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t")))
-      (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t"))))
+  (:& (complement (:seq "\n" wsnn* (:or ":end:" ":END:") wsnn*))
+      (:seq "\n" wsnn* ":" (:+ (:or 0-9 alpha "-" "_")) ":" wsnn*)))
 
 (define-lex-abbrev drawer-start
   (:seq drawer-start-line "\n"))
@@ -458,12 +491,12 @@ c
 
 (define-lex-abbrev drawer-ish-comp-begin
   ; FIXME seq this any-string?
-  (complement (:seq "\n" (:* " " "\t") ":" (:+ (:or 0-9 alpha "-" "_")) ":" (:* " " "\t")
-                    (:+ (:~ (:or " " "\t" "\n"))))))
+  (complement (:seq "\n" wsnn* ":" (:+ (:or 0-9 alpha "-" "_")) ":" wsnn*
+                    (:+ (:~ whitespace)))))
 
 (define-lex-abbrev drawer-ish-comp-end
   (:or #; (:seq any-string "\n" (:+ "*")) ; FIXME what happens if we leave this out ? TODO apparently it correctly does not match as a drawer?
-       (:seq any-string "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t"))))
+       (:seq any-string "\n" wsnn* (:or ":end:" ":END:") wsnn*)))
 
 (define-lex-abbrev drawer-ish
   ; FIXME this is not right, check the spec to see
@@ -475,7 +508,7 @@ c
           drawer-end))
     drawer-ish-comp-begin
     drawer-ish-comp-end)
-   (:& (complement (:seq any-string (:or ":end:" ":END:") (:* " " "\t") (:+ (:~ (:or " " "\t" "\n")))))
+   (:& (complement (:seq any-string (:or ":end:" ":END:") wsnn* (:+ (:~ whitespace))))
        (from/stop-before (:seq drawer-start-line drawer-end-line) "\n"))))
 
 (module+ test-drawer
@@ -489,13 +522,13 @@ c
 
 ;; plain lists
 
+(define-lex-abbrev bullet-counter (:or (:+ A-Z) (:+ a-z) (:+ 0-9)))
 (define-lex-abbrev bullet-marker (:or "." ")"))
-(define-lex-abbrev marker-value (:or (:+ A-Z) (:+ a-z) (:+ 0-9)))
 
 
 (define-lex-abbrev ordered-list-start
   ; wsnn+ or newline but can't eat the newline
-  (:seq wsnn* marker-value bullet-marker))
+  (:seq wsnn* bullet-counter bullet-marker))
 
 (define-lex-abbrev descriptive-list-start
   (:or (:seq wsnn* (:or "-" "+")) (:seq wsnn+ "*")))
@@ -584,7 +617,7 @@ c
      "\n"
      (:+
       (:or
-       (:+ (:or " " "\t"))
+       wsnn+
        (:+ lower-case)
        (:+ upper-case)
        (:+ 0-9)))))
@@ -599,7 +632,7 @@ c
     (from/stop-before
      (:seq "\n"
            ;(:~ "*" "")
-           (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
+           wsnn* ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
            (:or
             (:or
              "~"
@@ -629,7 +662,7 @@ c
             (:seq (:+ "*") (:~ (:or whitespace "*")))
             ; cases have to be paired to prevent (:~ "." ")") from further matching the same case
             ; FIXME TODO how to handle cases like \n123456789\n
-            (:seq (:+ (:or " " "\t")) "[") ; footnote anchors and inline defs can start a paragraph line
+            (:seq wsnn+ "[") ; footnote anchors and inline defs can start a paragraph line
             (:seq "[" (:~ "f"))
             (:seq "[f" (:~ "n"))
             (:seq "[fn" (:~ ":")) ; TODO see if we can get the actual complement of footnote label?
@@ -761,7 +794,7 @@ c
 
 (define-lex-abbrev line-break ; otherwise non-empty ? that is a nasty lookbehind that we can't do here
   ; FIXME stop-before "" does not work
-  (from/stop-before "" (:seq #;(:~ "\n") "\\" "\\" (:* (:or " " "\t")) "\n")))
+  (from/stop-before "" (:seq #;(:~ "\n") "\\" "\\" wsnn* "\n")))
 
 ;;; citation
 
@@ -1037,7 +1070,7 @@ c
   (:or "Z" ; you really really shouldn't use Z for auto-inserted, you should always use zoneoffset, Z is supported for other use cases
        (:seq (:or "+" "-") (:seq hour (:? ":") minute))))
 
-(define-lex-abbrev date-suffix (:seq "-" month "-" day (:? (:seq (:+ (:or " " "\t")) day-abbrev))))
+(define-lex-abbrev date-suffix (:seq "-" month "-" day (:? (:seq wsnn+ day-abbrev))))
 (define-lex-abbrev date-normal (:seq year date-suffix))
 (define-lex-abbrev date-ex (:seq year-ex date-suffix))
 (define-lex-abbrev date (:or date-normal date-ex))

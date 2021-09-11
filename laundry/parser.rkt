@@ -66,7 +66,7 @@ empty-line : newline
                         | paragraph-node ;paragraph-line
                         ; | detached-block-node ; still causing too many issues for well formed blocks
 
-@org-nbe-less-df : block-less-dyn
+@org-nbe-less-df : greater-block ; block-less-dyn
                  ;| block-end-line
                  ;| babel-call
                  ;| keyword ; lol yep you can affiliate keywords to keywords
@@ -127,6 +127,7 @@ paragraph-line : newline (
 
 ; FIXME I think we are going to be able to merge nonl and nl once planning is tokenized correctly ?
 malformed : planning-dissociated
+          | GREATER-BLOCK-MALFORMED
           | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place XXX variants that start with a newline do not match here
 
 @parl-tokens-with-newline : malformed-nl
@@ -135,7 +136,8 @@ detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME disti
 ; due to changes in the tokenizer the detached blocks always carry their own newline
 ; however if you are testing from the start of a file you may not see the newline there
 ; because it is stripped as an imlementation detail
-detached-block : SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED | UNKNOWN-BLOCK-MALFORMED
+detached-block : GREATER-BLOCK-MALFORMED
+               | SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED | UNKNOWN-BLOCK-MALFORMED
 keyword-malformed : KEYWORD-ELEMENT-MALFORMED
 
 ;;;; *
@@ -301,6 +303,8 @@ keyword-whole-line : KEYWORD-ELEMENT
 ; attr-backend : @wordhyus
 
 ;;; blocks
+
+greater-block : GREATER-BLOCK @empty-line?
 
 ; ugh, matching the arbitrary names here is ...
 ; not something I think that brag can handle in

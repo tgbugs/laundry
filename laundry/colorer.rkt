@@ -2,7 +2,7 @@
 
 (require brag/support
          "lex-abbrev.rkt"
-         (only-in "tokenizer.rkt" #;find-last get-block-type)
+         (only-in "tokenizer.rkt" #;find-last get-block-type set-port-next-location-from)
          (only-in racket/port peeking-input-port)
          (only-in racket/string string-split))
 
@@ -61,9 +61,7 @@
 (log-error "org colorer --------------------------------")
 #;
 (define (proc-comp lexeme composite-category))
-(define (set-port-next-location-from src dest)
-  (define-values (line col pos) (port-next-location src))
-  (set-port-next-location! dest line col pos))
+
 
 (define (lex-composite input-port lexeme composite-category paren start-pos end-pos mode)
   (let* (;[lexeme 'lol]

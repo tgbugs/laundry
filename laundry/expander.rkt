@@ -559,8 +559,12 @@
   #;
   fn-def
 
+  greater-block
+
+  #;
   blk-src
 
+  #;
   blk-unknown
 
   blk-src-contents
@@ -949,6 +953,8 @@
 
   (paragraph-inline "I" (footnote-reference (footnote-inline-simple "[fn::N.]")) ".")
 
+  (paragraph-inline "a" "b" "c" "d" "e" "f" "g")
+
   )
 
 (define-syntax (footnote-inline-simple stx)
@@ -969,6 +975,12 @@
        out
        )]))
 
+(define-for-syntax (paragraph-expand-body e)
+  (let ([out (local-expand e 'expression #f)])
+    (let ([dat (syntax-e out)])
+      ; FIXME this loses the info on the syntax
+      (if (string? dat) dat out))))
+
 (define-syntax (paragraph stx)
   (syntax-parse stx
     [(_ body ...)
@@ -982,14 +994,7 @@
                     ; TODO syntax warn probably? also this doesn't seem to work?
                     ; maybe the malformed annotation is getting lost during an sa?
                     (println (format "Found malformed structure! ~s" e)))
-                  (let ([out (local-expand e 'expression #f)])
-                    #;
-                    (println (list 'expander-paragraph-map-expanded out))
-                    (let ([dat (syntax-e out)])
-                      (if (string? dat) ; FIXME this loses the info on the syntax
-                          dat
-                          out))
-                    ))
+                  (paragraph-expand-body e))
                 (syntax->list #'(body ...)))))
      #:do [(when (debug)
              (pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...)))))]
@@ -999,13 +1004,18 @@
   (syntax-parse stx
     [(_ body ...)
      #:with (expanded ...)
-     (map (λ (e)
-            (when (syntax-property e 'malformed)
-              ; TODO syntax warn probably? also this doesn't seem to work?
-              ; maybe the malformed annotation is getting lost during an sa?
-              (println (format "Found malformed structure! ~s" e)))
-            (local-expand e 'expression #f))
-          (syntax->list #'(body ...)))
+     (map (λ (s) (if (string? s)
+                     (datum->syntax this-syntax s) ; FIXME URG PAIN
+                     s))
+          (merge-strings ; this is the correct place to do the merge
+
+           (map (λ (e)
+                  (when (syntax-property e 'malformed)
+                    ; TODO syntax warn probably? also this doesn't seem to work?
+                    ; maybe the malformed annotation is getting lost during an sa?
+                    (println (format "Found malformed structure! ~s" e)))
+                  (paragraph-expand-body e))
+                (syntax->list #'(body ...)))))
      #'(list 'paragraph expanded ...)]))
 
 (module+ test-paragraph-node

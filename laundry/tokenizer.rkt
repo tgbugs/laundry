@@ -21,6 +21,7 @@
          #;
          find-last
          get-block-type
+         set-port-next-location-from
 
          (rename-out [debug laundry-tokenizer-debug]
                      [final-port laundry-final-port])
@@ -73,29 +74,78 @@
       ; have to add the string because apparently racket-mode still loses the context
       (error "get-block-type:" lexeme)))
 
-(define (peek-stop TOKEN lexeme input-port lexer-more good? #:malformed [malformed #f])
+(define (make-block-lexer block-type)
+  (let ([stx
+         #`(lexer
+            [(from/stop-before
+              "" ; optional to handle the case where the end line is immediate
+              (:or stop-before-heading
+                   (:& (:seq "\n"
+                             (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t")
+                             "\n")
+                       (:seq any-string (:or "#+end_" "#+END_") #,block-type any-string))))
+             ; FIXME may need a few more values out of this
+             (let ([was-heading (regexp-match #rx"\n[*]+$" lexeme)])
+               ; TODO there are two ways that hitting a heading can
+               ; proceed one is to back up past the last newline and
+               ; mark everything in between as malformed, turning into
+               ; paragraph, or follow the elisp implementation
+               ; behavior and parse going forward treating the block
+               ; start line as malformed but paragraph and the rest as
+               ; whatever it would parse to at top level, will need to
+               ; explore the tradeoffs
+               (and (not was-heading) lexeme))
+             ])])
+    #;
+    (log-error "make-lexer stx: ~a" stx)
+    (eval-syntax stx (namespace-anchor->namespace nsa))))
+
+(define block-lexers (make-hash))
+
+(define (get-block-lexer block-type)
+  (hash-ref! block-lexers block-type (λ () (make-block-lexer block-type))))
+
+(define (set-port-next-location-from src dest)
+  (define-values (line col pos) (port-next-location src))
+  (set-port-next-location! dest line col pos))
+
+(define (peek-stop TOKEN lexeme input-port lexer-more #:malformed [malformed #f])
+  "lexer-more should return lexeme-more on a good match or #f on a bad
+match to avoid the need for an additional predicate, that information
+should be statically encoded in the lexer"
   ; more consisten
   (let* ([peek-port (peeking-input-port input-port #:init-position (+ 1 (file-position input-port)))]
-         [lexeme-more (lexer-more peek-port)]
+         [_ (port-count-lines! peek-port)]
+         [lexeme-more? (lexer-more peek-port)]
          #;
          [lexeme-combined (string-append lexeme lexeme-more)]
+         #;
          [ok (good? lexeme-more)]
          #;
          [stop-offset (stop? lexeme-more)]
          )
-    (if ok ;stop ; TODO do we just keep going or do we mark all the rest as potentially malformed?
+    (if lexeme-more? ;stop ; TODO do we just keep going or do we mark all the rest as potentially malformed?
         ; I would prefer to mark as malformed and not reparse the peek
         ; XXX no, actually, it is more consistent with the elisp and it is easier to
         ; implement the version where when you peek forward if you match you move the
         ; input port forward, if you miss, just keep lexing and mark as malformed
         ; basically this is the arbitrary lookahead lexer
-        (begin
+        (let ([port-position-combinator
+               (λ (in)
+                 ; location and position are independent and both must be set
+                 (file-position in (file-position peek-port))
+                 (set-port-next-location-from in peek-port))]
+              [tok (token TOKEN (string-append lexeme lexeme-more?))])
           ; TODO update input-port position
-          (token TOKEN (string-append lexeme lexeme-more)))
+          (if (or (file-stream-port? input-port)
+                  (string-port? input-port))
+              (begin
+                (port-position-combinator input-port)
+                tok)
+              (cons tok port-position-combinator)))
         (let ([tok (token
                     (string->symbol (if malformed (format "~a-MALFORMED" (symbol->string TOKEN)) TOKEN))
-                    lexeme
-                          )]
+                    lexeme)]
               #;
               [comb (λ (in)
                       (file-position in (- (file-position in) offset))
@@ -112,6 +162,7 @@
               (cons tok comb))))
     )
   )
+
 (define (set-port-position! input-port offset #:back-line [back-line #f])
   "do it in string chars not in bytes"
   (let*-values ([(l c p) (port-next-location input-port)]
@@ -585,6 +636,13 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(from/stop-before unknown-block-line-end "\n") ; if we run into one of these by itself it is malformed because it is disconnect
     (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
    [(from/stop-before unknown-block-line-begin "\n")
+    (peek-stop
+     'GREATER-BLOCK
+     lexeme
+     input-port
+     (get-block-lexer (get-block-type lexeme))
+     #:malformed #t)
+    #;
     (let* ([block-type (get-block-type lexeme)]
            [token-name
             (case block-type

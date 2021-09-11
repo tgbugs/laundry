@@ -3,7 +3,7 @@
 (require brag/support
          "lex-abbrev.rkt"
          (only-in racket/string string-suffix? string-trim string-split)
-         (only-in racket/port input-port-append)
+         (only-in racket/port input-port-append peeking-input-port)
          (only-in racket/list cons? last)
          (for-syntax racket/base
                      #;
@@ -73,26 +73,77 @@
       ; have to add the string because apparently racket-mode still loses the context
       (error "get-block-type:" lexeme)))
 
+(define (peek-stop TOKEN lexeme input-port lexer-more good? #:malformed [malformed #f])
+  ; more consisten
+  (let* ([peek-port (peeking-input-port input-port #:init-position (+ 1 (file-position input-port)))]
+         [lexeme-more (lexer-more peek-port)]
+         #;
+         [lexeme-combined (string-append lexeme lexeme-more)]
+         [ok (good? lexeme-more)]
+         #;
+         [stop-offset (stop? lexeme-more)]
+         )
+    (if ok ;stop ; TODO do we just keep going or do we mark all the rest as potentially malformed?
+        ; I would prefer to mark as malformed and not reparse the peek
+        ; XXX no, actually, it is more consistent with the elisp and it is easier to
+        ; implement the version where when you peek forward if you match you move the
+        ; input port forward, if you miss, just keep lexing and mark as malformed
+        ; basically this is the arbitrary lookahead lexer
+        (begin
+          ; TODO update input-port position
+          (token TOKEN (string-append lexeme lexeme-more)))
+        (let ([tok (token
+                    (string->symbol (if malformed (format "~a-MALFORMED" (symbol->string TOKEN)) TOKEN))
+                    lexeme
+                          )]
+              #;
+              [comb (λ (in)
+                      (file-position in (- (file-position in) offset))
+                      (set-port-position! in offset #:back-line #t))])
+          tok
+          #; ; no reset needs to be done on this branch because we just keep going and parse as if
+          ; it were just more of the org file
+          (if (or (file-stream-port? input-port)
+                  (string-port? input-port))
+              (begin
+                (comb input-port)
+                tok)
+              ; XXX resolved down in -stt below FIXME naming and action at a distance
+              (cons tok comb))))
+    )
+  )
 (define (set-port-position! input-port offset #:back-line [back-line #f])
   "do it in string chars not in bytes"
-  (let-values ([(l c p) (port-next-location input-port)])
-    (set-port-next-location!
-     input-port
-     (if back-line (sub1 l) l)
-     (if back-line #f (- c offset))
-     (- p offset)
-     ))
-  )
+  (let*-values ([(l c p) (port-next-location input-port)]
+                [(n-l n-c n-p)
+                 (values
+                  (if back-line (sub1 l) l)
+                  (and (not back-line) (- c offset))
+                  (- p offset))])
+    (set-port-next-location! input-port n-l n-c n-p)))
 
 (define (token-back-1 TOKEN lexeme input-port)
   ; FIXME multi-byte case
+  ; FIXME the real solution is to switch to a peeking port so that
+  ; we don't have to bother with this non-sense
   (file-position input-port (sub1 (file-position input-port)))
-  (let-values ([(l c p) (port-next-location input-port)])
+  (let*-values ([(l c p) (port-next-location input-port)]
+                [(back-line) (regexp-match #rx"\n$" lexeme)]
+                [(n-l n-c n-p)
+                 (values
+                  (if (and l back-line) (sub1 l) l)
+                  (and c (not back-line) (sub1 c))
+                  (and p (sub1 p))
+                  )]
+                )
+    (set-port-next-location! input-port n-l n-c n-p)
+    #;
     (set-port-next-location!
      input-port
      l ; TODO newline case
      (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
-     (and p (sub1 p))))
+     (and p (sub1 p))
+     ))
   (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
 
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
@@ -629,8 +680,20 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [table-element
     ; FIXME this still has issues where the newline following the last | is dropped
+    (token 'TABLE-ELEMENT lexeme)
+    #;
     (token-stop-before-table-double-blank-line 'TABLE-ELEMENT lexeme input-port start-pos)]
+   [descriptive-list-line (token 'DESCRIPTIVE-LIST-LINE lexeme)]
+   [ordered-list-line (token 'ORDERED-LIST-LINE lexeme)]
    [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; before hyperlink for #+[[[]]]:asdf
+
+   [(from/stop-before (:seq "\n" wsnn* "#+" (:or "begin" "BEGIN" "end" "END") "_") whitespace)
+    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
+   ; FIXME a bit of ambiguity about how to treat the #+begin_ cases,
+   ; atm I differentiate them from keywords since the user probably
+   ; mean for them to be blocks, not keywords
+   [keyword-element-malformed (token 'KEYWORD-ELEMENT-MALFORMED lexeme)]
+
    #;
    [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
    #;
@@ -640,8 +703,20 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
 
-   [drawer-props (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)]
+   [drawer-props
+    (token 'DRAWER-PROPS lexeme)
+    #;
+    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)]
    [drawer-ish
+    (token 'DRAWER lexeme)
+    #;
+    drawer-start-line
+    #;
+    (let ([lexer-more]
+          []
+          )
+      (peek-stop 'TABLE-ELEMENT lexeme input-port lexer-more stop?))
+    #;
     (begin0
         (token-stop-before-heading 'DRAWER lexeme input-port start-pos)
       #;
@@ -654,8 +729,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       )]
 
    [paragraph ; FIXME don't return PARAGRAPH-MALFORMED here
+    (token 'PARAGRAPH lexeme)
+    #;
     (token-stop-for-paragraph 'PARAGRAPH lexeme input-port start-pos)
     ] ; needed for performance reasons to mitigate quadratic behavior around short tokens
+   #; ; no longer needed as paragraph is now (:+ paragraph-2)
    [paragraph-2 (token 'PARAGRAPH-2 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
@@ -678,6 +756,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #; ; eaten by paragraph in nearly all cases I think
    [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
    [footnote-definition
+    (token 'FOOTNOTE-DEFINITION lexeme)
+    #;
     (token-stop-before-heading-foot-def-double-blank-line
      'FOOTNOTE-DEFINITION lexeme input-port start-pos)]
    #;
@@ -721,12 +801,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #;
    [(:or "#+end_example" "#+END_EXAMPLE") (token 'END-EX lexeme)]
 
-   [(from/stop-before (:or "#+begin_" "#+BEGIN_") whitespace)
-    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
-   [(from/stop-before (:or "#+end_" "#+END_") whitespace)
-    (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
-
+   #;
    [(:or "#+begin" "#+BEGIN") (token 'BEGIN-DB lexeme)]
+   #;
    [(:or "#+end" "#+END") (token 'END-DB lexeme)]
 
    #; ; this does not work as desired

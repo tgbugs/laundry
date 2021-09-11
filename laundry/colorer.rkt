@@ -257,6 +257,9 @@
     (values lexeme 'heading-line  'comp #f (pos lexeme-start) (pos lexeme-end))]
    [comment-element
     (values lexeme 'comment #f #f (pos lexeme-start) (pos lexeme-end))]
+   [plain-list-start
+    (values lexeme 'org-bullet #f #f (pos lexeme-start) (pos lexeme-end))]
+   #;
    [(:or (:seq "\n" plain-list-start)
          (:seq "\n"
                (:* (:or " " "\t"))
@@ -264,6 +267,7 @@
                (:or "-")
                (:+ (:or " " "\t")) ))
     (values lexeme 'org-bullet #f #f (pos lexeme-start) (pos lexeme-end))]
+   #;
    [(:seq "\n" (:* (:or " " "\t"))
           (:or
            (:seq (:or (:+ A-Z) (:+ a-z) (:+ 0-9)) bullet-marker)
@@ -298,6 +302,8 @@
     (begin
       (todo-keyword-line? lexeme)
       (values lexeme 'org-meta-line 'comp #f (pos lexeme-start) (pos lexeme-end)))]
+   [keyword-element-malformed
+    (values lexeme 'org-malformed #f #f (pos lexeme-start) (pos lexeme-end))]
    [paragraph-2
     (begin
       #;

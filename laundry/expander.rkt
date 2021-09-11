@@ -30,7 +30,7 @@
   racket/pretty
   syntax/parse
   (only-in racket/string string-trim string-split string-join string-contains?)
-  (only-in racket/list remove-duplicates)))
+  (only-in racket/list last remove-duplicates)))
 
 (provide
  (rename-out [laundry-module-begin #%module-begin])
@@ -52,6 +52,105 @@
 ; FIXME rather obviously in hindsight, these are actually expand-time-todo-keywords
 (define-for-syntax runtime-todo-keywords (make-parameter '("TODO" "DONE")))
 (define-for-syntax runtime-todo-keywords-changed (make-parameter #f))
+
+(module merge-helper racket/base
+  (require (only-in racket/list last))
+
+  (provide merge-strings merge-syntaxes)
+
+  (define (merge-strings lst)
+    "fold a list merging strings as we go"
+    ; I have no idea if there is a faster way to do this, but it certainly feels elegant
+    #;
+    (log-error "merge-strings: ~a" lst)
+    (foldl
+     (λ (new old)
+       (cond
+         [(null? old)
+          (cons new old)]
+         [(and (string? new) (string? (car old)))
+          (cons (string-append new (car old)) (cdr old))]
+         [else (cons new old)]))
+     '() ; old
+     (reverse lst)))
+
+  (define (merge-syntaxes lst context) ; FIXME broken because some incoming syntaxes have #f locations
+    "fold a list merging syntax as we go"
+    ; I have no idea if there is a faster way to do this, but it certainly feels elegant
+    (log-error "merge-syntaxes: ~a" lst)
+    (if (= (length lst) 1)
+        lst
+        (cdr ; we pad with a dead pair to avoid special cases
+         (foldl
+          (λ (new-pair old)
+            (if (null? old)
+                (cons new-pair old)
+                (let ([new-str (car new-pair)]
+                      [old-str (caar old)])
+                  (cond
+                    [(and new-str old-str)
+                     (cons
+                      (cons ; car
+                       (string-append new-str old-str) ; caar
+                       (cons (cadr new-pair) (cdar old))) ; cdar
+                      (cdr old))]
+                    [old-str ; we have hit a non-string element, clean up the old car
+                     ; everything is reversed in here so first is last and last is first
+                     ; which means that the start position for the syntax is contained in the
+                     ; last element of the old-syntaxes list
+                     (let*-values ([(old-syntaxes) (cdar old)]
+                                   [() (when #f
+                                         (println (list 'old-syntaxes:
+                                                        (map (λ (s) (list s
+                                                                          (syntax-line s)
+                                                                          (syntax-source s)
+                                                                          (syntax-span s)))
+                                                             old-syntaxes))) (values))]
+                                   [(syntax-end syntax-start) (values (car old-syntaxes) (last old-syntaxes))]
+                                   [(start-pos) (syntax-position syntax-start)]
+                                   [(syntax-loc)
+                                    (if (eq? syntax-start syntax-end)
+                                        syntax-start
+                                        (list
+                                         (syntax-source syntax-start)
+                                         (syntax-line syntax-start)
+                                         (syntax-column syntax-start)
+                                         start-pos
+                                         (apply + (map syntax-span old-syntaxes))
+                                         #;
+                                         (+ (- (syntax-position syntax-end) start-pos)
+                                            (syntax-span syntax-end))))])
+                       (println (list 'syntax-loc syntax-loc syntax-start syntax-end))
+                       (cons
+                        new-pair
+                        (cons (datum->syntax context old-str syntax-loc)
+                              (cdr old))))]
+                    ; toss the old caar retaining just the syntax
+                    [else (cons
+                           new-pair
+                           (cons
+                            (cdar old)
+                            (cdr old)))]))))
+          '() ; old
+          (let ([string-list
+                 (map (λ (stx)
+                        (let ([dat (syntax-e stx)])
+                          (cons (and (string? dat) dat) (list stx))))
+                      lst)])
+            (log-error "merge-syntax-string-list: ~a" string-list)
+            (reverse (cons (cons #f #f) string-list)))))))
+
+  (module+ test-merge
+    (require rackunit)
+    (require (only-in "tokenizer.rkt" paragraph-make-tokenizer))
+    (require (rename-in "paragraph.rkt" [parse parse-paragraph]))
+    (check-equal?
+     (merge-strings
+      '("a" "b" c "d" "e" f g "h"))
+     '("ab" c "de" f g "h"))
+    ))
+
+(require (for-syntax 'merge-helper))
 
 (define-syntax (laundry-module-begin stx)
   (syntax-parse stx
@@ -286,6 +385,7 @@
   parl-se-wsnn
   parl-sigh
   parl-tokens-with-newline
+  #;
   malformed-nl ; FIXME -> syntax warn
   detached-drawer
 
@@ -365,6 +465,8 @@
 
   footnote-inline-malformed
   footnote-inline-malformed-eof
+
+  keyword-malformed
   )
 #;
 (begin-for-syntax
@@ -670,10 +772,12 @@
            [__ (displayln (format "heading-input: ~s" heading-input))]
            [out (parse-heading-to-datum
                  (heading-make-tokenizer
-                  (open-input-string heading-input)))])
+                  (open-input-string heading-input)))]
+           [merged (merge-strings out)]
+           )
       (when (debug)
-        (pretty-write (list 'do-heading-out: out)))
-      out)))
+        (pretty-write (list 'do-heading-out/merged: out merged)))
+      merged)))
 
 ; paragraph
 
@@ -755,6 +859,7 @@
                                 [end-drawer (make-rename-transformer #'sa-node)]
                                 [footnote-inline-malformed (make-rename-transformer #'sa-node)]
                                 [footnote-inline-malformed-eof (make-rename-transformer #'sa-node)]
+                                [keyword-malformed (make-rename-transformer #'sa-node)]
                                 )
             (sa-malformed body ...))))
      (syntax-property
@@ -764,11 +869,16 @@
          (eval transparent)))
       'malformed this-syntax)]))
 
+; FIXME this should all be subsumed and malformed should be for whole lines
+(define-syntax malformed-nl (make-rename-transformer #'malformed))
+
 (module+ test-mal
   ;#; ; somehow this works at the top level but not in module scope !?
   ; WAIT !? somehow this is working now !??!?
   ; argh, it works here but not in a requiring module !?
   (paragraph-node (malformed (blk-src-begin "oops")))
+  #;
+  (paragraph-node "a\nb\nc\nd\ne")
   )
 
 (define-syntax (footnote-anchor stx)
@@ -863,14 +973,26 @@
   (syntax-parse stx
     [(_ body ...)
      #:with (expanded ...)
-     (map (λ (e)
-            (when (syntax-property e 'malformed)
-              ; TODO syntax warn probably? also this doesn't seem to work?
-              ; maybe the malformed annotation is getting lost during an sa?
-              (println (format "Found malformed structure! ~s" e)))
-            (local-expand e 'expression #f))
-          (syntax->list #'(body ...)))
-     ;#:do [(pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...))))]
+     (map (λ (s) (if (string? s)
+                     (datum->syntax this-syntax s) ; FIXME URG PAIN
+                     s))
+          (merge-strings ; this is the correct place to do the merge
+           (map (λ (e)
+                  (when (syntax-property e 'malformed)
+                    ; TODO syntax warn probably? also this doesn't seem to work?
+                    ; maybe the malformed annotation is getting lost during an sa?
+                    (println (format "Found malformed structure! ~s" e)))
+                  (let ([out (local-expand e 'expression #f)])
+                    #;
+                    (println (list 'expander-paragraph-map-expanded out))
+                    (let ([dat (syntax-e out)])
+                      (if (string? dat) ; FIXME this loses the info on the syntax
+                          dat
+                          out))
+                    ))
+                (syntax->list #'(body ...)))))
+     #:do [(when (debug)
+             (pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...)))))]
      #'(expanded ...)]))
 
 (define-syntax (paragraph-inline stx)
@@ -903,26 +1025,39 @@
 (define-syntax (paragraph-node stx)
   (syntax-parse stx
     [(_ body ...)
-     #:do [(when (debug) (pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...)))))]
+     #:do [(when (debug) (pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...)))))
+           (when (debug) (pretty-print (list "paragraph-node body:" (syntax->datum #'(body ...)))))]
      #:with (expanded ...)
      ; FIXME for malformed patterns we will need to flag that they are
      ; malformed, record their locations, and add them to syntax warn
      ; or something like that
-     (local-expand
-      (datum->syntax
-       #'(body ...)
-       (do-paragraph
-        (apply string-append
-               (map (λ (e)
-                      (syntax->datum
-                       (local-expand e 'expression #f)))
-                    (syntax-e #'(body ...))))
-        this-syntax))
-      'expression
-      #f)
+     (let* ([expanded-raw
+            (local-expand
+             (datum->syntax
+              #'(body ...)
+              (do-paragraph
+               ; FIXME it would be way, way, more efficient to chain in the
+               ; tokenizer by peeking to find the end and then using a
+               ; limited input port rather than passing all this garbage into
+               ; the abstract syntax tree ? no, not quite because the grammar
+               ; also also nested ? or no ? ... HRM regardless, it would be
+               ; nice to be able to use the underlying port instead of the
+               ; nonsense I do here ... HRM we can't do it in the lexer itself
+               ; but maybe we could do it in next-token ?
+               (apply string-append
+                      (map (λ (e)
+                             (syntax->datum
+                              (local-expand e 'expression #f)))
+                           (syntax-e #'(body ...))))
+               this-syntax))
+             'expression
+             #f)]
+           )
+       expanded-raw)
+
      (let ([out #'(list 'paragraph expanded ...)])
-       #;
-       (pretty-write (cons 'p1p1p1: (syntax->datum out)))
+       (when (debug)
+         (pretty-write (cons 'p1p1p1: (syntax->datum out))))
        out)]))
 
 (define-for-syntax (do-paragraph str [original-syntax #f])
@@ -938,17 +1073,25 @@
   (println (list "do-paragraph in:" str))
   (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
                                (raise-syntax-error #f "happened in" original-syntax))])
-    (let* ([out-helper (parse-paragraph-to-datum
-                (paragraph-make-tokenizer
-                 (open-input-string (string-append "\n" str "\n"))))]
+    (let* ([out-helper
+            (parse-paragraph-to-datum
+             (paragraph-make-tokenizer
+              (let ([port (open-input-string (string-append "\n" str "\n"))])
+                (port-count-lines! port)
+                ; FIXME get a real port kids!
+                port)))]
            [out (cons (car out-helper)
                       ; FIXME needs a bit of work if there are cases where the newline gets eaten
                       ; FIXME perf
-                      (reverse (cdr (reverse (cddr out-helper)))))])
+                      ; FIXME do merge strings in here for maximum efficiency, avoids 2 reverses
+                      (reverse (cdr (reverse (cddr out-helper)))))]
+           [merged (merge-strings out)] ; FIXME not 100% sure this is actually the right place to do this since we have to do it again
+           )
       #;
-      (pretty-write (list 'do-paragraph: out-helper out (when original-syntax (syntax-position original-syntax) original-syntax)))
-      out)))
+      (pretty-write (list 'do-paragraph: out-helper out merged (when original-syntax (syntax-position original-syntax) original-syntax)))
+      merged)))
 
+#; ; a bad implementation
 (define (merge-thing do-fun l)
   (if (null? l)
       l

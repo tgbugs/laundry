@@ -220,6 +220,12 @@
   (dotest "1. There\n A. asdf" #:node-type node-type) ; XXX
   (dotest "1. There\n A. asdf\n" #:node-type node-type)
 
+  (laundry-tokenizer-debug #f)
+  (dotest " f 
+ - g
+  h
+")
+
   )
 
 (module+ test-npnn
@@ -307,6 +313,7 @@
 
 (module+ test-table
   (current-module-path)
+  (define t 'table)
 
   (dotest "|\nx ")
   (dotest "|\n\nx")
@@ -329,7 +336,7 @@
   (dotest "\nwat\n|\nx")
   (dotest "\n|\nx")
   (dotest "|\n")
-  (dotest "|")
+  (dotest "|" #:nte t)
   (dotest "| ")
   (dotest " |")
   (dotest " | ")
@@ -730,6 +737,7 @@
   (dotest " *\n")
   (dotest " *")
   (dotest " * ")
+  (dotest "*")
 
   (dotest "  #" #:node-type 'comment) ; -> comment XXX FIXME broken comment element should be matching this
   (dotest "#" #:node-type 'comment) ; -> comment
@@ -1737,6 +1745,8 @@ y y:
   #;
   (dotest-quiet #f)
 
+  (dotest "#+KEYWORD does it bind?")
+
   (dotest "(" #:node-type p)
   (dotest "_" #:node-type p)
   (dotest "#+" #:node-type p)
@@ -1932,6 +1942,20 @@ don't affilaite to other unaff keyword
   (dotest "[fn::]")
   (dotest "[fn::")
 
+  ; FIXME these have annoying failure modes which push
+  ; the tokenizer to parser as paragraphs
+  (dotest "[fn:a] b\nc\n* d e\nf")
+  (dotest "[fn:a] b\nc\n[fn:d] e\nf")
+
+  (dotest "[fn:a]\n\n\n\n")
+
+  (dotest "[fn:a] b\n|t\n\n")
+
+  (dotest "[fn:a] b\n\nc\n\nd\n* \n")
+  (dotest "[fn:a] b\n\nc\n\nd\n\n")
+
+  (dotest "[fn:x]\n*\n")
+  (dotest "[fn:x]\n* \n")
 
   (dotest "[fn::a][fn::b]")
 

@@ -56,29 +56,29 @@
 (define-lex-abbrev wsnn* (:* wsnn))
 (define-lex-abbrev wsnn+ (:+ wsnn))
 
-(define-lex-abbrev negated-set
+(define-lex-abbrev negated-set ; aka NOT stop words
   (:~ ; NOT any of these
-   " "
+   " " ; only here to differentiate whitespace
    "\t"
    "\n"
 
    0-9
    alpha
-   "\\"
-   "\""
+   ;"\\" ; this is eol in paragraphs and no longer an issue
+   ;"\"" ; this is sandboxed to headings and is no longer an issue
 
-   "|"
-   ":"
-   "%"
-   "_"
+   "|" ; XXX maybe we can remove this
+   ":" ; XXX maybe we can remove this
+   ;"%" ; this is sandboxed in timestamps or paragraphs and is no longer and issue
+   ;"_" ; XXX sandboxed in ??? but definitely not an issue to star with it
 
    "*"
-   "@"
+   ;"@" ; this is sandboxed in paragraphs and no longer an issue
    "+"
    "-"
    "["
-   "]"
-   ">"
+   "]" ; XXX maybe we can remove this
+   ;">" ; FIXME why was this here at all?
    ))
 
 ;; elements
@@ -101,18 +101,141 @@
          (:* " " "\t")
          "#+"
          (:or
+          (:* (:~ whitespace))
           (:seq
            (:* (:~ whitespace "["))
            "["
            (:* (:~ "\n"))
-           "]")
-          (:* (:~ whitespace)))
+           "]"))
          ":"
          ; XXX BUT there must be a space before the first colon can appear in the value
          ; otherwise the :~ whitespace will continue to match, but I think it will do that
          ; anyway? so we are ok?
          (:* (:~ "\n")))
    "\n"))
+
+(define-lex-abbrev keyword-element-whitespace
+  (:& (:seq (:? (:~ "\n")) wsnn+ (:? (:~ "\n")))
+      (:* (:or whitespace (:~ (:or "[" "]" "\n"))))))
+
+(define-lex-abbrev keyword-post-colon
+  (:* (:~ (:or ":" "\n"))))
+
+#;
+(define-lex-abbrev keyword-not-begin
+  (:& (:+ (:~ (:or ":" "\n")))
+      (:or
+       (:~ "b")
+       (:seq "b" (:~ "e"))
+       (:seq "be" (:~ "g"))
+       (:seq "beg" (:~ "i"))
+       (:seq "begi" (:~ "n"))
+       (:seq "begin" (:~ "_"))
+       #; ; match as malformed block
+       (:seq "begin_" wsnn+)
+       #; ; match as malformed block
+       (:& (:seq "begin_")
+           (from/stop-before "b" "\n"))
+       (:~ "B")
+       (:seq "B" (:~ "E"))
+       (:seq "BE" (:~ "G"))
+       (:seq "BEG" (:~ "I"))
+       (:seq "BEGI" (:~ "N"))
+       (:seq "BEGIN" (:~ "_"))
+       #; ; match as malformed block
+       (:seq "BEGIN_" wsnn+)
+       #; ; match as malformed block
+       (:& (:seq "BEGIN_")
+           (from/stop-before "B" "\n")))))
+
+(define-lex-abbrev keyword-element-malformed
+  ; FIXME this doesn't cover with cases of malformed options
+  (:& (from/stop-before "\n" "\n") ; stop before isn't actually necessary if there is a shorter match ...
+      (complement
+       (:seq
+        "\n"
+        (:* " " "\t")
+        "#+"
+        (:or "begin" "BEGIN" "end" "END")
+        "_"
+        (:~ (:or " " "\t"))
+        any-string))
+      (:seq
+       "\n"
+       (:* " " "\t")
+       "#+"
+       ; the malformed options cases ??
+       ; [ whitespace missing ] :
+       ; not [ whitespace not ] :
+       ; whitespace ] anything :
+       ; basically whitespace not between [ and ]
+       ; or whitespace between [ and ] but something after ] that is not : and then no colon for reset of line
+       ; FIXME dealing with #+begin_ case is a pain here because we have to enumerate
+       (:?
+        ;(:&
+         #; ; using complement above covers all the cases here
+         keyword-not-begin
+         (:or
+          (:seq
+           (:* (:~ (:or "\n"))) ; FIXME the not colon case ? or does keyword-post-colon save us here?
+           wsnn+ ; any whitespace
+           (:* (:~ (:or "\n")))
+           (:~ (:or "]")) ; and the char before the colon is not rsb
+           ":")
+          (:seq
+           (:* (:~ ":" whitespace))
+           wsnn+
+           ":"
+           )
+          (:seq
+           (:* (:~ (:or "\n" "[")))
+           wsnn+ ; any whitespace before the first lsb
+           (:* (:~ (:or "\n"))) ; and rsb before colon
+           "]:")
+          #;
+          (:?
+           (:seq
+            (:+ (:~ (:or "b" "B" ":" "\n"))) ; #+begin_src etc.
+            )))
+         ;)
+       )
+       keyword-post-colon)))
+
+(module+ test-keyword-malformed
+  (define nk-lexer
+    (lexer-srcloc
+     [keyword-element (token 'KEYWORD-ELEMENT lexeme)] ; have to have this for longer match
+     [keyword-element-malformed (token 'KEYWORD-ELEMENT-MALFORMED lexeme)]))
+
+  (nk-lexer (open-input-string "\n#+ :\n"))
+  (nk-lexer (open-input-string "\n#+x :\n"))
+
+  (nk-lexer (open-input-string "\n#+]]]:\n"))
+  (nk-lexer (open-input-string "\n#+a b: \n"))
+  (nk-lexer (open-input-string "\n#+a b:\n"))
+
+  (nk-lexer (open-input-string "\n#+call:\n"))
+
+  (nk-lexer (open-input-string "\n#+call: hello\n"))
+
+  (nk-lexer (open-input-string "\n#+[hello]: lol\n"))
+  (nk-lexer (open-input-string "\n#+[a b]: lol\n"))
+  (nk-lexer (open-input-string "\n#+[a b]x: lol\n"))
+
+
+  (nk-lexer (open-input-string "\n#+lolol hello world\n"))
+
+  (nk-lexer (open-input-string "\n#+b\n"))
+  (nk-lexer (open-input-string "\n#+begin\n"))
+  (nk-lexer (open-input-string "\n#+beginx\n"))
+  ; these are matched as malformed blocks ? FIXME but somehow they match here too ???
+  (nk-lexer (open-input-string "\n#+begin_\n"))
+  (nk-lexer (open-input-string "\n#+begin_ \n"))
+
+  ; this matches a shorter string and the block parser takes over
+  (nk-lexer (open-input-string "\n#+begin_src\n"))
+
+  )
 
 #;
 (define-lex-abbrev todo-spec-line ; XXX FIXME remove as overly complex
@@ -129,6 +252,8 @@
 ;;; tables
 
 (define-lex-abbrev table-element
+  (:+ (from/stop-before (:seq "\n" wsnn* "|") "\n"))
+  #;
   (from/stop-before (:+ (:seq "\n" (:* (:or " " "\t")) "|" (:* (:~ "\n"))))
                     (:or
                      "\n\n"
@@ -268,10 +393,11 @@ c
   ; early so we will have to detect mismatched suffixes in a second step
   ; OR we will have to terminate if we hit another #+begin_ block before
   ; finding an end, which might make more sense, but will have to test
-  (:seq (from/stop-before unknown-block-line-begin
-                          (:or
-                           stop-before-heading
-                           (:seq unknown-block-line-end "\n")))))
+  (:& (:seq any-string unknown-block-line-end)
+   (:seq (from/stop-before unknown-block-line-begin
+                           (:or
+                            stop-before-heading
+                            (:seq unknown-block-line-end "\n"))))))
 
 ;;;; drawers
 
@@ -300,7 +426,7 @@ c
            ; I don't understand how the variant above matches things where :end: has 
            ; something other than whitespace in front of it :/
            drawer-prop-comp
-           (:or (:seq any-string "\n" (:+ "*"))
+           (:or #; (:seq any-string "\n" (:+ "*"))
                 (:seq any-string "\n" (:* " " "\t") ":end:" (:* " " "\t"))))
        ; sigh legacy support for this
        (:& (from/stop-before
@@ -308,7 +434,7 @@ c
             (:or stop-before-heading
                  (:seq "\n" (:* " " "\t") ":END:" (:* " " "\t") "\n")))
            drawer-PROP-comp
-           (:or (:seq any-string "\n" (:+ "*"))
+           (:or #; (:seq any-string "\n" (:+ "*"))
                 (:seq any-string "\n" (:* " " "\t") ":END:" (:* " " "\t"))))
        (:& drawer-end-comp
         (from/stop-before
@@ -336,7 +462,7 @@ c
                     (:+ (:~ (:or " " "\t" "\n"))))))
 
 (define-lex-abbrev drawer-ish-comp-end
-  (:or (:seq any-string "\n" (:+ "*"))
+  (:or #; (:seq any-string "\n" (:+ "*")) ; FIXME what happens if we leave this out ? TODO apparently it correctly does not match as a drawer?
        (:seq any-string "\n" (:* " " "\t") (:or ":end:" ":END:") (:* " " "\t"))))
 
 (define-lex-abbrev drawer-ish
@@ -364,10 +490,45 @@ c
 ;; plain lists
 
 (define-lex-abbrev bullet-marker (:or "." ")"))
+(define-lex-abbrev marker-value (:or (:+ A-Z) (:+ a-z) (:+ 0-9)))
+
+
+(define-lex-abbrev ordered-list-start
+  ; wsnn+ or newline but can't eat the newline
+  (:seq wsnn* marker-value bullet-marker))
+
+(define-lex-abbrev descriptive-list-start
+  (:or (:seq wsnn* (:or "-" "+")) (:seq wsnn+ "*")))
+
+(define-lex-abbrev plain-list-start-helper
+  (:or ordered-list-start descriptive-list-start))
 
 (define-lex-abbrev plain-list-start
-  ; can't eat the newline :/
-  (:seq (:* (:or " " "\t")) (:or (:+ A-Z) (:+ a-z) (:+ 0-9)) bullet-marker (:or " " "\t")))
+  (:or
+   (:seq "\n" plain-list-start-helper wsnn+)
+   (:&
+    (:seq "\n" plain-list-start-helper)
+    (from/stop-before (:seq "\n" plain-list-start-helper) "\n"))))
+
+; marker types and sequences are completely interchangable, so the only
+; useful distinction in the grammar is between ordered and descriptive
+(define-lex-abbrev ordered-list-line
+  (from/stop-before
+   (:or
+    (:seq "\n" ordered-list-start wsnn+)
+    (:&
+     (:seq "\n" ordered-list-start)
+     (from/stop-before (:seq "\n" ordered-list-start) "\n")))
+   "\n"))
+
+(define-lex-abbrev descriptive-list-line
+  (from/stop-before
+   (:or
+    (:seq "\n" descriptive-list-start wsnn+)
+    (:&
+     (:seq "\n" descriptive-list-start)
+     (from/stop-before (:seq "\n" descriptive-list-start) "\n")))
+   "\n"))
 
 ;; paragraphs
 
@@ -382,13 +543,24 @@ c
   ; #[ \t]
   ; #\+
   ; :[A-Za-z]+:
+  (:+ paragraph-2) ; WARNING if you accidentally use this form and try
+  ; to process the output with token-stop-for-paragraph you will it an
+  ; infinite loop and massive memory usage as the tokenizer produces
+  ; and infinite stream of empty strings
+
+  #; ; this variant is broken and requires token-stop-for-paragraph, but we have very nearly
+  ; constructed paragraph-1 such that it is the exact complement of all the other line elements
+  ; NOW, having written this, we could try to use (complement all-the-other-elements) to implement
+  ; paragraph ... worth investigating
+
   (from/stop-before
    paragraph-2
    ;(:or paragraph-2 paragraph-1)
    (:or "\n\n"
         ; FIXME this is broken because we have to look WAY ahead e.g. all the way to an #+end_src
-        stop-before-heading
-        stop-before-footnote-def
+        stop-before-heading ; FIXME shouldn't need this ??
+        stop-before-footnote-def ; FIXME shouldn't need this ??
+        ; plain-list-start ; FIXME we shouldn't need this ???
         ;stop-before-drawer-start
         drawer-start
         (:seq "\n" (:* (:or " " "\t")) "#+") ; keyword
@@ -421,8 +593,8 @@ c
 (define-lex-abbrev paragraph-1
   (:+
    (:or
-    hyperlink
-    hyperlink-ab
+    ;hyperlink ; already covered below
+    ;hyperlink-ab ; already covered below
     ;timestamp ; FIXME including this here massively increases compile times and runtime and we don't need it at this stage
     (from/stop-before
      (:seq "\n"
@@ -430,6 +602,10 @@ c
            (:* (:or " " "\t")) ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
            (:or
             (:or
+             "~"
+             "="
+             "/"
+             "_"
              "<" ">" ; anything that would collide here will be parsed in the nested paragraph parser
              "'"
              "\""
@@ -446,7 +622,8 @@ c
              "^"
              "&"
              ".")
-            (:seq (:or "+" "-") (:~ whitespace))
+            (:seq (:or "+" "-") (:~ whitespace)) ; FIXME somehow this fails to protect?
+            (:seq wsnn+ "*" (:~ whitespace))
             #; ; broken ? or something else is wrong?
             (:seq (:+ "*") (:& (:~ whitespace) (:~ "*")))
             (:seq (:+ "*") (:~ (:or whitespace "*")))
@@ -464,26 +641,47 @@ c
               (:+ lower-case)
               (:+ upper-case)
               (:+ 0-9))
-             bullet-marker
-             (:~ whitespace))))
+             (:or
+              "-" "+" "*"
+              (:seq
+               bullet-marker
+               (:~ whitespace))))))
      ; FIXME somehow keep the first of two newlines at the end? (per the spec trailing newlines go with the previous element)
      "\n"))))
 
 (module+ test-par-1
+  (require rackunit)
+  (define p1-lexer
+    (lexer-srcloc
+     [paragraph-1 (token 'PARAGRAPH-1 lexeme)]))
+
+  (define p2-lexer
+    (lexer-srcloc
+     [paragraph-2 (token 'PARAGRAPH-2 lexeme)]))
+
   (define p-lexer
     (lexer-srcloc
-     #;
-     [paragraph-1 (token 'PARAGRAPH-1 lexeme)]
-     [paragraph-2 (token 'PARAGRAPH-2 lexeme)]
-     ))
+     [paragraph (token 'PARAGRAPH lexeme)]))
 
-  #; ; correctly fails
-  (p-lexer (open-input-string "\n99.\n"))
+  (check-exn exn:fail? (λ () (p1-lexer (open-input-string "\n - \n"))))
+  (check-exn exn:fail? (λ () (p2-lexer (open-input-string "\n - \n"))))
+  (check-exn exn:fail? (λ () (p-lexer (open-input-string "\n - \n"))))
 
-  (p-lexer (open-input-string "\naaaaaaaaaaaaaaaaaaaaa\nx \n"))
+  (check-exn exn:fail? (λ () (p1-lexer (open-input-string "\n - g\n"))))
+  (check-exn exn:fail? (λ () (p2-lexer (open-input-string "\n - g\n"))))
+  (check-exn exn:fail? (λ () (p-lexer (open-input-string "\n - g\n"))))
 
-  (p-lexer (open-input-string "\nHello how are you?\n"))
-  (p-lexer (open-input-string "\nHello. How are you?\n"))
+  ; note the critical space after the f
+  (p1-lexer (open-input-string "\n f \n - g\n"))
+  (p2-lexer (open-input-string "\n f \n - g\n"))
+  (check-equal? (token-struct-val (srcloc-token-token (p-lexer (open-input-string "\n f \n - g\n")))) "\n f ")
+
+  (check-exn exn:fail? (λ () (p2-lexer (open-input-string "\n99.\n"))))
+
+  (p2-lexer (open-input-string "\naaaaaaaaaaaaaaaaaaaaa\nx \n"))
+
+  (p2-lexer (open-input-string "\nHello how are you?\n"))
+  (p2-lexer (open-input-string "\nHello. How are you?\n"))
 
   )
 
@@ -686,8 +884,61 @@ c
 (define-lex-abbrev stop-before-footnote-def
    (:seq "\n" "[fn:" footnote-label "]"))
 
+(define-lex-abbrev footnote-definition-line
+  (from/stop-before
+   (:seq
+    "\n"
+    (:or
+     (:~ (:or "*" "[" "\n"))
+     (:seq (:+ "*") (:~ wsnn))
+     (:seq "[" (:~ (:or "f" "\n")))
+     (:seq "[f" (:~ (:or "n" "\n")))
+     (:seq "[fn" (:~ (:or ":" "\n")))
+     (:seq "[fn:" (:~ (:or 0-9 alpha "_" "-" "\n"))) ; includes [fn:]
+     (:seq "[fn:" (:* (:or 0-9 alpha "_" "-" "\n"))
+           (:~ (:or 0-9 alpha "_" "-" "]" "\n")))))
+   "\n"))
+
 (define-lex-abbrev footnote-definition
+  ; FIXME we can't use the (:& complement) technique here because these endings are technically not
+  ; malformed, HOWEVER ... we might be able to use a positive definition instead ?
+
+  (:seq
+   (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
+   ; FIXME how to include the single newline
+   (:*
+    (:or (:seq "\n" (:+ footnote-definition-line))
+         footnote-definition-line))
+   )
+
+  #; ; XXX this variant is extremely slow and doesn't actually work
+  (:seq
+   (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
+   (:+
+    (:or paragraph
+         drawer-ish
+         table-element
+         unknown-block
+         keyword-element
+         keyword-element-malformed))
+
+   )
+
+  ;(:&
+  #; ; this appraoch doesn't work
+  (:seq
+   (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
+   (:*
+    (:&
+     (complement (:seq any-string "\n[fn:" footnote-label))
+     ;(complement (from/stop-before stop-before-footnote-def "\n"))
+     (complement (:seq any-string "\n" (:+ "*")))
+     ;(complement (from/stop-before "\n" "\n\n"))
+     ))
+   )
+
   ; FIXME "word constituent characters" not 100% sure what that means in this and other similar contexts
+  #;
   (from/stop-before
    (:seq "\n" "[fn:" footnote-label "]")
    (:or
@@ -695,7 +946,8 @@ c
     stop-before-heading
     "\n\n\n"
     ; eof as well it seems
-    )))
+    ;)
+   )))
 
 ;;; hyperlink
 

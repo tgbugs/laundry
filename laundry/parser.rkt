@@ -105,19 +105,37 @@ paragraph-node : PARAGRAPH
 
 ; this only needs to handle the single line cases that are ambiguous for the tokenizer
 ; note stars is safe here because headlines don't use the standalone stars token
-paragraph-line : newline ( LSB | RSB | HASH | PLUS | UNDERSCORE | NEGATED-SET | wsnn | ALPHA | ALPHA-N | END-DB | COLON | malformed | stars )+
+paragraph-line : newline (
+                          LSB
+                         | RSB
+                         ;| HASH
+                         | PLUS
+                         ;| UNDERSCORE
+                         | ASTERISK
+                         | NEGATED-SET
+                         | wsnn
+                         | ALPHA
+                         | ALPHA-N
+                         | DIGIT
+                         | DIGIT-N
+                         | END-DB
+                         | COLON
+                         | malformed
+                         | stars )+
                | parl-tokens-with-newline
 
+; FIXME I think we are going to be able to merge nonl and nl once planning is tokenized correctly ?
 malformed : planning-dissociated
           | UNKNOWN-BLOCK-MALFORMED  ; FIXME move this to the right place XXX variants that start with a newline do not match here
 
-parl-tokens-with-newline : malformed-nl
-malformed-nl : detached-drawer | detached-block | UNKNOWN-BLOCK-MALFORMED
+@parl-tokens-with-newline : malformed-nl
+malformed-nl : detached-drawer | detached-block | keyword-malformed
 detached-drawer : DRAWER-EOF | DRAWER-PROPS-EOF | DRAWER-MALFORMED ; FIXME distinguish maybe?
 ; due to changes in the tokenizer the detached blocks always carry their own newline
 ; however if you are testing from the start of a file you may not see the newline there
 ; because it is stripped as an imlementation detail
-detached-block : SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED
+detached-block : SRC-BLOCK-EOF | SRC-BLOCK-MALFORMED | UNKNOWN-BLOCK-MALFORMED
+keyword-malformed : KEYWORD-ELEMENT-MALFORMED
 
 ;;;; *
 
@@ -415,16 +433,20 @@ table-element : TABLE-ELEMENT
 
 ;;; plain lists
 
-plain-list-line : /newline pl-indent ( ordered-list-line | descriptive-list-line )
+plain-list-line : ordered-list-line | descriptive-list-line
+ordered-list-line : ORDERED-LIST-LINE
+descriptive-list-line : DESCRIPTIVE-LIST-LINE
+
+-plain-list-line : /newline pl-indent ( ordered-list-line | descriptive-list-line )
 pl-indent : @wsnn*
-ordered-list-line : bullet-counter plain-list-line-tail?
+-ordered-list-line : bullet-counter plain-list-line-tail?
 bullet-counter : ( digits | alphas-unmixed ) ( PERIOD | R-PAREN )
 ;; XXX NOTE the worg spec is inconsistent with behavior, single letters DO NOT WORK AS COUNTERS
 ;; TODO ARGH, I've never checked what the org-export backends do O_O AAAAAAAAAAAAAAAAAAAA
 ;; yet another part of the elisp implementation to deal with FFS
 ;; html and tex export backends do not support letters in the bullet counter
 
-descriptive-list-line : bullet-plain plain-list-line-tail?
+-descriptive-list-line : bullet-plain plain-list-line-tail?
 bullet-plain : HYPHEN | PLUS | wsnn+ ASTERISK 
 
 plain-list-line-tail : @wsnn+ @not-newline | @wsnn+ ; sadly we have to use the dumb parser here due to ambiguity

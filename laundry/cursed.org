@@ -781,9 +781,15 @@ font locking and org-element disagree on this
 
 I'm ruling this a bug in org element since it doesn't match the spec.
 
+#+: what is the empty key?
+
 #+k:k : :]
 oh dear
 
 #+k: : :]
 oh no
+
+#+]]]][[[[: this should be a keyword I think ? according to org-element it is!
+#+a b:
+#+x :
 

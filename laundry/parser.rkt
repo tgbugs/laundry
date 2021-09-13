@@ -95,13 +95,14 @@ empty-line : newline
 ; FIXME pretty sure that the @not-newline? after PARAGRAPH-1 never matches anything ?
 ; we can actually do this now I think since we have successfully defined paragraphs as the negation of the other elements
 ; FIXME PARAGRAPH-EOF ambiguity
-paragraph-node : ( PARAGRAPH
+paragraph-node : @paragraph-core NEWLINE? ; spec says empty lines should associate with the preceeding paragraph
+
+paragraph-core : PARAGRAPH
                ;| PARAGRAPH-EOF
                ;| PARAGRAPH-MALFORMED
                | paragraph-line ; this only happens if PARAGRAPH does not match
                | planning-detached ; FIXME isnt this eaten by paragraph-1 ? TODO check
                ; | PARAGRAPH-EOF?
-               ) NEWLINE? ; spec says empty lines should associate with the preceeding paragraph
 
 ; this only needs to handle the single line cases that are ambiguous for the tokenizer
 ; note stars is safe here because headlines don't use the standalone stars token
@@ -365,7 +366,10 @@ table-element : ( TABLE-ELEMENT )+ NEWLINE?
 
 ;;; plain lists
 
-plain-list-line : ( ordered-list-line | descriptive-list-line ) NEWLINE?
+; maybe this will work ... it is a putative plain list but what to do about empty-line terminating?
+plain-list-element : plain-list-line ( plain-list-line | paragraph-core )* NEWLINE?
+
+plain-list-line : ( ordered-list-line | descriptive-list-line )
 ordered-list-line : ORDERED-LIST-LINE
 descriptive-list-line : DESCRIPTIVE-LIST-LINE
 

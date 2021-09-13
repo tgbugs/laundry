@@ -13,39 +13,13 @@
                      (only-in racket/list combinations permutations)
                      ))
 (provide laundry-make-tokenizer
-         #;
-         cumulative-offset
          table-make-tokenizer
          paragraph-make-tokenizer
-         ;heading-make-tokenizer
          bind-runtime-todo-keywords
-
-         #;
-         find-last
          get-block-type
          set-port-next-location-from
-
          (rename-out [debug laundry-tokenizer-debug]
                      [final-port laundry-final-port])
-
-         #; ; colorer needs its own
-         token-stop-for-paragraph
-
-         ;heading
-         ;hyperlink
-         ;hyperlink-ab
-         ;comment-element
-         ;drawer-ish
-
-         ;paragraph
-         #|
-         markup-*
-         markup-/
-         markup-_
-         markup-+
-         markup-=
-         markup-~
-         |#
          )
 
 (define (find-last char str)
@@ -209,9 +183,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                     [(token-correct position-correct)
                      (values (token TOKEN lexeme-correct)
                              (+ (position-offset start-pos)
-                                offset))]
-                    #;
-                    [(this-offset) (- (add1 (file-position input-port)) position-correct)])
+                                offset))])
         (when (debug)
           (println (list 'ooooooo lexeme-correct offset (position-offset start-pos) position-correct)))
         (if (or (file-stream-port? input-port)
@@ -231,15 +203,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                  (add1 position-correct)))
               (file-position input-port position-correct)
               (when (debug)
-                #;
-                (cumulative-offset (+ this-offset (cumulative-offset)))
                 (println (list 'p1: (file-position input-port)))
                 (println (list 'pnl1: (let-values ([(l c p) (port-next-location input-port)]) (list l c p))))
                 (println (list 'pppppppppppppppp (peek-char input-port)))
-                (println (list 'tttttttttttttttt token-correct))
-                #;
-                (println (list 'cumoff (cumulative-offset)))
-                )
+                (println (list 'tttttttttttttttt token-correct)))
               token-correct)
             ; FIXME we will have to come up with a better solution where we can set the
             ; file position on the appended ports for the first token so that everything
@@ -318,16 +285,6 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 (define heading-lexer (make-parameter #f))
 
 (define (bind-runtime-todo-keywords [keywords #f])
-  ; FIXME I swear this is as close to absolutely having to use
-  ; eval as I have ever come, and it is because brag and agg
-  ; are completely static macros with regard to specifying the tokenizer
-  ; (define-syntax NAME (make-lex-abbrev (λ () (quote-syntax RE))))
-  #;
-  (define-syntax runtime-todo-keyword
-    (make-lex-abbrev (λ () (datum->syntax #f `(:or ,@keywords)))))
-  #;
-  (eval-syntax #`(define-lex-abbrev runtime-todo-keyword (:or #,@keywords)))
-  ;;(define-lex-abbrev eof (eof))
   (define heading-lexer-src
     ; XXX this lexer should ALWAYS be given strings that start and end with a newline
     #`(lexer-srcloc
@@ -338,40 +295,18 @@ using from/stop-before where the stop-before pattern contains multiple charachte
               (:+ (:seq ":"
                         (:* ; zero or more so that empty tags are still tags
                          (:or alpha 0-9 "_" "@" "#" "%"))))
-              ; XXX warning :+ seems to have an implicit :or lurking in it
-              ; XXX unicode dialect and ascii dialect?
               ":"
-              ; FIXME SIGH we can't include eof here because ... reasons ??
               (:* (:or " " "\t"))
               "\n")
         (token 'TAGS lexeme)]
        ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; this must come befor RTK
-       #; ; we don't need this anymore it complicates the grammar signiciantly
-       ; it was originally retained to deal with divergent behavior between org-element and the archive
-       ; functionality itself, but since we have fixed the issue and are using stop-before, we don't need
-       ; this anymore
-       [":ARCHIVE:" (token 'ARCHIVE lexeme)] ; we keep this so we can catch lone archive tags more easily
-       #;
-       [runtime-todo-keyword (token 'RUNTIME-TODO-KEYWORD lexeme)]
        [(:or #,@keywords) (token 'RUNTIME-TODO-KEYWORD lexeme)]
        [(:seq "[#" upper-case "]") (token 'PRIORITY lexeme)]
-       #;
-       [":" (token 'COLON lexeme)]
-       #;
-       ["[" (token 'LSB lexeme)]
-       #;
-       ["]" (token 'RSB lexeme)]
-       #;
-       ["#" (token 'HASH lexeme)]
-       ; FIXME markup is allowed here too
        [(:or " " "\t") (token 'BLANK lexeme)] ; unfortunately we still have to split on space
        [(:seq (:+ (:~ #;"*" "[" "]" ":" "\n" " " "\t")))
         (token 'OTHER lexeme)]
        ["\n" (token 'NEWLINE-END lexeme)]
-       [(:~ (:or " " "\t" "\n" #;":")) ; insurance
-        #;
-        any-char
-        #;(:~ "*")
+       [(:~ (:or " " "\t" "\n")) ; insurance
         (token 'OOPS lexeme)]))
   (define heading-lexer (eval-syntax heading-lexer-src (namespace-anchor->namespace nsa)))
   ; FIXME apparently this is incredibly slow, taking up nearly a quarter of our runtime !?
@@ -416,15 +351,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["{" (token 'LCB lexeme)] ["}" (token 'RCB lexeme)]
    ["(" (token 'LP lexeme)]  [")" (token 'RP lexeme)]
    ["_" (token 'UNDERSCORE lexeme)]
-   #;
-   [left-square-bracket-helper
-    ; FIXME this is clearly wrong
-    (token 'LSB-HELPER lexeme)]
 
-   ;[pre+s-m (token 'PRE-S lexeme)] ; can't use this one it will eat everything, has to go in grammar
-   ;[pre+s+m (token 'PRE-S-M lexeme)] ; also don't use this because it has the braces >_<
-   ;[pre-s+m]
-   ; and thus we are back to mu-pre-safe
    [mu-pre-safe (token 'MU-PRE-SAFE lexeme)]
 
    [(:seq (:+ (:~ mu-pre-1 mu-marker #;mu-post-1 "[" "]" "}" ")" script-marker whitespace))
@@ -647,65 +574,17 @@ using from/stop-before where the stop-before pattern contains multiple charachte
       out))
   next-token)
 
-; I have no idea why this was defined inside of make-tokenizer in the
-; original example I copied years ago ...
-
-; ah, now I see, sometimes you want/need to be able to configure the
-; lexer at runtime, so for exaple org reconfigures startup options
-; searching out the initial configuration of various #+todo: keywords
-; which may appear anywhere in the file (oops) so a full simple parse
-; would have to be conducted to find them first, OR we specify that
-; #+todo: keywords defined outside the first section of the org-file
-; are not guranteed to be included during any given parse
-
-; XXX FALSE, there is no easy way to define lexer-srcloc
-; why the foo do people define these things as macros ?!?!?!?!
-; there is no reason to force it to be so fooing rigid
-; all in the name of safety I'm sure, so annoying though
-; why the hell can't I just pass the data in!
-
-; XXX further fooery: ah yes, even more problems which is
-; that you can't compile the fooing lexer so that it is
-; performant at runtime when you need it because this thing
-; wait no ... this can't be the case ... because the macro
-; used to be invoked only inside a function call ?
-; ah foo, but it could still be compiled ahead of time
-
 (define-namespace-anchor nsa)
 
 (define laundry-lexer
   (lexer-srcloc
 
-   ; for testing secondary headline parser
-   #;
-   ["TODO" (token 'RUNTIME-TODO-KEYWORD lexeme)]
-   #;
-   ["DONE" (token 'RUNTIME-TODO-KEYWORD lexeme)]
-
-   [heading (begin0 (token 'HEADING lexeme)
-              #;
-              (println (list
-                        "heading start-pos" start-pos
-                        "file-position input-port after heading" (file-position input-port)
-                        input-port
-                        (port-file-identity input-port)
-                             )))
-            ]
+   [heading (token 'HEADING lexeme)]
    [planning-line (token 'PLANNING-ELEMENT)]
    [planning-line-malformed (token 'PLANNING-ELEMENT-MALFORMED)]
 
-   ; FIXME there is a question of whether to use the lexer like this
-   ; to slurp code blocks in the first pass and then run code block
-   ; specific parser in a later pass, or whether we want to try to
-   ; get certain information in the first pass
-   #; ; XXX doesn't work the match is too short
-   [(from/stop-before (:seq "\n" (:* " " "\t") "#+begin_src")
-                      (:seq "\n" (:+ "*") (:or " " "\t")))
-    (token 'SRC-BLOCK-BEGIN-MALFORMED lexeme)]
-   ; XXX we can't do start-after on a heading to find a random end_src
-   #; ; easier to dispatch all blocks from the same patterns and issue tokesn based on block-type
-   [src-block (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos)]
-   [(from/stop-before unknown-block-line-end "\n") ; if we run into one of these by itself it is malformed because it is disconnect
+   [(from/stop-before unknown-block-line-end "\n")
+    ; if we run into one of these by itself it is malformed because it is disconnect
     (token 'UNKNOWN-BLOCK-MALFORMED lexeme)]
    [(from/stop-before unknown-block-line-begin "\n")
     (peek-stop
@@ -713,101 +592,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
      lexeme
      input-port
      (get-block-lexer (get-block-type lexeme))
-     #:malformed #t)
-    #;
-    (let* ([block-type (get-block-type lexeme)]
-           [token-name
-            (case block-type
-              ; the only blocks that are differentiated here are types
-              ; that are differentiated here because they are the only
-              ; ones that have parsing impliciations at runtime
-
-              ; note that without smuggling in some state to this
-              ; lexer we can't really lookahead and then parse a
-              ; separate language in here
-              [("src" "SRC") 'SRC-BLOCK]
-              #; ; TODO example, verbatim, etc. that need special fontification
-              [("example" "EXAMPLE") 'EXAMPLE-BLOCK]
-              [else 'UNKNOWN-BLOCK])]
-           [make-lexer
-            (λ ()
-              (let ([stx
-                     #`(lexer
-                        [(from/stop-before
-                          "" ; optional to handle the case where the end line is immediate
-                          (:or stop-before-heading
-                               (:& (:seq "\n"
-                                         (:* " " "\t") (:or "#+end_" "#+END_") #,block-type (:* " " "\t")
-                                         "\n")
-                                   (:seq any-string (:or "#+end_" "#+END_") #,block-type any-string))))
-                         ; FIXME may need a few more values out of this
-                         lexeme])])
-                #;
-                (log-error "make-lexer stx: ~a" stx)
-                (eval-syntax stx (namespace-anchor->namespace nsa))))]
-           [block-lexer (make-lexer)]
-           [lexeme-more (block-lexer input-port)]
-           [lexeme-combined (string-append lexeme lexeme-more)]
-           [was-heading (regexp-match #rx"\n[*]+$" lexeme-more)]
-           )
-      (when (debug)
-        (println (list "eeeeeeee:" block-type lexeme lexeme-more lexeme-combined)))
-      (if was-heading
-          (let* ([offset (string-length (car was-heading))]
-                 [tok (token 'UNKNOWN-BLOCK-MALFORMED
-                             (substring lexeme-combined 0 (- (string-length lexeme-combined) offset)))]
-                 [comb (λ (in)
-                         (file-position in (- (file-position in) offset))
-                         (set-port-position! in offset #:back-line #t))])
-            #;
-            (log-error "was-heading: ~a" offset)
-            ; FIXME backtrack at bof and eof has to be done outside this function TODO put this in a function
-            (if (or (file-stream-port? input-port)
-                 (string-port? input-port))
-                (begin
-                  (comb input-port)
-                  tok)
-                ; XXX resolved down in -stt below FIXME naming and action at a distance
-                (cons tok comb))
-            #;
-            (error was-heading)
-            ; XXX note that if we hit malformed all the rest of the
-            ; text to the next headline is marked as malformed, the
-            ; elisp implementation has different behavior
-            #;
-            (token 'UNKNOWN-BLOCK-MALFORMED (substring lexeme-combined 0 (- (string-length lexeme-combined) offset))))
-          (if (string=? (string-append lexeme "\n") lexeme-combined)
-              ; FIXME this is the result of stop/before matching
-              (token 'UNKNOWN-BLOCK-MALFORMED lexeme-combined) ; eof case or immediate heading case
-              (begin
-                #;
-                (println (list 'aaaaaaaaaaaaaaaaaaa lexeme lexeme-combined))
-                (token token-name lexeme-combined)))))]
-   #;
-   [unknown-block ; FIXME somehow this is taking priority over src-block? or what?
-    ; TODO we should be able to rework this by detecting #+begin_pattern, extracting pattern
-    ; and then doing (from/stop-before "\n" "#+end_pattern") and synthesizing the lexeme
-    ; it is not clear that this approach is the best since it means that a different approach
-    ; will likely have to be taken if you are using a less powerful tokenizer that can't
-    ; to aribtrary things ... actually, this matches very will with what tree sitter provides
-    ; in terms of external scanners, their examples include heredocs etc. which are a classic
-    ; example of context sensitivity
-    (let* (#;[test-lexeme (string-downcase lexeme)] ; FIXME case folding is evil, we should not support this
-           [suffix (string-trim (car (regexp-match "_[^ \t]+[ \t]" lexeme)) #:repeat? #t)]
-           [sigh (last (string-split (string-trim lexeme "\n" #:repeat? #t) "\n"))]
-           )
-      (unless (or (regexp-match #rx"^[*]+$" sigh) #;(regexp-match #rx"\n[*]+$" lexeme)
-                  (regexp-match (regexp suffix)
-                                ; FIXME super inefficient check!
-                                sigh)
-                  (regexp-match #rx"\n\\*+[ \t]$" lexeme))
-        ; TODO proper next steps when a mismatch is detected
-        ; FIXME elisp can deal with nested cases ... at least for example blocks
-        (error "mismatch" sigh suffix start-pos))
-      (if (member suffix '("_src" "_SRC"))
-          (token-stop-before-heading 'SRC-BLOCK lexeme input-port start-pos #:eof #f) ; FIXME workaround ...
-          (token-stop-before-heading 'UNKNOWN-BLOCK lexeme input-port start-pos #:eof #f)))]
-
+     #:malformed #t)]
    [dynamic-block
     ; FIXME the failure mode for dynamic block separation produces well formed keywords
     ; which probably means that there needs to be a way to define keywords so that if they
@@ -830,47 +615,14 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ; mean for them to be blocks, not keywords
    [keyword-element-malformed (token 'KEYWORD-ELEMENT-MALFORMED lexeme)]
 
-   #;
-   [hyperlink (token 'LINK lexeme)] ; as it turns out this also helps performance immensely
-   #;
-   [hyperlink-ab (token 'LINK-AB lexeme)]
-   ; in theory it should be possible to scan for headlines and then parse all the sections
-   ; in parallel
-
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
 
    [drawer-props
-    (token 'DRAWER-PROPS lexeme)
-    #;
-    (token-stop-before-heading 'DRAWER-PROPS lexeme input-port start-pos)]
+    (token 'DRAWER-PROPS lexeme)]
    [drawer-ish
-    (token 'DRAWER lexeme)
-    #;
-    drawer-start-line
-    #;
-    (let ([lexer-more]
-          []
-          )
-      (peek-stop 'TABLE-ELEMENT lexeme input-port lexer-more stop?))
-    #;
-    (begin0
-        (token-stop-before-heading 'DRAWER lexeme input-port start-pos)
-      #;
-      (println (list
-                "drawer start-pos" start-pos
-                "file-position input-port after drawer" (file-position input-port)
-                input-port
-                (port-file-identity input-port)
-                ))
-      )]
+    (token 'DRAWER lexeme)]
 
-   [paragraph ; FIXME don't return PARAGRAPH-MALFORMED here
-    (token 'PARAGRAPH lexeme)
-    #;
-    (token-stop-for-paragraph 'PARAGRAPH lexeme input-port start-pos)
-    ] ; needed for performance reasons to mitigate quadratic behavior around short tokens
-   #; ; no longer needed as paragraph is now (:+ paragraph-2)
-   [paragraph-2 (token 'PARAGRAPH-2 lexeme)] ; the only time this will match is if paragraph does not so we ware safe
+   [paragraph (token 'PARAGRAPH lexeme)]
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
    ["*" (token 'ASTERISK lexeme)]
@@ -880,218 +632,22 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(:+ " ") (token 'SPACE-N lexeme)]
    ["\t" (token 'TAB)]
 
-   #; ; don't parse this at the top level, only in the paragraph
-   [citation (token 'CITATION lexeme)] ; TODO will likely want nested tokenization here
-
-   ; these are lexemes so that we can ignore them if they don't start the line
-
-   #;
-   ["[fn:" (token 'FOOTNOTE-START lexeme)]
-   #; ; eaten by paragraph in nearly all cases I think
-   [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
-   #; ; eaten by paragraph in nearly all cases I think
-   [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
    [footnote-definition
-    (token 'FOOTNOTE-DEFINITION lexeme)
-    #;
-    (token-stop-before-heading-foot-def-double-blank-line
-     'FOOTNOTE-DEFINITION lexeme input-port start-pos)]
-   #;
-   ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
+    (token 'FOOTNOTE-DEFINITION lexeme)]
 
-   #;
-   ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; FIXME ALPHA-N takes priority over this >_< FFS
-
-   #;
-   ["DEADLINE" (token 'CHARS-DEADLINE lexeme)]
-   #;
-   ["SCHEDULED" (token 'CHARS-SCHEDULED lexeme)]
-   #;
-   ["OPENED" (token 'CHARS-OPENED lexeme)]
-   #;
-   ["CLOSED" (token 'CHARS-CLOSED lexeme)]
-
-   ; FIXME fontification doesn't work for lower case but org element does?
-   ; no, org element recognizes that it might be a planning line but cannot parse the lower case
-   ; seek clarity spec says case insensitive unless explicitly noted, and it does not explicitly note so insense
-   ;[(:or "deadline:" "DEADLINE:") (token 'DEADLINE lexeme)]
-   ;[(:or "scheduled:" "SCHEDULED:") (token 'SCHEDULED lexeme)]
-   ;[(:or "closed:" "CLOSED:") (token 'CLOSED lexeme)]
-
-   #; ; I don't think we need this anymore
-   [":ARCHIVE" (token 'ARCHIVE lexeme)] ; sigh longest match >_<
-
-   ;[":no_export" (token 'NO_EXPORT lexeme)] ; TODO this should probably be configurable
-
-   ; FIXME why is this so uselessly static ... SIGH
-   ;[runtime-todo-keyword (token 'CHARS-TODO-KEYWORD lexeme)]
-   ;[hrm (token 'CHARS-TODO-KEYWORD lexeme)]
-
-   #;
-   [(:or ":PROPERTIES:" ":properties:") (token 'PROPERTIES-D lexeme)] ; sigh
-   #;
-   [(:or ":END:" ":end:") (token 'END-D lexeme)] ; sigh
-
-   ; FIXME yeah, this is is a pain
-   #;
-   [(:or "#+begin_src" "#+BEGIN_SRC") (token 'BEGIN-SRC lexeme)]
-   #;
-   [(:or "#+end_src" "#+END_SRC") (token 'END-SRC lexeme)]
-   #;
-   [(:or "#+begin_example" "#+BEGIN_EXAMPLE") (token 'BEGIN-EX lexeme)]
-   #;
-   [(:or "#+end_example" "#+END_EXAMPLE") (token 'END-EX lexeme)]
-
-   #;
-   [(:or "#+begin" "#+BEGIN") (token 'BEGIN-DB lexeme)]
-   #;
-   [(:or "#+end" "#+END") (token 'END-DB lexeme)]
-
-   #; ; this does not work as desired
-   [
-    ; XXX fortunately this does not capture #+begin_src style lines due to sligh differences in syntax
-    ; this captures the essence of the keyword line
-    ; dealing with the ambiguity of the current specification is
-    ; more problematic
-    ; FIXME this won't work because whitespace IS allowed inside [] so we can't defer
-    ; resolving cases like #+k[[[]:v ]]
-    (:or
-     (from/stop-before (:seq "\n"
-                             (:+ " " "\t")
-                             "#+"
-                             (:+ (:~ whitespace)) ; pretty sure this gobbles the []
-                             ; this is ambiguous and it is not obvious what the rigution
-                             "["
-                             (:~ "]" "\n") ; FIXME nesting issues
-                             "]:"
-                             (:* (:~ ":" "\n")))
-                       "\n")
-
-     (from/stop-before (:seq "\n"
-                             (:+ " " "\t")
-                             "#+"
-                             (:+ (:~ whitespace))
-                             ":"
-                             (:* (:~ ":" "\n")))
-                       "\n"))
-    (token 'KEYWORD-LINE lexeme)]
-   ; FIXME 99% these should not be in the tokenizer maybe with #+NAME: #+name:
-   ; the issue is that if these appear at other places in the file we will be
-   ; in trouble ; NOTE have to add the colons ourselves where needed
-   ; XXX eh, we've more or less gotten it all worked out here
-   ; affiliated keywords
-   #|
-   [(:or "#+NAME" "#+name") (token 'NAME lexeme)]
-   [(:or "#+HEADER" "#+header") (token 'HEADER lexeme)]
-   [(:or "#+PLOT" "#+plot") (token 'PLOT lexeme)]
-   [(:or "#+RESULTS" "#+results") (token 'RESULTS lexeme)] ; NOTE THE PLURAL
-   [(:or "#+CAPTION" "#+caption") (token 'CAPTION lexeme)]
-   [(:or "#+ATTR_" "#+attr_") (token 'ATTR-PREFIX lexeme)]
-   |#
-
-   #; ; we can handle this more cleanly in the keyword module of the expander
-   [todo-spec-line (token 'TODO-SPEC-LINE lexeme)]
-
-   #;
-   [(:or "#+TODO" "#+todo") (token 'TODO lexeme)]
-   #; ; these arent' actually affilated so removing them to simplify things
-   [(:or "#+AUTHOR" "#+author") (token 'AUTHOR lexeme)]
-   #;
-   [(:or "#+DATE" "#+date") (token 'DATE lexeme)]
-   #;
-   [(:or "#+TITLE" "#+title") (token 'TITLE lexeme)] ; FIXME this is showing up as an affiliated keyword
-   
-   ; the call ... not actually keyword and not actually associated
-   ; XXX TODO but should be
-   #;
-   [(:or "#+CALL" "#+call") (token 'CALL lexeme)] ; FIXME move to the keyword module of the expander
-
-   ;[(from/to "@@" "@@" (token 'EXPORT-SNIPPET lexeme))] ;; TODO this might actually work ... except for nested blocks
-   ;[month-major-digit (token 'MMD)]
-   ;[day-major-digit (token 'DMD)]
-   ;[time-major-digit (token 'TMD)]
-   ;[(eof) (token 'MY-EOF) #;(return-without-srcloc eof)]
    [(eof) (return-without-srcloc eof)]
-   ; [(eof) (token-EOF)]
-   ;["#+" (token 'HASH-PLUS)] ; do not want
-   ;[(from/to "#" "\n") (token 'COMMENT lexeme)] ; lol can't use this
-   ;[whitespace (token 'WS lexeme)]
 
-   [":" (token 'COLON lexeme)] ; XXX not sure what needs this but it is related to drawer tests
-;   ["_" (token 'UNDERSCORE lexeme)] ; XXX something in test keywords needs this
-
-   ; the keyword failures FIXME keyword failures should probably parse as that directly?
-;   ["+" (token 'PLUS lexeme)] ; #+ needs this apparently? ; FIXME
-   ["[" (token 'LSB lexeme)]  ; #+x[ ]x: ; FIXME
-   ["]" (token 'RSB lexeme)]  ; #+x[ ]x: ; FIXME
-;   ["." (token 'PERIOD lexeme)] ; needed for ordered lists  ; FIXME lex those lines
-;   [")" (token 'R-PAREN lexeme)] ; needed for ordered lists  ; FIXME lex those lines
-;   ["-" (token 'HYPHEN lexeme)] ; needed for unordred lists ?? ; FIXME
-;   ["@" (token 'AT lexeme)] ; needed for the list start [@99]
-
-   #| ; I'm pretty sure we can drop all of this now
-
-   ["#" (token 'HASH lexeme)]
-   ["%" (token 'PERCENT lexeme)]
-
-   ["|" (token 'PIPE lexeme)]
-   ["<" (token 'LAB lexeme)]
-   [">" (token 'RAB lexeme)]
-   ["{" (token 'LCB lexeme)]
-   ["}" (token 'RCB lexeme)]
-   ["'" (token 'SQ lexeme)]
-   ["\"" (token 'DQ lexeme)]
-   ["\\" (token 'BS lexeme)]
-
-   ["(" (token 'L-PAREN lexeme)]
-   |#
-   
-   ; strings don't work because longest match means we can never detect the escape sequence
-   ;[(from/to "\"" "\\") (token 'DQ-TO-ESC lexeme)]
-   ;[(from/to "\"" "\"") (token 'DQ-TO-DQ lexeme)] ; ARGH longest match kills us here again :/
+   [":" (token 'COLON lexeme)]
+   ["[" (token 'LSB lexeme)]
+   ["]" (token 'RSB lexeme)]
 
    [0-9 (token 'DIGIT lexeme)]
-   #|
-   [(:= 2 0-9) (token 'DIGIT-2 lexeme)] ; dates
-   [(:= 3 0-9) (token 'DIGIT-3 lexeme)] ; dates
-   [(:= 4 0-9) (token 'DIGIT-4 lexeme)] ; dates
-   |#
    [(:>= 2 0-9) (token 'DIGIT-N lexeme)]
-   ;["l" (token 'CHAR-LOWER-L lexeme)] ; HAH BEGONE FOUL INSTANCE OF A THING
-   ["X" (token 'CHAR-UPPER-X lexeme)] ; FOO
+
    [alpha (token 'ALPHA lexeme)] ; FIXME TODO alpha+ ?
    [(:>= 2 alpha) (token 'ALPHA-N lexeme)]
-   #;
-   [(:>= 2 lower-case) (token 'ALPHA-LOWER-N lexeme)]
-   #; ; given the rework of the parsing hierarchy we don't need these to be top level tokens
-   [(:** 2 7 upper-case) (token 'ALPHA-UPPER-N lexeme)] ; XXX stop at 7 to avoid gobbling COMMENT and ARCHIVE
-   ; TODO with ARCHIVE it might be possible to match against :ARCHIVE
-   ; for COMMENT it is trickier ~* COMMENT~ ~]COMMENT~ but then we're back to where we started
-   ; so suggestion to come up with some prefix for comment or modify the grammar have COMMENT
-   ; come BEFORE the todo keyword if it is present at all, this will allow us to increase the run
-   ; length of the ALPHA-N parse, the alternative is to ditch matching COMMENT during the first
-   ; parse pass, but that seems like it might be a bad tradeoff, can also split alpha into
-   ; upper and lower allow lower to match N since lower case are used more frequently
 
-   ; FIXME l breaks this (SIGH switches) TODO I think the right way to
-   ; handle this is to have switch syntax just be switch-sign ALPHA
-   ; string | switch-sign ALPHA but then the last string gets gobbled,
-   ; so have to split the rules for the params if there are switches
-
-   ;[word (token 'WORD-CHAR lexeme)] ; FIXME need punctuation here
-
-   [(:+ negated-set) (token 'NEGATED-SET lexeme)] ; massively enhance parsing performance via fallthrough XXX TODO 
-   )
-  ; this is probably going to break the parser until
-  ; we adjust the fact that NETAGED-SET matches more than 1 char now?
-  ; but actually looking at this, I don't think there are any cases where this is used
-  ; that will break as a result because it will just keep going until it hits a negated
-  ; token at which point the logic for the next step will kick in which should be almost
-  ; still need to check though
-  )
-
-#; ; default to #f to force a contract violation if not parameterized correctly
-(define cumulative-offset (make-parameter #f))
+   [(:+ negated-set) (token 'NEGATED-SET lexeme)]))
 
 (define (fix-srcloc-mod srcloc-token-instance)
   (let* ([token (srcloc-token-token srcloc-token-instance)]

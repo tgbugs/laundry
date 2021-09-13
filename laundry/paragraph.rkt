@@ -108,13 +108,18 @@ export-snippet : EXPORT-SNIP
 
 citation : CITATION
 
+@nested-lol : nested-square | footnote-inline ; this is the current elisp behavior ...
+
 inline-call : INLINE-CALL-START
-            ( nested-parens | nested-square nested-parens nested-square )
+            ( nested-parens
+            | nested-lol
+              nested-parens
+              nested-lol )
 
 inline-call-malformed : INLINE-CALL-START
                       ( open-delim
-                      | nested-square open-delim
-                      | nested-square nested-parens open-delim
+                      | nested-lol open-delim
+                      | nested-lol nested-parens open-delim
                       )? ; XXX the ? introduces ambiguity
 
 ; trailing headers are too useful, so []()[] is the other option
@@ -125,7 +130,7 @@ inline-call-malformed : INLINE-CALL-START
 ;            | nested-square nested-parens nested-square
 ;            | nested-parens )
 
-inline-src-block : INLINE-SRC-BLOCK-START nested-square? nested-curlie
+inline-src-block : INLINE-SRC-BLOCK-START ( nested-square | nested-lol )? nested-curlie
 
 ;;; line-break ; TODO not quite sure how to deal with this one right now
 

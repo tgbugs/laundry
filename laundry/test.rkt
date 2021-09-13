@@ -1197,6 +1197,41 @@ echo oops a block
 
   )
 
+(module+ fuzz
+  ; TODO look into afl like I did for sxpyr? the search space is huge
+
+  ; org may needs the unbounded lookahead of a PEG grammar, certainly if you want a single
+  ; unified grammar that has to be the case
+  ; https://arxiv.org/pdf/1801.10490.pdf
+  (require math #; math/number-theory)
+  (define basics
+    (apply
+     string-append
+     '("`-="
+       "~!@#$%^&*_+"
+       "()[]{}"
+       "\\|;:'\",.<>/?"
+       #;
+       "abcdefghijklmnopqrstuvwxyz"
+       "a"
+       #;
+       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+       "W"
+       #;
+       "0123456789"
+       "5"
+       " \t\n"
+       )))
+
+  (define (prospect test-set test-length batch-size)
+    (let* ([count (binomial (string-length test-set) test-length)]
+           [batched (exact->inexact (/ count batch-size))])
+      (values count batched)))
+
+  (define (make-test-strings)
+    )
+  )
+
 (module+ test-markup
   (current-module-path)
 

@@ -164,27 +164,8 @@
         ; apparently the root binding can only be accessed inside here
         ; but not if the module is executed directly? not sure if this
         ; is a racket-mode issue or what?
-        #;
-        (begin
-          (require racket/pretty)
-          (pretty-write root))
         (module+ main
           root)))))
-
-#; ; TODO I think this is where we set syntax time parameters
-   ; XXX no there is a place you can customize expansion explicitly I think
-(define-syntax (org-file stx)
-  (syntax-parse stx
-    ([_ body ...]
-     (parameterize ([runtime-todo-keywords (runtime-todo-keywords)])
-       (syntax-local-expand-expression
-        #'(identity body ...)
-        ))
-     #'(cons 'org-file body ...)
-     #;
-     #'(define root (cons 'org-file body ...))
-     #;
-     #'(define root (quote (org-file body ...))))))
 
 (define-syntax (define-node stx)
   (syntax-parse stx
@@ -208,29 +189,6 @@
               (define-rename-transformer-parameter sa-name (make-rename-transformer #'sa-name))) ...
              ))
      ]))
-
-#; ; not needed because name is factored out unlike for define-node
-(define-syntax (define-sa-node stx)
-  (syntax-parse stx
-    [(_ name)
-     #:with elipsis (datum->syntax this-syntax '...)
-     #:with elipsis-plus (datum->syntax this-syntax '...+)
-     #'(define-syntax (name stx)
-         (syntax-parse stx
-           [(_) #'""] ; needed for cases like parl-indent
-           [(_ body)
-            (local-expand #'body 'expression #f)]
-           [(_ body elipsis-plus)
-            #:with appended
-            (datum->syntax
-             #'(body elipsis)
-             (apply string-append
-                    (let ([sigh (map (λ (e) (syntax->datum (local-expand e 'expression #f)))
-                                     (syntax-e #'(body elipsis)))])
-                      #;
-                      (pretty-write (cons 'sighsighsigh: sigh))
-                      sigh)))
-            #'appended]))]))
 
 (define-syntax (sa-node stx)
   (syntax-parse stx
@@ -280,54 +238,7 @@
   ; FIXME this macro is broken
   (syntax-parse stx
     [(_ name ...)
-     #'(begin (define-sa-alt-node name) ...)]
-    #;
-    [(_ prefix name ...)
-     #:with elipsis (datum->syntax this-syntax '...)
-     #:with ((node-name sa-name) ...)
-     (datum->syntax
-      #'(name ...)
-      (map
-       (λ (n)
-         (list
-          (datum->syntax
-           n
-           (string->symbol
-            (format "node-~a" (syntax-e n))))
-          (datum->syntax
-           n
-           (string->symbol
-            (format "~a-~a"
-                    (syntax-e #'prefix) (syntax-e n))))))
-       (syntax-e #'(name ...))))
-
-     #'(begin
-         (define-sa-alt-node name) ...
-        )
-     #;
-     #'(begin
-         (define-sa-node sa-name) ...
-         (define-node node-name) ...
-         (define-rename-transformer-parameter name (make-rename-transformer #'node-name)) ...
-         #;
-         (begin-for-syntax
-           (define-syntax-parameter name
-             (λ (stx) (error 'aaaaaaaaaaaaaaaaaaaa))
-             #;
-             (make-rename-transformer #'name))) ;...
-         #;
-         (define-node name) ;...
-         #;
-         (begin-for-syntax
-           (define-syntax-parameter name
-             (λ (stx)
-               ; XXX should always be aligned with define-node
-               (syntax-parse stx
-                 [(_ body-inner elipsis)
-                  ;#:do [(println #'(body-inner elipsis))]
-                  #'(cons 'name (list body-inner elipsis))])))
-           ; ...
-           ))]))
+     #'(begin (define-sa-alt-node name) ...)]))
 
 (define-syntax (define-sa-keep-node stx)
   (syntax-parse stx
@@ -343,84 +254,14 @@
     [(_ name ...)
      #'(begin (define-sa-keep-node name) ...)]))
 
-(define-sa-keep-nodes
-  #; ; FIXME h-title must use the paragraph parser internally
-  h-title
-  plain-list-line-tail
-  #;
-  table-cell)
-
 (define-sa-nodes ; XXX things in this list should probably be spliced out
-  not-newline
-  not-whitespace
-  ns-nwt-less-negated
-  not-pl-start-whitespace1
   stars
-  alphas
-  alpha-n
-  alphas-unmixed ; only the parser needs to know that they are unmixed
 
-  #;
-  headline-content ; this is sa because we have to remerge the whole headline for the 2nd pass parser
-
-  ; put the headline titles here for now until we can figure out what
-  ; to do about the markup for titles
-  ; all spliced out now
-  ;h-title-r-p-c
-  ;h-title-p-c
-  ;h-title-c
-  ;;h-title
-
-  paired-square
   paragraph-line
 
-  parl-start
-  parl-indent
-  parl-wsnn
-  parl-prp-bt
-  parl-ncn-bt-l-d
-  not-prp-newline1
-  parl-ws-bt-l-s
-  parl-ws-bt
-  parl-pw-bt
-  parl-se-wsnn
-  parl-sigh
-  parl-tokens-with-newline
-  #;
-  malformed-nl ; FIXME -> syntax warn
   detached-drawer
 
   stuff
-  wordhyus
-  word-char-n
-  blank-line
-  not-alpha-newline1
-  not-colon-newline
-  not-colon-newline1
-  not-colon-whitespace
-  not-colon-whitespace1
-
-  not-colon-lsb-whitespace
-  not-colon-lsb-whitespace1
-  not-colon-rsb-newline
-  not-colon-rsb-newline1
-  not-rsb-newline
-
-  not-plus-whitespace1
-  not-whitespace-l-d
-  not-whitespace1
-  not-asterisk-whitespace1
-
-  big-tokes-less-d-s
-  big-tokes-less-d-s-p
-  big-tokes-less-d-s-p-cnt
-  big-tokes-less-d-s-p-cnt-blk
-  big-tokes-less-d-s-blk
-  bt-chars-no-title-start
-  bt-chars-plan
-  bt-chars
-  bt-colon
-  bt-hash
   )
 
 (define-sa-nodes ; malformed case
@@ -429,23 +270,11 @@
   ; when we roll these up to be strings again for reparsing as a paragraph
 
   sa-malformed
-  #|
-  sa-blk-src-begin
-  sa-blk-src-line-contents
-  sa-end-drawer
-  |#
 
-  detached-block-node
+  ;detached-block-node
   detached-block ; FIXME not sure if we need this
-  blk-greater-malformed
-  det-blk-ex-begin
-  det-blk-ex-end
-  det-blk-src-begin
-  det-blk-src-end
   ; blk-src-begin sa variant
   planning-dissociated
-  ak-key-no-colon
-  babel-call-no-colon
   )
 
 (define-sa-alt-nodes
@@ -469,9 +298,7 @@
 
   keyword-malformed
   )
-#;
-(begin-for-syntax
-  (define-rename-transformer-parameter blk-src-begin (make-rename-transformer #'node-blk-src-begin)))
+
 (define-nodes
   org-file
   org-node
@@ -492,6 +319,7 @@
   tags ; XXX internal should probably be a struct field
   archive
 
+  plain-list-element
   plain-list-line
   descriptive-list-line
   ordered-list-line
@@ -509,72 +337,28 @@
   table-row
   table-row-rule
 
-  bof
-  digits
-  nlpws ; this can't be saed because it contains an indent that is needed in some cases?
-
   property-drawer
   pdrawer-unparsed ; FIXME naming ??
 
-  keyword
-  keyword-key
-  keyword-value
-  keyword-key-sigh
-  keyword-value-sigh
-  keyword-options
-
   ; TODO -> new keyword approach
   keyword-node
-  kw-key-options
-  kw-key
-  kw-value
+  ;kw-key-options
+  ;kw-key
+  ;kw-value
 
-  affiliated-keyword
-  un-affiliated-keyword
-  name
-  header
-  plot
-  ak-key
-  ak-value
-  ak-key-attr
-  attr-backend
-  ak-opt
-  ak-key-opt
-  ak-key-name-opt
+  ;keyword
+  ;keyword-key
+  ;keyword-value
+  ;keyword-key-sigh
+  ;keyword-value-sigh
+  ;keyword-options
 
-  babel-call
+
 
   greater-block
 
-  #;
-  blk-src
-
-  #;
-  blk-unknown
-
-  blk-src-contents
-  blk-src-whole
-  blk-src-malformed
-
-  block-begin-line
-  block-end-line
-
-  blk-ex-begin
-  blk-ex-end
-
-  blk-greater-begin
-  blk-greater-type
-  block-type-name
-  bg-type-special
-  block-type-rest
-  blk-greater-end
-  bg-end-special
-
-  blk-dyn
-  blk-dyn-begin
-  blk-line-contents
-  blk-dyn-contents
-  blk-dyn-end
+  ;block-begin-line
+  ;block-end-line
 
   ;; objects
 
@@ -624,22 +408,6 @@
   strike-through
   verbatim
   code
-
-  #|
-  bold-italic
-  bold-underline
-  bold-strike-through
-  italic-underline
-  italic-strike-through
-  underline-strike-through
-
-  bold-italic-strike-through
-  bold-italic-underline
-  bold-underline-strike-through
-  italic-underline-strike-through
-
-  bold-italic-underline-strike-through
-  |#
   )
 
 (define-nodes ; test parsers
@@ -906,7 +674,6 @@
   ; WAIT !? somehow this is working now !??!?
   ; argh, it works here but not in a requiring module !?
   (paragraph-node (malformed (blk-src-begin "oops")))
-  #;
   (paragraph-node "a\nb\nc\nd\ne")
   )
 
@@ -1053,8 +820,6 @@
   ; is removed before we ever arrive
   (paragraph-node "[fn::\n\n")
   (paragraph-node "\n[fn::\n\n\n")
-
-  (paragraph-line (newline #f) (parl-start (not-pl-start-whitespace1 "[")) (not-newline "fn" ":" ":" "a" "[" "fn" ":" ":" "b" "]" "]"))
 
   (paragraph-node "[fn::")
 

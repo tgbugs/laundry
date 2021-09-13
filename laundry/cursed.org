@@ -611,6 +611,11 @@ g [fn:: [ x =]= y ]
 h [fn:: =[= x ] y ]
 
 i [fn:: =[= x =]= y ]
+
+=[= [fn:: x =]= y ]
+
+[fn:: hrm]
+
 ** footnote macro interactions
 #+macro: yes no $1 $2
 ARE YOU READY [fn::{{{yes([,])}}}]
@@ -792,4 +797,3 @@ oh no
 #+]]]][[[[: this should be a keyword I think ? according to org-element it is!
 #+a b:
 #+x :
-

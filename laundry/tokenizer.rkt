@@ -3,6 +3,7 @@
 (require racket/pretty)
 (require brag/support
          "lex-abbrev.rkt"
+         (only-in "parameters.rkt" export-with-sub-superscripts)
          (only-in racket/string string-suffix? string-trim string-split)
          (only-in racket/port input-port-append peeking-input-port)
          (only-in racket/list cons? last)
@@ -175,7 +176,10 @@ should be statically encoded in the lexer"
 (define (token-back-1 TOKEN lexeme input-port)
   ; FIXME multi-byte case
   ; FIXME the real solution is to switch to a peeking port so that
-  ; we don't have to bother with this non-sense
+  ; we don't have to bother with this nonsense, unfortunately for
+  ; the markup case that means we have to peek every time we hit
+  ; a potential start case for the markup which is a pain but maybe
+  ; still worth it
   (file-position input-port (sub1 (file-position input-port)))
   (let*-values ([(l c p) (port-next-location input-port)]
                 [(back-line) (regexp-match #rx"\n$" lexeme)]
@@ -185,15 +189,13 @@ should be statically encoded in the lexer"
                   (and c (not back-line) (sub1 c))
                   (and p (sub1 p))
                   )]
+                [(out) (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme))))]
                 )
     (set-port-next-location! input-port n-l n-c n-p)
     #;
-    (set-port-next-location!
-     input-port
-     l ; TODO newline case
-     (and c (sub1 c)) ; FIXME -1 is going to be a problem for =x=\n
-     (and p (sub1 p))
-     ))
+    (log-error "token-back-1 out: ~s ~s" out lexeme)
+    out)
+  #;
   (token TOKEN (substring lexeme 0 (sub1 (string-length lexeme)))))
 
 (define (token-stop-before TOKEN TOKEN-EOF lexeme char input-port start-pos #:eof [eof-ok #t])
@@ -365,7 +367,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
        [(:or " " "\t") (token 'BLANK lexeme)] ; unfortunately we still have to split on space
        [(:seq (:+ (:~ #;"*" "[" "]" ":" "\n" " " "\t")))
         (token 'OTHER lexeme)]
-       ["\n" (token 'NEWLINE-END)]
+       ["\n" (token 'NEWLINE-END lexeme)]
        [(:~ (:or " " "\t" "\n" #;":")) ; insurance
         #;
         any-char
@@ -407,27 +409,70 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
 (define paragraph-lexer
   (lexer-srcloc
-   [macro-invocation (token 'MACRO lexeme)]
-   #; ; the spec for macro reads like it can be multi-line
-   [(:seq "{{{" alpha (:+ (:or alpha 0-9 "-" "_")) (:? (:seq "(" ")")) "}}}") (token 'MACRO lexeme)]
-   [(:+ (:~ mu-pre-1 mu-marker mu-post-1 "]")) (token 'STUFF-B lexeme)]
+   [wsnn+ (token 'WSNN lexeme)]
+   ["\n" (token 'NEWLINE lexeme)]
+   ["[" (token 'LSB lexeme)] ; this cannot be parsed by itself due to ambiguity with [=hello=]\nlol (=oops=)
+   ["]" (token 'RSB lexeme)]
+   ["{" (token 'LCB lexeme)] ["}" (token 'RCB lexeme)]
+   ["(" (token 'LP lexeme)]  [")" (token 'RP lexeme)]
+   ["_" (token 'UNDERSCORE lexeme)]
+   #;
+   [left-square-bracket-helper
+    ; FIXME this is clearly wrong
+    (token 'LSB-HELPER lexeme)]
+
+   ;[pre+s-m (token 'PRE-S lexeme)] ; can't use this one it will eat everything, has to go in grammar
+   ;[pre+s+m (token 'PRE-S-M lexeme)] ; also don't use this because it has the braces >_<
+   ;[pre-s+m]
+   ; and thus we are back to mu-pre-safe
+   [mu-pre-safe (token 'MU-PRE-SAFE lexeme)]
+
+   [(:seq (:+ (:~ mu-pre-1 mu-marker #;mu-post-1 "[" "]" "}" ")" script-marker whitespace))
+          ; FIXME matches [fn:: ; so we have to exclude [ from starting, we have have to exclude it later too
+          ; XXX not entirely sure that mu-post-1 should be in here? maybe for the first
+          ; but we peek mu-post-1 now
+          ; make sure that we eat any markers that are preceeded by non whitespace
+          (:* (:~ mu-pre-1           #;mu-post-1 "]" "}" ")" script-marker whitespace)))
+    (token 'STUFF-B lexeme)]
+   [(:+ (:or (:& (:~ mu-pre-safe-1 "[" "]" "}" ")" script-marker whitespace) mu-post-less-whitespace-delim)
+             ; have to exclude [ so that LCB works correctly I think, may need to split as we did above
+             ; but both [ and ( can occur effectively in the middle of things so tricky
+             ; can't quite be mu-marker becuse _ is also subscript
+             "=" "~" "*" "/" "+"))
+    (token 'STUFF-A lexeme)]
+   [(:seq "[" ; ensure that markup doesn't run wild with an incorrect parse
+          (:or
+           ;"=" "~" "*" "/" "+"
+           (:~
+            (:or
+             whitespace
+             "_" "^" ; FIXME potential issues if script export is enabled/disabled
+             "[" "]" ; =lol [= case will match markup so not an issue
+             "{" "}"
+             "(" ")"
+             ))))
+    (token 'LSB-PLUS lexeme)]
+   [(:seq ; interactions between markup and pb-script
+     script-marker
+     (:~ (:or "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" whitespace))
+     #;
+     (:+ (:&
+          (:~ (:or "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" ))
+          (:or (:& (:~ mu-pre-1 "]" "}" ")" "^" "_") mu-post-less-newline) mu-marker))))
+    (token 'STUFF-C lexeme)]
 
    #|
-   [markup-*/_+ (token 'MU-BIUS lexeme)]
+   [markup-* (token 'BOLD lexeme)]
+   [markup-/ (token 'ITALIC lexeme)]
+   [markup-_ (token 'UNDERLINE lexeme)]
+   [markup-+ (token 'STRIKE lexeme)]
 
-   [markup-*/+ (token 'MU-BIS lexeme)]
-   [markup-*/_ (token 'MU-BIU lexeme)]
-   [markup-*_+ (token 'MU-BUS lexeme)]
-   [markup-/_+ (token 'MU-IUS lexeme)]
-
-   [markup-*/ (token 'MU-BI lexeme)]
-   [markup-*_ (token 'MU-BU lexeme)]
-   [markup-*+ (token 'MU-BS lexeme)]
-   [markup-/_ (token 'MU-IU lexeme)]
-   [markup-/+ (token 'MU-IS lexeme)]
-   [markup-_+ (token 'MU-US lexeme)]
+   [markup-= (token 'VERBATIM lexeme)]
+   [markup-~ (token 'CODE lexeme)]
    |#
 
+   ; #| ; duh we don't have to back up I fixed it in the pattern itself
+   ; sadly we DO have to back up due to cases like x_{y}_{z}
    [markup-* (token-back-1 'BOLD lexeme input-port)]
    [markup-/ (token-back-1 'ITALIC lexeme input-port)]
    [markup-_ (token-back-1 'UNDERLINE lexeme input-port)]
@@ -435,56 +480,82 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [markup-= (token-back-1 'VERBATIM lexeme input-port)]
    [markup-~ (token-back-1 'CODE lexeme input-port)]
+   ; |#
 
-   #; ; busted
-   [(:+ (:or mu-pre mu-post)) (token 'STUFF-A lexeme)]
 
-   [(:+ (:or (:& (:~ mu-pre-1) mu-post-not-newline) mu-marker)) (token 'STUFF-A lexeme)]
-
+   #;
    [mu-pre-n-not-lcb (token 'MU-PRE-N-NOT-LCB lexeme)] ; LCB cannot be in mu-pre-n because it would block macro
+   #;
    [mu-pre-1 (token 'MU-PRE-1 lexeme)] ; needed to prevent accidental capture when :+ length for stuff is longer than markup
+
+   ; org objects
+
+   [latex-entity/fragment-1 (token 'LATEX-ENTITY-OR-FRAGMENT-1 lexeme)]
+   [latex-fragment-n (token 'LATEX-FRAGMENT-N lexeme)]
+   [latex-fragment-parens (token 'LATEX-FRAGMENT-PARENS lexeme)]
+
+   [export-snip (token 'EXPORT-SNIP lexeme)]
 
    [citation (token 'CITATION lexeme)] ; FIXME annoying because it gets parsed twice
 
    [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
-   #; ; doesn't work in the absense of EOF might work if we detect eof in here
-   [footnote-inline-malformed
-    ; I think this kind of works? we might not back up enough? we hard match \n\n without stop before
-    (begin
-      (println (list "BEFORE" lexeme))
-      (file-position input-port (sub1 (file-position input-port))) ; FIXME port-next-location
-      (let-values ([(l c p) (port-next-location input-port)])
-        (set-port-next-location! input-port l 0 (sub1 p)))
-      (println "I THOUGH SO")
-      (begin0
-          (token-stop-before-blank-line 'FOOTNOTE-INLINE-MALFORMED (substring lexeme 0 (sub1 (string-length lexeme))) input-port start-pos)
-        (println "I don't get here"))
-      )]
    [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
-   #; ; XXX leave this out for now so we can test a uniform solution
-   [footnote-inline-simple (token 'FOOTNOTE-INLINE-SIMPLE lexeme)]
 
-   #; ; busted
-   [maybe-paired-square ; FIXME risk of matching whole footnotes?
-    (if (regexp-match #rx"\\[" (substring lexeme 1))
-        (token 'NOT-INLINE-FOOTNOTE lexeme) ; FIXME obvious failure with [fn::[fn::]] case
-        (token 'PAIRED-SQUARE lexeme))
-    ]
+   #; ; tokenizer can't do this the spec is ... inaccurate
+   [inline-call (token 'INLINE-CALL lexeme)]
+   [inline-call-start (token 'INLINE-CALL-START lexeme)]
+
+   #;
+   [inline-src-block (token 'INLINE-SRC-BLOCK lexeme)]
+   [inline-src-block-start (token 'INLINE-SRC-BLOCK-START lexeme)]
 
    [hyperlink (token 'LINK lexeme)]
    [hyperlink-ab (token 'LINK-AB lexeme)]
+
+   [macro-invocation (token 'MACRO lexeme)]
+
+   [noweb-target (token 'NOWEB-TARGET lexeme)]
+   [radio-target (token 'RADIO-TARGET lexeme)]
+
+   [stats-percent (token 'STATS-PERCENT lexeme)]
+   [stats-quotient  (token 'STATS-QUOTIENT lexeme)]
+
+   ; FIXME checking parameters like this doesn't need to be done here
+   ; I don't think there are any cases where script being off would
+   ; lead to a difference in the parse so fundamental that we could
+   ; not recover the correct value, on the other hand, this way we
+   ; don't have to worry about it at all ...
+   [superscript ; this is the non ^{} case
+    (if (eq? (export-with-sub-superscripts) #t)
+        (token 'SUPERSCRIPT lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+   [superscript-start-b
+    (if (export-with-sub-superscripts)
+        (token 'SUP-START-B lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+   [superscript-start-p
+    (if (export-with-sub-superscripts)
+        (token 'SUP-START-P lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+
+   [subscript ; this is the non _{} case
+    (if (eq? (export-with-sub-superscripts) #t)
+        (token 'SUBSCRIPT lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+   [subscript-start-b
+    (if (export-with-sub-superscripts)
+        (token 'SUB-START-B lexeme)
+        ; FIXME check to see if _{} is included verbatim
+        (token 'SCRIPT-DISABLED lexeme))]
+   [subscript-start-p
+    (if (export-with-sub-superscripts)
+        (token 'SUB-START-P lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+
    [timestamp (token 'TIMESTAMP lexeme)]
 
-   ["[" (token 'LSB lexeme)]
-   ["]" (token 'RSB lexeme)]
-
-   #;
-   [(:+ mu-marker) (token 'MARKER lexeme)] ; break out from the pre/post to avoid creating longer matches than eof? cases
-
-   #;
-   [(:+ (:or mu-pre-not-newline mu-post-not-newline)) (token 'STUFF-A lexeme)]
-   ["\n" (token 'NEWLINE)]
    )
+
   #;
   (
    [(:>= 2 whitespace) (token 'WHITESPACE-GT2 lexeme)]
@@ -535,7 +606,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["|" (token 'PIPE lexeme)]
    #;
    ["-" (token 'HYPHEN lexeme)]
-   ["\n" (token 'NEWLINE)]
+   ["\n" (token 'NEWLINE lexeme)]
    ["\t" (token 'TAB)]
    [" " (token 'SPACE)]
    [(:+ (:~ (:or "|" #;"-" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
@@ -620,6 +691,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                         (port-file-identity input-port)
                              )))
             ]
+   [planning-line (token 'PLANNING-ELEMENT)]
+   [planning-line-malformed (token 'PLANNING-ELEMENT-MALFORMED)]
 
    ; FIXME there is a question of whether to use the lexer like this
    ; to slurp code blocks in the first pass and then run code block
@@ -801,7 +874,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
    ["*" (token 'ASTERISK lexeme)]
-   ["\n" (token 'NEWLINE)]
+   ["\n" (token 'NEWLINE lexeme)]
    [" " (token 'SPACE)]
    #; ; TODO should help with perf
    [(:+ " ") (token 'SPACE-N lexeme)]
@@ -826,16 +899,21 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #;
    ["[fn::" (token 'FOOTNOTE-START-INLINE lexeme)] ; here longest match helps us
 
+   #;
    ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; FIXME ALPHA-N takes priority over this >_< FFS
 
+   #;
    ["DEADLINE" (token 'CHARS-DEADLINE lexeme)]
+   #;
    ["SCHEDULED" (token 'CHARS-SCHEDULED lexeme)]
+   #;
    ["OPENED" (token 'CHARS-OPENED lexeme)]
+   #;
    ["CLOSED" (token 'CHARS-CLOSED lexeme)]
 
    ; FIXME fontification doesn't work for lower case but org element does?
    ; no, org element recognizes that it might be a planning line but cannot parse the lower case
-   ; seek clarity
+   ; seek clarity spec says case insensitive unless explicitly noted, and it does not explicitly note so insense
    ;[(:or "deadline:" "DEADLINE:") (token 'DEADLINE lexeme)]
    ;[(:or "scheduled:" "SCHEDULED:") (token 'SCHEDULED lexeme)]
    ;[(:or "closed:" "CLOSED:") (token 'CLOSED lexeme)]
@@ -940,16 +1018,16 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ;[whitespace (token 'WS lexeme)]
 
    [":" (token 'COLON lexeme)] ; XXX not sure what needs this but it is related to drawer tests
-   ["_" (token 'UNDERSCORE lexeme)] ; XXX something in test keywords needs this
+;   ["_" (token 'UNDERSCORE lexeme)] ; XXX something in test keywords needs this
 
    ; the keyword failures FIXME keyword failures should probably parse as that directly?
-   ["+" (token 'PLUS lexeme)] ; #+ needs this apparently? ; FIXME
+;   ["+" (token 'PLUS lexeme)] ; #+ needs this apparently? ; FIXME
    ["[" (token 'LSB lexeme)]  ; #+x[ ]x: ; FIXME
    ["]" (token 'RSB lexeme)]  ; #+x[ ]x: ; FIXME
-   ["." (token 'PERIOD lexeme)] ; needed for ordered lists  ; FIXME lex those lines
-   [")" (token 'R-PAREN lexeme)] ; needed for ordered lists  ; FIXME lex those lines
-   ["-" (token 'HYPHEN lexeme)] ; needed for unordred lists ?? ; FIXME
-   ["@" (token 'AT lexeme)] ; needed for the list start [@99]
+;   ["." (token 'PERIOD lexeme)] ; needed for ordered lists  ; FIXME lex those lines
+;   [")" (token 'R-PAREN lexeme)] ; needed for ordered lists  ; FIXME lex those lines
+;   ["-" (token 'HYPHEN lexeme)] ; needed for unordred lists ?? ; FIXME
+;   ["@" (token 'AT lexeme)] ; needed for the list start [@99]
 
    #| ; I'm pretty sure we can drop all of this now
 

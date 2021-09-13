@@ -8,6 +8,7 @@
 ; from/stop-before. The tokenizer has to deal with this.
 heading : stars heading-rest
 
+; TODO do we remove the newlines here ???
 @heading-rest : ( /wsnn+ @heading-content )? ( h-tags | NEWLINE-END )
               | /wsnn+ NEWLINE-END
 

@@ -1,8 +1,10 @@
 ; @@comment: the colon is the only thing that cannot be avoided in this approach
 #lang org
 ; @@
-# [[file:test.html]]
 # [[file:test.pdf]]
+# [[file:test.html]]
+
+#+options: debug:t
 
 :drawer:
 hello
@@ -14,7 +16,7 @@ hello
 
 
 
-# (((( rainbow delims or my version of it is dumb
+# (((((((( rainbow delims or my version of it is dumb
 
 * plain lists
 hello
@@ -52,7 +54,6 @@ e. f
 2. 
 3. 
 4. 
-
 
 1. .
 2) )
@@ -177,6 +178,9 @@ the verbatim=
 
 a *b* /c/ _d_ +e+ =f= ~g~ yes newline is a bug
 
+*b but what happens if *b2 b2*? b*
+*b but what happens if _*b2 b2*_? b*
+
 * footnotes
 
 Inline [fn::footnote] footnote.
@@ -252,7 +256,9 @@ Testing [fn:no-space].
 What?!?!?!?! [fn:: [ hello =]= there
 another p]
 
-Unmatched [fn:: [ lol]
+Unmatched [fn:: [ lol] this will fontify as footnotes all the way to the end of the file if it is not stopped!
+
+# ] required for containment
 
 [fn:q] Hello there
 #+begin_src bash
@@ -275,7 +281,6 @@ You can't set =#+options: broken-footnotes:t= like you can with =#+options: brok
 #+begin_src elisp
 (+ 1 2)
 #+end_src
-
 * block issues
 #+begin_h
 #+end_h
@@ -285,3 +290,259 @@ You can't set =#+options: broken-footnotes:t= like you can with =#+options: brok
 
 * timestamps
   <2018-09-04 Tue>
+
+* latex
+** environments
+Are these legacy and thus could be ignored since we have #+begin_hello blocks now?
+Thinking mostly about how to simplify the spec without losing functionality, even if
+there is a bit of work for users if they want to be able to go beyond emacs.
+
+\begin{hello}
+world
+\end{distractor}! hrm, I wonder ... do these nest ?
+\end{hello}
+
+** entities
+\alpha
+\pi{}d
+
+woah, ok this behavior is tricky because the parse is non-structural
+\pi{}{} urg
+\pi{hrm}{} urg
+
+\name{}
+\name{x}
+
+\hello{}{}
+\hello[]{}
+\hello{}[]
+\hello[][]
+
+uh, why is it eating whitespace?
+\[what is this thing?\]
+\[and can it actually have
+newlines? in it\]
+\(how about this one?\)
+\(a
+b\)
+
+These can't actually have empty lines because those break the paragraph before the paragraph parser runs
+\(c
+
+d\)
+
+What happens inline? \[hello world\] post line?
+What happens inline? \(hello world\) post line?
+
+huh, the parens render ... ah right, math
+ x_{sub} x_*wat* x_' x_{'} x_(oh no)
+ x^{sup} x^*wat* x^' x^{'} x^(oh no)
+
+x^{this
+is
+a really
+123 super
+)( !@#$%^&*_
+script
+}
+
+date^{ <2020-20-20> }
+
+** snip
+snip latex^{ @@latex: latex 1@@ }
+snip latex^{
+@@latex: latex 2@@ }
+
+snip latex^{
+@@latex: latex 3@@
+@@latex: latex 4@@
+}
+
+snip html^{ @@html: EVEN MORE LOL@@ breaks? }
+
+snip lh^{
+@@latex: latex 1@@
+@@html:  html 1@@ }
+
+I think the reason why this fails is because the html line is somehow
+commented out and treated as an empty line at some point in the export process
+snip the rest doesn't render
+
+lh^{ @@latex: latex 2@@
+@@html:  html 2@@
+}
+
+This means if we reverse the order then it will export correctly but only for latex
+
+lh^{ @@html:  html 3@@
+@@latex: latex 3@@
+}
+
+Clearly a bug.
+#+begin_src org
+lh2^{ @@latex: latex 2@@
+@@html:  html 2@@
+}
+
+lh3^{ @@html:  html 3@@
+@@latex: latex 3@@
+}
+#+end_src
+
+** nesting
+
+at the limit x_{{{}}}
+
+beyond the limit x_{{{{}}}}
+
+take it to the x_{ oh god y_{ i hope this does not z_{ work }}}
+yet it does, yet it does
+#+begin_export latex
+x\textsubscript{y\textsubscript{z\textsubscript{a\textsubscript{b\textsubscript{c\textsubscript{d\textsubscript{e}}}}}}}
+#+end_export
+thus it would seem that latex supports arbitrary nesting depth so no reason to limit it there
+
+[2020-20-20]_date
+[2020-20-20]^date
+
+@@latex: hrm@@^latex
+lol \\
+@@html: hrm@@^html
+
+@@comment: the ghost of subscript present@@^eeeeeeeeeeeeeeeeeeeeeeeeee
+
+The reason for this behavior is that someone might stack =@@latex: x@@@@html: y@@^value= or something like that
+it certainly makes the implementation easier
+
+* script
+
+_{not script}
+
+,_{script}
+
+(^(scr^(script)ipt))
+
+x^* is disabled by default
+
+x^{super} working
+x_{sub} working
+
+y^(
+y
+) working but needs differentiation from curlies
+
+x_{y}_{z}
+
+** markup interaction
+(_{oh})
+(_{no}_) org export and font lock diverge here, the spec is ambiguous here, it gives both patterns, but no priority, prefer underline
+the correct way to get subscript would be to use =(__{no}_)= =->= (__{no}_) however both ox latex and ox html are broken for this as well
+(*{no}*)
+(__{no} x_)
+
+
+=a=[fn::x y z]=b=
+
+# arg this one is a nightmare
+[=hello=]
+(=hello=)
+{=hello=}
+<=hello=>
+=hello=[]
+[]=hello=
+
+_u_{}
+_u_()
+_u_[]
+
+# #+begin_broken
+z^{
+z
+}
+#+end_broken
+
+# #+begin_oops
+x^{this
+is
+a really
+123 super
+)( !@#$%^&*_
+script
+}
+#+end_oops
+
+but wait! there's MORE_{how about [fn:: FOOTNOTES IN THE SCRIPT!?]}
+lol that's a bug, the footnote is there but its contents are empty
+
+x_{also a bug [fn:x]}
+
+[fn:x] also oa bug
+** maybe it is section zero? nope just broken
+y_{also a bug [fn:y]}
+
+[fn:y] ?
+
+z_{[fn:z]}
+[fn:z] org can detect if the footnote is missing, maybe it is just the latex out put?
+
+
+test [fn:q]
+[fn:q] q
+
+
+woah ... something very very broken is going on double footnote numbers? what!?
+the issues are just in the latex export backend, html is fine
+** source blocks in subscript
+a_{src_elisp[:exports both :eval never]{(+ 1 2)}}
+
+I don't believe you.
+src_elisp[:exports both :eval never]{(+ 1 2)}}}}}}}}}}}
+src_elisp[:exports both :eval never]{ {} well? (+ 3 4)}
+[fn:: sigh]
+
+src_elisp[:exports both :eval never]{  well? { (+ 5 6)}
+src_elisp[:exports both :eval never]{  well? } (+ 7 8)}
+# for comparison
+src_elisp[:exports both :eval never]{  well? { (+ 9 10)}
+# make sure these are separate
+src_elisp[:exports both :eval never]{  well? } (+ 11 12)}
+
+these require matching parens it would seem, which is not
+what the spec says, in fact, the body CAN contain newlines
+but curlies must match, I suspect it is the same for the
+options as well.
+
+so ... src_elisp[fn:: LOL :eval never :exports both]{(+ x y)} what's it gonna be? that's not a footnote ...
+
+src_elisp[:eval never :exports both]{so I heard
+that you could have multiple lines so long as
+it was all the same paragraph?
+(* 10 11 12)
+(message "OH NO")}
+
+** markup interaction
+x_{=}=}
+x_{={=}
+** footnote interaction
+everything about this is not good
+fontification has lost its mind, export conforms to spec but urg
+for simplicity sake we don't want to have to define all the pairwise
+and then all the nested interactions, so I think it is just easier to
+embrace context free nesting in these cases, because it is literally
+impossible to do it any other way
+
+x_{ ] }
+x_{ [ }
+
+x_{ [fn:: oh_{ ] no} ] }
+
+:^{[fn::works]}
+
+ox-latex totally busted for these the number is completely off, the minimal repro is above
+for the racket colorer mode can be used as a pda stack to count parens etc. without having
+to backtrack, but going full pda in the tokenizer is probably more than we can require
+
+[fn::^{[fn::oh } no]}]
+[fn::^{[fn::oh { no]}]
+[fn::x^{[fn::oh } no]}]
+[fn::x^{[fn::oh { no]}]

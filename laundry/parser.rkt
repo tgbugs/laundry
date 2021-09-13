@@ -99,18 +99,18 @@ paragraph-node : ( PARAGRAPH
                ;| PARAGRAPH-EOF
                ;| PARAGRAPH-MALFORMED
                | paragraph-line ; this only happens if PARAGRAPH does not match
+               | planning-detached ; FIXME isnt this eaten by paragraph-1 ? TODO check
                ; | PARAGRAPH-EOF?
-               ) @empty-line? ; spec says empty lines should associate with the preceeding paragraph
+               ) NEWLINE? ; spec says empty lines should associate with the preceeding paragraph
 
 ; this only needs to handle the single line cases that are ambiguous for the tokenizer
 ; note stars is safe here because headlines don't use the standalone stars token
-paragraph-line : newline (
-                          LSB
+paragraph-line : newline ( LSB
                          | RSB
                          ;| HASH
-                         | PLUS
+                         ;| PLUS
                          ;| UNDERSCORE
-                         | ASTERISK
+                         ;| ASTERISK
                          | NEGATED-SET
                          | wsnn
                          | ALPHA
@@ -149,7 +149,9 @@ keyword-malformed : KEYWORD-ELEMENT-MALFORMED
 ;; easier to write a grammar for!
 
 ; both planning and property drawer can only have a single newline each before them
-headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
+;headline-node : headline ( newline ( planning | planning-malformed ) )? property-drawer? ; FIXME property drawers broken again
+
+headline-node : headline ( planning | planning-malformed )? property-drawer?
 headline : HEADING
 
 stars : STARS ; ASTERISK+ destorys performance
@@ -181,11 +183,15 @@ stars : STARS ; ASTERISK+ destorys performance
 ;not-plan-keyword-timestamp-newline : ( unsyms-less-timestamp | ns-nwt-less-negated | wsnn | word-char-n ) ; not-timestamp-plan-newline
                                    ;| plan-keyword not-colon-newline
 
-planning : ( plan-sep plan-info )+ /wsnn* ;not-plan-keyword-timestamp-newline?
+planning : PLANNING-ELEMENT
+planning-malformed : PLANNING-ELEMENT-MALFORMED
+planning-detached : PLANNING-ELEMENT | PLANNING-ELEMENT-MALFORMED
+
+-planning : ( plan-sep plan-info )+ /wsnn* ;not-plan-keyword-timestamp-newline?
 plan-sep : /wsnn*
 ;plan-sep : /wsnn* | not-plan-keyword-timestamp-newline /wsnn
 
-planning-malformed : plan-mal-info+
+-planning-malformed : plan-mal-info+
 plan-mal-info : plan-mal-sep? plan-keyword /COLON plan-mal-sep? ; XXX will gobble?
 plan-mal-sep : plan-keyword ; not-colon-newline
              ;| not-plan-keyword-timestamp-newline ; FIXME do it in the lexer
@@ -252,7 +258,7 @@ drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues he
 comment-element : ( COMMENT-ELEMENT
                     ; | comment-line
                     )+ ; remember kids one-or-more != one-and-maybe-more?
-                    @empty-line?
+                    NEWLINE?
 ; comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
 
 ;;; keywords
@@ -263,7 +269,7 @@ comment-element : ( COMMENT-ELEMENT
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
-keyword-node : keyword-whole-line @empty-line?
+keyword-node : keyword-whole-line NEWLINE?
              ; | /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
 keyword-whole-line : KEYWORD-ELEMENT
 ;keyword-whole-line : KEYWORD-LINE ; XXX this isn't quite working for some reason but that may be ok
@@ -301,7 +307,7 @@ keyword-whole-line : KEYWORD-ELEMENT
 
 ;;; blocks
 
-greater-block : GREATER-BLOCK @empty-line?
+greater-block : GREATER-BLOCK NEWLINE?
 
 ; ugh, matching the arbitrary names here is ...
 ; not something I think that brag can handle in
@@ -315,7 +321,7 @@ greater-block : GREATER-BLOCK @empty-line?
 
 ;@block-less-dyn : ( blk-src | blk-unknown ) @empty-line?
 
-dynamic-block : DYNAMIC-BLOCK @empty-line?
+dynamic-block : DYNAMIC-BLOCK NEWLINE?
 
 ;blk-dyn : /newline blk-dyn-begin blk-dyn-contents newline blk-dyn-end
 ; XXX elisp impl requires at least wsnn after #+begin: to work
@@ -351,22 +357,15 @@ dynamic-block : DYNAMIC-BLOCK @empty-line?
 
 ;;; tables
 
-;table : ( table-row | table-row-rule )+
-;table : ( /newline /wsnn* ( table-row | table-row-rule ) )+ | table-node
-
-table-element : ( TABLE-ELEMENT )+ ; @empty-line? ; XXX technically the tokenizer manages the + here ; FIXME newline is not being handled correctly here yet
-
-;table-dumb : /newline /PIPE @not-newline ; as a matter of last resort
-;table-row : table-cell+ /PIPE?
-;table-cell : /PIPE @not-pipe-not-newline? ; this is NOT ambiguous the minimal match is /PIPE+ PIPE? !??!?!
-;table-cell : /PIPE /space? ( @not-pipe-bs-newline | /BS PIPE | BS )* /space? ; XXX divergence
-;table-row-rule : /PIPE /HYPHEN /not-newline? ; everything else gets wiped
+; XXX technically the tokenizer manages the + here
+; FIXME newline is not being handled correctly here yet
+table-element : ( TABLE-ELEMENT )+ NEWLINE?
 
 ;;;;
 
 ;;; plain lists
 
-plain-list-line : ( ordered-list-line | descriptive-list-line ) @empty-line?
+plain-list-line : ( ordered-list-line | descriptive-list-line ) NEWLINE?
 ordered-list-line : ORDERED-LIST-LINE
 descriptive-list-line : DESCRIPTIVE-LIST-LINE
 
@@ -377,9 +376,7 @@ descriptive-list-line : DESCRIPTIVE-LIST-LINE
 ; FIXME there isn't really any such thing as a malformed or eof footnote defintion in the way
 ; that there can be for blocks or drawers, but because we are reusing some of the internal
 ; machinery they show up here, there is a TODO to refactor so that this is clear
-footnote-definition : FOOTNOTE-DEFINITION @empty-line?
-;footnote-definition : ( FOOTNOTE-DEFINITION | FOOTNOTE-DEFINITION-EOF | FOOTNOTE-DEFINITION-MALFORMED)
-;footnote-inline : FOOTNOTE-START-INLINE org-node? RSB ; FIXME this is really org-node-less-fd probably
+footnote-definition : FOOTNOTE-DEFINITION NEWLINE?
 
 ;;;; <[
 
@@ -389,10 +386,23 @@ timestamp : TIMESTAMP
 
 ;;; ???????
 
-;clock
-;inline-task
-;item
-;section
+;; clock
+; TODO I think?
+
+;; inline-task
+; inline tasks are a dervied concept that abuse a concrete heading
+; level and are not something that can be implemented as part of a
+; portable grammar, we have no choice for todo keywords, but this
+; would require us to parameterize the whole grammar, it could be
+; done, but induces enormous amounts of complexity
+
+;; item
+; items are a derived concept that nest plain lists and must be
+; implemented in the expander
+
+;; section
+; sections are derived concepts that nests headings and must be
+; implemented in the expander
 
 ;;;; tokens
 

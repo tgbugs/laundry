@@ -16,8 +16,7 @@
                   laundry-make-tokenizer
                   laundry-final-port
                   bind-runtime-todo-keywords)
-         #;
-         (except-in laundry/expander #%module-begin)
+         (only-in laundry/expander) ; hack to pull expander for compile since in testing we only invoke at runtime
          (rename-in (only-in laundry/heading make-rule-parser)
                     [make-rule-parser heading-rule-parser])
          syntax/strip-context
@@ -539,7 +538,7 @@
   (dotest "** COMMENT[#A]")
   (dotest "** COMMENT [#A] COMMENT")
 
-  (dotest "*                      :x:")
+  (dotest "*                      :x:") ; catch perf issues
 
   (dotest "* " #:node-type 'headline)
   (dotest (string-append (make-string 99 #\*) " "))
@@ -846,11 +845,14 @@
 (module+ test-paragraphs
   (current-module-path)
   (define nte 'paragraph)
+
+  (dotest "***nasdf" #:nte nte)
+
   (dotest "aaaaaaaaa paragraph" #:nte nte)
 
   (dotest "p11\np12\n\np21"
           #:eq-root
-          '(org-file (paragraph "p11" "\n" "p12" "\n") (paragraph "\n" "p21")))
+          '(org-file (paragraph "p11\np12\n") (paragraph "\np21")))
 
   (dotest "\nIf nothing else this is a paragraph." #:nte nte)
   (dotest "p" #:nte nte) ; sigh bof
@@ -893,17 +895,320 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
   )
 
+(module+ test-cite
+  ; from test-org-element
+  (dotest "[cite:@key]" #:nte 'citation)
+  (dotest "[cite:-@key]" #:nte 'citation)
+  (dotest "[cite:text]") ; not key
+  (dotest "[cite/style:@key]" #:nte 'citation)
+  #; ; TODO ?
+  (dotest "[cite/elyts:@key]" #:nte 'style) ; element property should be style
+  (dotest "[cite:@a;@b;@c]" #:nte 'citation)
+  #; ; TODO not sure of the distinction
+  (dotest "[cite:@a;@b;@c]" #:nte 'citation-reference)
+  (dotest "[cite:@a;-@b]")
+  (dotest "[cite:common-prefix@a]") ; ??? what should this be
+  (dotest "[cite:common-prefix;@a]")
+  (dotest "[cite:@a;common-suffix]")
+  (dotest "[cite: common-prefix ;@a]")
+  (dotest "[cite: @a; common-suffix]")
+  (dotest "[cite: @a ; common-suffix]") ; ???
+  (dotest "[cite:common-prefix;@a;common-suffix]")
+  (dotest "[cite:@[]]") ; not key
+  (dotest "[cite:@a:.#$%&-+?<>~/1]" #:nte 'citation)
+  (dotest "[cite:@;]") ; not citation-reference ? XXX
+
+  (dotest "[cite: pre @key post]")
+  (dotest "[cite: pre @key]")
+  (dotest "[cite:@key post]")
+
+  (dotest "[cite: pre1 @k1 post1; pre2 @k2 post2]")
+  (dotest "[cite: pre1 @k1;pre2 @k2 post2]")
+  (dotest "[cite: pre1 @k1 post1;@k2 post2]")
+  (dotest "[cite:@k1 post1; pre2 @k2]")
+
+  )
+
+(module+ test-footnotes
+  (dotest "[fn::]")
+  (dotest "[fn::")
+
+  ; series
+  (dotest "[fn::a][fn::b]")
+
+  ; series nested
+  (dotest "[fn::c[fn::a][fn::b]]")
+
+  ; nested
+  (dotest "[fn::a[fn::b]]")
+
+  ; deeply nested
+  (dotest "[fn::[fn::[fn::[fn::[fn::[fn::]]]]]]")
+
+  ; XXX divergece, fortunately it is relxaing a constraint
+  (dotest "[fn:: =]= ]")
+  (dotest "[fn:: =[= ]")
+
+
+  ; FIXME these have annoying failure modes which push
+  ; the tokenizer to parser as paragraphs
+  (dotest "[fn:a] b\nc\n* d e\nf")
+  (dotest "[fn:a] b\nc\n[fn:d] e\nf")
+
+  (dotest "[fn:a]\n\n\n\n")
+
+  (dotest "[fn:a] b\n|t\n\n")
+
+  (dotest "[fn:a] b\n\nc\n\nd\n* \n")
+  (dotest "[fn:a] b\n\nc\n\nd\n\n")
+
+  (dotest "[fn:x]\n*\n")
+  (dotest "[fn:x]\n* \n")
+
+  (dotest "[fn:def] always a definition")
+
+  ; cursed
+  ; elisp font locking gets this wrong, export gets it right, the issue is the lack fo leading whitespace
+  ; among other things
+  (dotest "[fn:: =x= ]")
+  (dotest "[fn::=]=]")
+  (dotest "[fn:: =]= ]") ; XXX divergence
+  (dotest "[fn:: x =]= y ]") ; XXX divergence
+  (dotest "[fn::=[=]") ; =[= is not verbatim because the pre or post do not meet the requirements
+  (dotest "[fn:: [ x =]= y ]") ; XXX divergence
+  (dotest "[fn:: =[= x ] y ]") ; XXX divergence
+  (dotest "[fn:: =[= x =]= y ]") ; consistent
+  (dotest "[fn:: =[= x [ ] =]= y ]") ; consistent
+  ; un-marked up brackets pair? no ... ugh, everything a mess here
+
+  ; cursed part 2
+  (dotest " [fn::=]=]")
+  (dotest " [fn:: =]= ]")
+  (dotest " [fn:: x =]= y ]")
+  (dotest " [fn::=[=]")
+  (dotest " [fn:: [ x =]= y ]")
+  (dotest " [fn:: =[= x ] y ]")
+  (dotest " [fn:: =[= x =]= y ]")
+  ; from/to [fn:: ] and (:~ [ ) ?? doesn't help with the nested cases though
+  ; right now markup wins when fighting with footnotes
+
+
+  (dotest "=[= [fn:: x =]= y ]") ; FIXME this one gets the interaction between footnotes and markup
+  ; turns out that the elisp implementation has the same issue, it highlights as both the terminal
+  ; for a footnote and verbatim in fontlocking but org export gets it right
+
+  ; cursed anchor
+  (dotest "[fn:lol]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]")
+
+  (dotest "Text [fn::Inline footnote[fn::Nested.].] more." #:expand? #t)
+
+  (dotest "be[fn::in[fn::ne]]aft") ; FIXME bad parse on the ne
+
+  (dotest "a[fn::b[fn:c]]")
+
+
+  (dotest "[fn:: sigh\nwhat")
+  (dotest "[fn:: sigh\n\nwhat")
+
+  (dotest "[fn:: asdf")
+
+  (dotest "be[fn::in[fn::ne]
+#+begin_src bash
+echo oops a block
+#+end_src
+]aft") ; XXX broken because the inline footnote doesn't know to stop for blocks
+
+  (dotest "Text [fn::Inline footnote.] more.")
+  (dotest "Text [fn::Inline footnote.\nmore footnote.] more.") ; yes
+
+  (dotest "Text [fn::Inline footnote.\n\nA new paragraph?] more.") ; officially NOT an inline footnote YAY!!!!!!!
+
+  (dotest "Text [fn:anchor] more.")
+  (dotest "Text [fn:x] more.\n[fn:x] Gonna")
+
+  (dotest "A [fn:1].\n[fn:1] footnote.\n**\n")
+  (dotest "A [fn:1].\n[fn:1] footnote.\n** \n")
+
+  ; FIXME none of these should be inline ! which means that we have to update the paragraph tokenizer to skip ^[fn:
+  (dotest "[fn::]")
+  (dotest "[fn::::::::::]")
+
+  (dotest "[fn:: hello =]= there ]")
+
+  (dotest "[fn:: [ hello =]= there ]")
+
+  (dotest "[fn:: [ hello =]= there\n\n\nanother p]")
+
+  (dotest "[fn:: =a= \n\n")
+
+  (dotest "[fn:: =a= \n")
+
+  (dotest "[fn:: =a=\n")
+
+  (dotest "[fn:: =a= \n\n b]")
+
+  (dotest "[fn:: =a= \n b]") ; XXX verbatim here is wrong as well ... off by two error
+
+  )
+
+(module+ test-script
+  (current-module-path)
+
+  ; follows the same pattern as footnotes
+
+  ; series
+  (dotest
+   "x_{a}_{b}"
+   #:eq-root
+   '(org-file (paragraph "x" (subscript "a") (subscript "b"))))
+
+  ; series nested
+  (dotest
+   "x_{c_{a}_{b}}"
+   #:eq-root
+   '(org-file (paragraph "x" (subscript "c" (subscript "a") (subscript "b")))))
+
+  ; nested
+  (dotest
+   "x_{a_{b}}"
+   #:eq-root
+   '(org-file (paragraph "x" (subscript "a" (subscript "b")))))
+  ; pretty sure that x_a_b -> x_{a}_{b} so {} required for nesting
+
+  ; deeply nested
+  (dotest
+   "x_{a_{b_{c_{d_{e_{f}}}}}}"
+   ; note that the elisp implementation cannot handle this case due to faking the nesting
+   #:eq-root
+   '(org-file
+     (paragraph
+      "x"
+      (subscript
+       "a"
+       (subscript
+        "b"
+        (subscript
+         "c"
+         (subscript
+          "d"
+          (subscript
+           "e"
+           (subscript
+            "f")))))))))
+
+  (dotest "at the limit x_{{{{}}}}\n\n") ; XXX same footnote pairing issue
+  (dotest
+   "[_{oof}"
+   #:eq-root
+   '(org-file (paragraph "[" (subscript "oof"))))
+  (dotest "[^{oof}")
+  (dotest "(_oh body_)")
+  (dotest "(_{oh}_)" #:nte 'underline)
+  (dotest
+   "(__{no} x_)"
+   #:eq-root
+   '(org-file (paragraph "(" (underline (subscript "no") " x") ")")))
+
+  ; markup interaction
+  ; XXX oh but this one is worse and different because {} and () are valid markup pre chars
+  ; the fontification agrees with me here ... but export very much does not
+  (dotest "x_{=}=}") ; XXX divergence
+  (dotest "x_{={=}") ; XXX divergence
+  (dotest "x_(=)=)") ; XXX divergence
+  (dotest "x_(=(=)") ; XXX divergence
+
+  (dotest "x_{ =y= }")
+
+  (dotest "x_{ [ }")
+  (dotest "x_{ ] }")
+
+  ; so cursed
+  (dotest "x_{ [fn:: oh_{ ] no} ] }")
+  (dotest "x_{ [fn:: oh_{ [ no} ] }")
+
+  (dotest "[fn::^{[fn::oh } no]}]")
+  (dotest "[fn::^{[fn::oh { no]}]")
+
+  (dotest "a_{b}")
+  (dotest "x_{y}_{z}")
+
+  (dotest "a_{src_elisp[:exports both :eval never]{(+ 1 2)}}")
+  (dotest "a_{x_{y}_{z} b_{c_{_d{") ; XXX broken
+
+  )
+
+(module+ test-inline-call
+  (current-module-path)
+
+  (dotest "call_name(a,b)")
+
+  (dotest "call_name[[]](a,b)[]")
+
+  (dotest "call_name[[[[[[[[[[[]]]]]]]]]]](a,b)[]")
+
+  (dotest "call_name[](a,b)[]")
+  (dotest "call_name[](a,b)[x]")
+  (dotest "call_name[](a,b)[!]")
+  (dotest "call_name[](a,b)[12x]")
+  (dotest "call_name[](a,b)[12x ]")
+  (dotest "call_name[](a,b)[hello ]")
+  (dotest "call_name[](a,b)[xxxxxx]")
+  (dotest "call_name[](a,b)[xxxxxxx]")
+  (dotest "call_name[](a,b)[xxxxx x]") ; XXX I think the issues happens because the trailing header is optional
+  (dotest "call_name[](a,b)[x xxxxx]") ; XXX so maybe we don't support that for the standard, or we follow the
+                                       ; spec to the letter and require []()[] ...
+  (dotest "call_name[](a,b)[xxxxxxxxxxxxxxxxxxxxx]")
+
+  (dotest "call_name[](a,b)[hello world!]")
+  (dotest "call_name[](a,b)[ [[[]]] [] [[]] ]")
+  (dotest "call_name[](a,b)]")
+  (dotest "call_name[](a,b)[[]") ; XXX nesting fail -> error or ambiguity
+  (dotest "call_name[](a,b)[]]")
+  (dotest "call_name[](a,b)")
+  (dotest "call_name[]")
+  (dotest "call_name")
+
+  )
+
+(module+ test-left-square-bracket
+  (current-module-path)
+  ; interactions between various paragraph parts
+
+  (dotest "[")
+  (dotest "[=hello=")
+
+  (dotest "[fn::")
+
+  (dotest "[c")
+  (dotest "[c_")
+  (dotest "[f")
+  (dotest "[f_")
+  (dotest "[[")
+  (dotest "[[_")
+
+  (dotest "[=a=]\n(=b=)")
+
+  (dotest "[]*a*\n(=b=)" #:nte 'verbatim)
+  (dotest "{}*a*\n(=b=)" #:nte 'verbatim)
+  (dotest "()*a*\n(=b=)" #:nte 'verbatim)
+  (dotest "{{{lol}}}*a*\n(=b=)" #:nte 'verbatim)
+
+  (dotest "=a=[]\n[]=b=")
+
+  )
+
 (module+ test-markup
   (current-module-path)
+
 
   (dotest "*")
   (dotest "**")
   (dotest "***")
 
-  (dotest " *hello* ")
+  (dotest " *hello* " #:nte 'bold) ; counter descriptive list
   (dotest " /hello/ ")
   (dotest " _hello_ ")
-  (dotest " +hello+ ")
+  (dotest " +hello+ " #:nte 'strike-through) ; counter descriptive list
   (dotest " =hello= ")
   (dotest " ~hello~ ")
 
@@ -926,7 +1231,26 @@ AAAAAAAAAAAAAAAAAAAAAAA
 
   (dotest "*bold text /bi text/ bold _bu text_ bold =bold verb= bold ~bold code~ bold*")
 
-  (dotest "*b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*")
+  (dotest
+   "*b /i _u +s =v /*_+lol+_*/= ~c /*_+lol+_*/~ s+ u_ i/ b*"
+   #:eq-root
+   '(org-file
+     (paragraph
+      (bold
+       "b "
+       (italic
+        "i "
+        (underline
+         "u "
+         (strike-through
+          "s "
+          (verbatim "v /*_+lol+_*/")
+          " "
+          (code "c /*_+lol+_*/")
+          " s")
+         " u")
+        " i")
+       " b"))))
 
   (dotest "\n =v=")
   (dotest "\n =v=\n")
@@ -963,16 +1287,48 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "_ * *")
 
 
-  (dotest "*/_+b+_ _+bus+_ /*")
+  (dotest
+   "*/_+b+_ _+bus+_ /*"
+   #:eq-root
+   '(org-file (paragraph (bold "/_+b+_ " (underline (strike-through "bus")) " /"))))
 
-  (dotest "/_+x+_ _+bus+_ /")
+  (dotest
+   "/_+x+_ _+bus+_ /"
+   #:eq-root
+   '(org-file (paragraph "/_+x+_ " (underline (strike-through "bus")) " /")))
 
-  (dotest "x+_ _+bus+_")
-  (dotest "x*_ _*bus*_")
+  (dotest
+   "x+_ _+bus+_"
+   #:eq-root
+   '(org-file (paragraph "x+_ " (underline (strike-through "bus")))))
 
-  (dotest "*/_+bius+_ _+bius+_/*")
+  (dotest
+   "x*_ _*bus*_"
+   #:eq-root
+   '(org-file (paragraph "x*_ " (underline (bold "bus")))))
 
-  (dotest "*/_+bius+_ _+bius+_ bi/*")
+  (dotest
+   "*/_+bius+_ _+bius+_/*"
+   #:eq-root
+  '(org-file
+    (paragraph
+     (bold
+      (italic
+       (underline (strike-through "bius"))
+       " "
+       (underline (strike-through "bius")))))))
+
+  (dotest
+   "*/_+bius+_ _+bius+_ bi/*"
+   #:eq-root
+   '(org-file
+     (paragraph
+      (bold
+       (italic
+        (underline (strike-through "bius"))
+        " "
+        (underline (strike-through "bius"))
+        " bi")))))
 
   )
 
@@ -994,7 +1350,7 @@ then another paragraph
 ")
 
   (dotest "35934")
-  (dotest "35934" #:eq-root '(org-file (paragraph "\n" "35934")))
+  (dotest "35934" #:eq-root '(org-file (paragraph "\n35934")))
   (dotest "# 35934")
   (dotest "# hello")
   (dotest "# hello\n# there\nwat")
@@ -1938,153 +2294,9 @@ don't affilaite to other unaff keyword
   (dotest-quiet #f)
   )
 
-(module+ test-footnotes
-  (dotest "[fn::]")
-  (dotest "[fn::")
-
-  ; FIXME these have annoying failure modes which push
-  ; the tokenizer to parser as paragraphs
-  (dotest "[fn:a] b\nc\n* d e\nf")
-  (dotest "[fn:a] b\nc\n[fn:d] e\nf")
-
-  (dotest "[fn:a]\n\n\n\n")
-
-  (dotest "[fn:a] b\n|t\n\n")
-
-  (dotest "[fn:a] b\n\nc\n\nd\n* \n")
-  (dotest "[fn:a] b\n\nc\n\nd\n\n")
-
-  (dotest "[fn:x]\n*\n")
-  (dotest "[fn:x]\n* \n")
-
-  (dotest "[fn::a][fn::b]")
-
-  ; nested
-  (dotest "[fn::a[fn::b]]")
-
-  ; deeply nested
-  (dotest "[fn::[fn::[fn::[fn::[fn::[fn::]]]]]]")
-
-  (dotest "[fn:def] always a definition")
-
-  ; cursed
-  (dotest "[fn::=]=]")
-  (dotest "[fn:: =]= ]")
-  (dotest "[fn:: x =]= y ]")
-  (dotest "[fn::=[=]") ; XXX
-  (dotest "=[= [fn:: x =]= y ]")  ; FIXME HRM this is mismatched do footnotes somehow take priority over verbatim !?
-  (dotest "[fn:: [ x =]= y ]")
-  (dotest "[fn:: =[= x ] y ]")
-  (dotest "[fn:: =[= x =]= y ]") ; FIXME bad markup
-
-  ; cursed anchor
-  (dotest "[fn:lol]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]")
-
-  (dotest "Text [fn::Inline footnote[fn::Nested.].] more." #:expand? #t)
-
-  (dotest "be[fn::in[fn::ne]]aft") ; FIXME bad parse on the ne
-
-  (dotest "a[fn::b[fn:c]]")
-
-
-  (dotest "[fn:: sigh\nwhat")
-  (dotest "[fn:: sigh\n\nwhat")
-
-  (dotest "[fn:: asdf")
-
-  (dotest "be[fn::in[fn::ne]
-#+begin_src bash
-echo oops a block
-#+end_src
-]aft") ; XXX broken because the inline footnote doesn't know to stop for blocks
-
-  (dotest "Text [fn::Inline footnote.] more.")
-  (dotest "Text [fn::Inline footnote.\nmore footnote.] more.") ; yes
-
-  (dotest "Text [fn::Inline footnote.\n\nA new paragraph?] more.") ; officially NOT an inline footnote YAY!!!!!!!
-
-  (dotest "Text [fn:anchor] more.")
-  (dotest "Text [fn:x] more.\n[fn:x] Gonna")
-
-  (dotest "A [fn:1].\n[fn:1] footnote.\n**\n")
-  (dotest "A [fn:1].\n[fn:1] footnote.\n** \n")
-
-  ; FIXME none of these should be inline ! which means that we have to update the paragraph tokenizer to skip ^[fn:
-  (dotest "[fn::]")
-
-  (dotest "[fn:: hello =]= there ]")
-
-  (dotest "[fn:: [ hello =]= there ]")
-
-  (dotest "[fn:: [ hello =]= there\n\n\nanother p]")
-
-  (dotest "[fn:: =a= \n\n")
-
-  (dotest "[fn:: =a= \n")
-
-  (dotest "[fn:: =a=\n")
-
-  (dotest "[fn:: =a= \n\n b]")
-
-  (dotest "[fn:: =a= \n b]") ; XXX verbatim here is wrong as well ... off by two error
-
-  )
-
-(module+ test-cite
-  ; from test-org-element
-  (dotest "[cite:@key]" #:nte 'citation)
-  (dotest "[cite:-@key]" #:nte 'citation)
-  (dotest "[cite:text]") ; not key
-  (dotest "[cite/style:@key]" #:nte 'citation)
-  #; ; TODO ?
-  (dotest "[cite/elyts:@key]" #:nte 'style) ; element property should be style
-  (dotest "[cite:@a;@b;@c]" #:nte 'citation)
-  #; ; TODO not sure of the distinction
-  (dotest "[cite:@a;@b;@c]" #:nte 'citation-reference)
-  (dotest "[cite:@a;-@b]")
-  (dotest "[cite:common-prefix@a]") ; ??? what should this be
-  (dotest "[cite:common-prefix;@a]")
-  (dotest "[cite:@a;common-suffix]")
-  (dotest "[cite: common-prefix ;@a]")
-  (dotest "[cite: @a; common-suffix]")
-  (dotest "[cite: @a ; common-suffix]") ; ???
-  (dotest "[cite:common-prefix;@a;common-suffix]")
-  (dotest "[cite:@[]]") ; not key
-  (dotest "[cite:@a:.#$%&-+?<>~/1]" #:nte 'citation)
-  (dotest "[cite:@;]") ; not citation-reference ? XXX
-
-  (dotest "[cite: pre @key post]")
-  (dotest "[cite: pre @key]")
-  (dotest "[cite:@key post]")
-
-  (dotest "[cite: pre1 @k1 post1; pre2 @k2 post2]")
-  (dotest "[cite: pre1 @k1;pre2 @k2 post2]")
-  (dotest "[cite: pre1 @k1 post1;@k2 post2]")
-  (dotest "[cite:@k1 post1; pre2 @k2]")
-
-  )
-
 (define h-l1
   '(org-file
-    (headline-node (heading 1 (tags)))))
-(define h-l1-c 
-  '(org-file
-    (headline-node
-     (headline
-      (stars "*")
-      (headline-content (h-sane-comment (h-comment "COMMENT")))))))
-(define h-l1-t
-  '(org-file
-    (headline-node
-     (headline
-      (stars "*")
-      (headline-content (h-tags (tag-name "t") (tag-name "1")))))))
-(define h-l1-p
-  '(org-file
-    (headline-node
-     (headline
-      (stars "*")
-      (headline-content (h-priority (priority-level (not-whitespace1 "P"))))))))
+    (headline-node (heading 1)))) ; don't have to have (tags) if there are no tags
 
 (module+ test-sentinel
   (current-module-path)
@@ -2111,7 +2323,7 @@ p 2
   (dotest "* ")
   (dotest "* " #:eq-root h-l1)
   (dotest "*  " #:eq-root h-l1)
-  (dotest "*                                     ")
+  (dotest "*                                     ") ; perf issue canary
   (dotest "* COMMENT" #:nte 'comment)
   (dotest "* COMMENT " #:nte 'comment)
   (dotest "* COMMENT[#A]")
@@ -2137,9 +2349,8 @@ p 2
   (dotest "\n" #:eq-root '(org-file (empty-line "\n") (empty-line "\n")))
   #;
   (dotest "  " #:eq   '(org-file (org-node (paragraph (space #f) (space #f)))))
-  (dotest "  " #:eq-root   '(org-file (paragraph "\n" "  "))) ; FIXME vs "\n  "
-  (dotest "  \n" #:eq-root '(org-file (paragraph "\n" "  ") ; FIXME vs "\n  "
-                                      (empty-line "\n")))
+  (dotest "  " #:eq-root   '(org-file (paragraph "\n  ")))
+  (dotest "  \n" #:eq-root '(org-file (paragraph "\n  \n")))
 
   (dotest "* :tag:")
   (dotest "*   :ARCHIVE:")

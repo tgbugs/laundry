@@ -360,6 +360,7 @@
   alpha-n
   alphas-unmixed ; only the parser needs to know that they are unmixed
 
+  #;
   headline-content ; this is sa because we have to remerge the whole headline for the 2nd pass parser
 
   ; put the headline titles here for now until we can figure out what
@@ -507,11 +508,6 @@
   table
   table-row
   table-row-rule
-  citation
-  hyperlink ; FIXME needs to be an sa alt probably
-  link-angle
-  link-regular
-  timestamp ; TODO deeper parsing
 
   bof
   digits
@@ -548,20 +544,6 @@
 
   babel-call
 
-  footnote-reference ; FIXME likely needs a separate implementation
-  #;
-  footnote-anchor
-  footnote-anchor-inline
-  #;
-  footnote-inline
-
-  footnote-definition
-  footnote-definition-inline
-  #;
-  fn-label
-  #;
-  fn-def
-
   greater-block
 
   #;
@@ -594,7 +576,47 @@
   blk-dyn-contents
   blk-dyn-end
 
+  ;; objects
+
+  latex-entity-fragment
+  latex-fragment
+  latex-fragment-n
+  latex-fragment-parens
+  export-snippet
+  citation
+
+  inline-call
+  inline-call-malformed
+  inline-src-block
+
+  hyperlink ; FIXME needs to be an sa alt probably
+  link-angle
+  link-regular
+
   macro ; TODO determine the phase at which macros expand
+
+  noweb-target
+  radio-target
+  stats-cookie
+  superscript
+  subscript
+  script-paren
+
+  timestamp ; TODO deeper parsing
+
+  footnote-reference ; FIXME likely needs a separate implementation
+  #;
+  footnote-anchor
+  footnote-anchor-inline
+  #;
+  footnote-inline
+
+  footnote-definition
+  footnote-definition-inline
+  #;
+  fn-label
+  #;
+  fn-def
 
   bold
   italic
@@ -680,7 +702,7 @@
                            (syntax->datum
                             (local-expand e 'expression #f)))
                          (syntax->list #'(body ...))))])
-        (do-headline heading-input-raw this-syntax)))]))
+        (do-heading heading-input-raw this-syntax)))]))
 
 (define-syntax (heading stx)
   (syntax-parse stx
@@ -759,9 +781,9 @@
 
 (define-for-syntax heading-make-tokenizer (make-parameter #f))
 
-(define-for-syntax (do-headline str [original-syntax #f])
+(define-for-syntax (do-heading str [original-syntax #f])
   (when (debug)
-    (println (list "do-headline runtime-todo-keywords:" (runtime-todo-keywords))))
+    (println (list "do-heading runtime-todo-keywords:" (runtime-todo-keywords))))
   (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
                                (raise-syntax-error #f "happened in" original-syntax))])
     (let* ([heading-make-tokenizer
@@ -978,6 +1000,9 @@
        out
        )]))
 
+(define-syntax sup-p (make-rename-transformer #'script-paren))
+(define-syntax sub-p (make-rename-transformer #'script-paren))
+
 (define-for-syntax (paragraph-expand-body e)
   (let ([out (local-expand e 'expression #f)])
     (let ([dat (syntax-e out)])
@@ -1057,15 +1082,16 @@
                ; nice to be able to use the underlying port instead of the
                ; nonsense I do here ... HRM we can't do it in the lexer itself
                ; but maybe we could do it in next-token ?
-               (apply string-append
-                      (map (λ (e)
+               (let ([wat (map (λ (e)
                              (syntax->datum
                               (local-expand e 'expression #f)))
-                           (syntax-e #'(body ...))))
+                               (syntax-e #'(body ...)))])
+                 (when (debug)
+                   (println (format "paragraph-node wat: ~a" wat)))
+                 (apply string-append wat))
                this-syntax))
              'expression
-             #f)]
-           )
+             #f)])
        expanded-raw)
 
      (let ([out #'(list 'paragraph expanded ...)])
@@ -1224,13 +1250,13 @@
 
 (define-syntax (table-element stx)
   (syntax-parse stx
-    [(_ table-string:str)
+    [(_ table-string:str (~optional newline:str #:defaults ([newline #'""])))
      #:do [(when (debug) (println (list "table-element in:" (syntax-e #'table-string))))]
      #:with table
      (local-expand
       (datum->syntax
        #'table-string ; FIXME we can get better granularity than this surely ?
-       (do-table (syntax-e #'table-string)))
+       (do-table (string-append (syntax-e #'table-string) (syntax-e #'newline))))
       'expression
       #f)
      (let ([out #'table])

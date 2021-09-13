@@ -88,6 +88,17 @@
 ; from/stop-before could also be used here, but negating the newline is probably ok
 (define-lex-abbrev heading (:seq "\n" (:+ "*") wsnn (:* (:~ "\n"))))
 
+
+(define-lex-abbrev plan-dead (:or "DEADLINE" "deadline"))
+(define-lex-abbrev plan-sched (:or "SCHEDULED" "scheduled"))
+(define-lex-abbrev plan-open (:or "OPENED" "opened"))
+(define-lex-abbrev plan-close (:or "CLOSED" "closed"))
+(define-lex-abbrev plan-keyword (:seq (:or plan-dead plan-sched plan-open plan-close)))
+;(define-lex-abbrev plan-info (:seq plan-keyword (:or (:? (:seq wsnn* timestamp wsnn*)) wsnn+))) ; doesn't quite solve SCHEDULED:DEADLINE: with eol
+(define-lex-abbrev plan-info (:seq plan-keyword wsnn* (:? timestamp)))
+(define-lex-abbrev planning-line           (:seq "\n" (:+ (:seq wsnn* plan-info)) wsnn*))
+(define-lex-abbrev planning-line-malformed (:seq "\n" (:+ (:seq wsnn* plan-info)) wsnn* (:~ whitespace) (:+ (:~ "\n"))))
+
 (define-lex-abbrev comment-element
   (:+ (:seq "\n" wsnn* "#" (:seq wsnn (:* (:~ "\n"))))))
 
@@ -266,6 +277,13 @@
 ;;; elements that cannot contain headings 
 
 (define-lex-abbrev stop-before-heading (:seq "\n" (:+ "*") wsnn))
+
+;;;; latex environments
+
+(define-lex-abbrev latex-environment-start
+  ; these are like greater blocks and require runtime generated lexers
+  ; therefore there is no end pattern defined here
+  (:seq "\begin{" (:+ (:or alpha 0-9 "*")) "}"))
 
 ;;;; blocks
 
@@ -555,13 +573,13 @@ c
    "\n"))
 
 (define-lex-abbrev descriptive-list-line
-  (from/stop-before
    (:or
-    (:seq "\n" descriptive-list-start wsnn+)
+    (from/stop-before (:seq "\n" descriptive-list-start wsnn+) "\n")
     (:&
      (:seq "\n" descriptive-list-start)
+     ; use stop-before ensures that we don't go too far, but it does not ensure that we don't stop too soon
      (from/stop-before (:seq "\n" descriptive-list-start) "\n")))
-   "\n"))
+   )
 
 ;; paragraphs
 
@@ -642,9 +660,9 @@ c
              "<" ">" ; anything that would collide here will be parsed in the nested paragraph parser
              "'"
              "\""
-             "("
-             ")"
-             "]"
+             "(" ")"
+             "{" "}"
+                 "]" ; no left square bracket due to footnote definitions
              ","
              ";" ; pretty sure this one is safe
              "!"
@@ -725,28 +743,66 @@ c
 (define-lex-abbrev latex-name
   (:seq "\\" (:+ alpha)))
 
-(define-lex-abbrev latex-entity
+(define-lex-abbrev latex-entity/fragment-1
+  ; XXX note that some of these may in fact be fragments at runtime
   (:or
+   ; XXX the spec is incomplete here because it does not indicate whether
+   ; entities are shortest match or whether \name{}{} always parses as a fragment
+   ; I am going to rul that \name{}{} always parses as a fragment which means that
+   ; the spec is missing a note that a fragment that ends in {} cannot be followed by [] or {}
+   ; (not that you would implement it in that way) NOW, this may also be incorrect because
+   ; someone could do \pi{}[lol look at me] but I'm not entirely sure about that should happen there
    (:seq latex-name "{}")
-   (from/stop-before latex-name "\n")))
+   (:&
+    latex-name
+    (from/stop-before latex-name "\n"))))
 
+(define-lex-abbrev latex-brackets-curley*
+  (:seq "{" (:* (:~ (:or "\n" "{" "}"))) "}"))
+(define-lex-abbrev latex-brackets-curley+
+  (:seq "{" (:+ (:~ (:or "\n" "{" "}"))) "}"))
+(define-lex-abbrev latex-brackets-square
+  (:seq "[" (:* (:~ (:or "\n" "[" "]" "{" "}"))) "]"))
+
+(define-lex-abbrev latex-brackets
+  ; curley+ differentiates \name{contents*} from \name{contents+} and
+  ; :>= 2 differentiates \name{} from \name{}{} and \name{}[]
+  (:?
+   (:or
+    latex-brackets-curley+
+    latex-brackets-square
+    (:>= 2
+         (:or
+          latex-brackets-curley*
+          latex-brackets-square)))))
+
+(define-lex-abbrev latex-fragment-n
+  ; XXX collides with latex-entity, in the grammar they need to be combined sort it out afterward
+  (:seq latex-name latex-brackets))
+
+(define-lex-abbrev latex-fragment-parens
+  (:or
+   ; this pattern is insurance against accidental greedy behavior
+   (:seq (from/stop-before "\\[" "\\]") "]")
+   (:seq (from/stop-before "\\(" "\\)") ")")
+   ))
+
+; the $ and $$ forms are not implemented due to the note from ngz
+#;
 (define-lex-abbrev latext-$$ ; so the spec claims but I'm not sure I buy it
   (from/to "$$" "$$"))
 
+#;
 (define-lex-abbrev latex-char
   (:~ (:or "." "," "?" ";" "'" "\"")))
 
+#;
 (define-lex-abbrev latext-$
   (:or
    (from/stop-before
     "" (:seq (:or "\n" (:~ "$")) "$" latex-char "$" "\n"))
-       (:seq (:or "\n" (:~ "$")) "$" latex-char "$" (:or "(){}[].,!\"\' "))))
-
-(define-lex-abbrev latex-brackets
-  (:*
-   (:or
-    (:seq "[" (:* (:~ (:or "\n" "[" "]" "{" "}"))) "]")
-    (:seq "{" (:* (:~ (:or "\n" "{" "}"))) "}"))))
+   (:seq (:or "\n" (:~ "$")) "$" latex-char "$" (:or "(){}[].,!\"\' "))
+   ))
 
 ;;; export snippets
 
@@ -754,7 +810,7 @@ c
   (:seq "@@" (:+ (:or alpha 0-9 "-")) ":"))
 
 (define-lex-abbrev export-snip
-  (from/to export-snip-start "@@")
+  (:seq (from/stop-before export-snip-start "@@") "@") ; insurance against greedy
   #;
   (from/stop-before
    export-snip-start
@@ -766,6 +822,15 @@ c
     stop-before-heading
     (:seq (:seq "@@" any-char)))))
 
+;;; delimiter extension
+
+; pair these with (from/stop-before "" (:seq "]" pattern "|")) at tokenize time like we did for source blocks
+; that way if a user needs to nest, they can just bump the escape sequence (yay induction)
+(define-lex-abbrev extend-delim-start (:seq "|" (:* (:or (:~ whitespace alpha 0-9))))) ; TODO check the racket syntax
+(define-lex-abbrev extend-curlie-start (:seq extend-delim-start "{"))
+(define-lex-abbrev extend-square-start (:seq extend-delim-start "["))
+(define-lex-abbrev extend-parens-start (:seq extend-delim-start "("))
+
 ;;; inline call
 
 (define-lex-abbrev inline-call-header
@@ -773,21 +838,53 @@ c
 (define-lex-abbrev inline-call-args
   (:seq "(" (:* (:~ (:or ")" "\n"))) ")"))
 
+(define-lex-abbrev inline-call-start
+  ; XXX spec is underspecified, call_oops why do I have [a](b=c)[d] in my name [:eval never](a=1, b=2)[:post lol]
+  ; as written the spec would gobble badly call_name()[]() call_name2()[]()
+  ; XXX that thing about allowing spaces in names ...
+  #; ; dirty approach
+  (from/stop-before
+   (:seq "call_" (:+ (:~ (:or "(" ")" "\n")))) ; XXX greedy vs non-greedy
+   (:or "[" "("))
+  ; a cleaner approach
+  (:seq
+   "call_"
+   (:+ (:~ (:or "[" "]" "(" ")" "\n")))))
+
 (define-lex-abbrev inline-call
   (:seq "call_"
-        (:+ (:~ (:or "(" ")" "\n")))
+        (:+ (:~ (:or "(" ")" "\n"))) ; XXX that thing about allowing spaces in names ...
         (:? inline-call-header)
         inline-call-args
         (:? inline-call-header)))
 
 ;;; inline src-block
 
-(define-lex-abbrev inline-src-block ; XXX this seems underspecified in the spec
+; FIXME TODO I think that we are going to need a generic solution for
+; delimiters because the spec is inconsistent in too many cases and
+; there are a bunch of bugs when different objects interact
+
+(define-lex-abbrev inline-src-block-start
+  (:seq "src_" (:+ (:~ whitespace "[" "]" "{" "}"))))
+
+(define-lex-abbrev inline-src-block ; XXX this seems underspecified in
+  ; the spec XXX yes, it is under specified and the actual behavior is
+  ; radically different, requiring matched parens and allowing
+  ; newlines
+
+  ; for now I'm going to do this as shortest match which
+  ; effectively means that rcb is not allowed
+
   ; e.g. what happens with src_name[oops I have more ]{of these}]{oh no!} src_name2[very oh no]  ]{echo lol}
   ; maybe that is ok
   (:seq "src_"
         (:+ (:~ whitespace))
         (:? (:seq "[" (:* (:~ "\n")) "]"))
+        ; FIXME while this is what the spec says, it produces longest
+        ; matches, which break usage inside {} script this is another
+        ; case where it is hard to know what the best solution is
+        ; because the spec is internally inconsistent and doesn't
+        ; match the actual behavior, ox and babel both get it right
         (:seq "{" (:* (:~ "\n")) "}")))
 
 ;;; line break
@@ -802,15 +899,18 @@ c
   (:seq "@" (:+ (:or 0-9 A-Z a-z "-.:?!`'/*@+|(){}<>&_^$#%&~"))))
 
 (define-lex-abbrev citation
-  (from/to (:seq "[cite" (:* (:seq "/"
-                                   ; FIXME I think this is wrong because it will match [cite//:] ?
-                                   (:+ (:or 0-9 alpha "-" "_" "/"))))
-                 ":"
-                 (:* whitespace))
-           ; TODO internal citation structure parser
-           ; FIXME I think we need to stop before heading here as well?
-           ; because [cite:\n* @key] would match this I think ...?
-           (:seq "]")))
+  (:seq
+   (from/stop-before ; insurance against greedy match
+    (:seq "[cite" (:* (:seq "/"
+                            ; FIXME I think this is wrong because it will match [cite//:] ?
+                            (:+ (:or 0-9 alpha "-" "_" "/"))))
+          ":"
+          (:* whitespace))
+    ; TODO internal citation structure parser
+    ; FIXME I think we need to stop before heading here as well?
+    ; because [cite:\n* @key] would match this I think ...?
+    "]")
+   "]"))
 
 ;;; footnote
 
@@ -824,54 +924,35 @@ c
   (:seq "[fn:" footnote-label "]")
   )
 
-#;
-(define-lex-abbrev maybe-paired-square ; XXX does not work
-  ; I think the best way to handle this is to use from/to in this way,
-  ; and then check to see whether there are any extra left square
-  ; brackets dangling, if there are then return paragraph instead of
-  ; footnote, which I think is what the elisp implementation does
-  (from/to "[" "]") ; this allows [[]
-  #;
-  (:or
-   (:seq "[" "]")
-   (:seq "[" "]")
-   ;(from/to "[" (:or (:seq "[" ) "]"))
-   ))
-
 (define-lex-abbrev footnote-inline-start
   ; see footnote references
   ; the key constraint is that square brackets must be balanced
   ; which means that this portion cannot be handled in the tokenizer
   ; TODO technically these are allowed to contain only paragraph contents
   ; so not blocks or drawers
-  (:seq "[fn:" (:? footnote-label) ":"))
+  (:seq "[fn:" (:? footnote-label) ":"
+        #; ; NOPE this makes things irregular
+        ; there is no reasonable solution here as far as I can tell
+        ; the right way to solve this is to update the elisp implementation
+        ; so that markup takes priority over closing delimiters, the reason
+        ; elisp can get away with this is because they use a hack in the tokenizer
+        ; to fake a the nesting, but if you do it for real in the grammar you
+        ; realize that there will be a conflict between the markup and the nesting
+        ; and you really really want the markup to be handled by the tokenizer and
+        ; not part of the grammar, because markup in the grammar is a nightmare
+        ; there might be another way out of this but I'm not seeing it
+        ; XXX this divergence is ok because it is technically a relaxing of a constraint
+        ; even then there are still differences in behavior but edge cases
+        footnote-inline-segment))
 
-; XXX broken
-#;
-(define-lex-abbrev footnote-inline-malformed ; FIXME -maybe-malformed, because it will match ok bits too but EOF causes issues
-  ; FIXME verbatim issues probably
+(define-lex-abbrev footnote-inline-segment
+  (:* (:~ (:or "[" "]")))
+  )
 
-  ; FIXME arbitrary nesting cannot be handled effectively here
-
-  ; FIXME this is incorrect, what we wanted was to detect cases where
-  ; there was a double blank line (or was it single blank line?)
-  ; before a RSB
-  ; TODO this is going to need some special post processing
-  ; yes footnotes are annoying to deal with due to need to match brackets
-  ; we can't use from/stop-before for this because the gap will allow closing brackets to creep in
-  #;
-  (:seq footnote-inline-start (:* (:~ "]")) "\n\n") ; FIXME  double newline never makes it through because they end paragraphs in the top lexer
-  (:seq footnote-inline-start (:seq (:+ (:seq (:* (:~ (:or "[" "]")) "\n")))
-                                    ))
-  #;
-  (from/stop-before (:seq footnote-inline-start
-                          (:* (:~ "]")))
-                    (:or "]"
-                         "\n\n")))
-
-#; ; XXX fails in the [fn::a][fn::b] case contrast [fn::a[fn::b]]
-(define-lex-abbrev footnote-inline-maybe
-  (:seq footnote-inline-start (:*) "]"))
+#; ; can't use this because the grammar has to do the counting
+(define-lex-abbrev footnote-inline-starts
+  (:+ footnote-inline-start)
+  )
 
 (define-lex-abbrev footnote-inline-simple
   (:seq footnote-inline-start
@@ -894,24 +975,6 @@ c
 
   (fisim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
 
-  #|
-  (define fim-lexer
-    (lexer-srcloc
-     [footnote-inline-malformed (token 'FIM lexeme)]))
-
-  (define fim+-lexer
-    (lexer-srcloc
-     [footnote-inline-malformed (token 'FIM lexeme)]
-     [footnote-inline-start (token 'FIS lexeme)]))
-
-  ; FIXME the double newline never makes it through the top level parser
-  (fim-lexer (open-input-string "[fn::\n\n"))
-  (fim+-lexer (open-input-string "[fn::\n\n"))
-  (fim+-lexer (open-input-string "[fn:: sigh\n\n"))
-
-  ; expect to fail
-  (fim-lexer (open-input-string "[fn::Inline footnote[fn::Nested.].] more."))
-  |#
   )
 
 (define-lex-abbrev stop-before-footnote-def
@@ -933,54 +996,43 @@ c
    "\n"))
 
 (define-lex-abbrev footnote-definition
-  ; FIXME we can't use the (:& complement) technique here because these endings are technically not
-  ; malformed, HOWEVER ... we might be able to use a positive definition instead ?
-
+  ; we can't use the (:& complement) technique here because these
+  ; endings are technically not malformed, thus the constructive
+  ; approach
   (:seq
    (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
    ; FIXME how to include the single newline
    (:*
-    (:or (:seq "\n" (:+ footnote-definition-line))
-         footnote-definition-line))
-   )
+    (:or
+     (:seq "\n" (:+ footnote-definition-line))
+     footnote-definition-line))))
 
-  #; ; XXX this variant is extremely slow and doesn't actually work
-  (:seq
-   (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
-   (:+
-    (:or paragraph
-         drawer-ish
-         table-element
-         unknown-block
-         keyword-element
-         keyword-element-malformed))
+;;; left square bracket
 
-   )
-
-  ;(:&
-  #; ; this appraoch doesn't work
-  (:seq
-   (from/stop-before (:seq "\n" "[fn:" footnote-label "]") "\n")
-   (:*
-    (:&
-     (complement (:seq any-string "\n[fn:" footnote-label))
-     ;(complement (from/stop-before stop-before-footnote-def "\n"))
-     (complement (:seq any-string "\n" (:+ "*")))
-     ;(complement (from/stop-before "\n" "\n\n"))
-     ))
-   )
-
-  ; FIXME "word constituent characters" not 100% sure what that means in this and other similar contexts
+#;
+(define-lex-abbrev left-square-bracket-helper
+  #; ; this eats everything
+  (:& (:seq "[" any-string)
+      (complement
+       (:seq
+        (:or timestamp
+             footnote-inline-start
+             citation
+             hyperlink)
+        any-string))
+      )
+  ; XXX incomplete
   #;
-  (from/stop-before
-   (:seq "\n" "[fn:" footnote-label "]")
-   (:or
-    stop-before-footnote-def
-    stop-before-heading
-    "\n\n\n"
-    ; eof as well it seems
-    ;)
-   )))
+  (:seq "[" (:or (:~ (:or "c" "f" "[" 0-9))))
+  (:& "["
+      (complement
+       (:seq
+        (:or
+         ts-inactive
+         ts-range-inactive
+         footnote-inline-start
+         citation)
+        any-string))))
 
 ;;; hyperlink
 
@@ -1022,11 +1074,29 @@ c
   ; the closest pair of triple parents always parse as a macro regardless of whether their contents are well formed
   ; if their contents are NOT well formed then it should probably expand to be a malformed macro
   ; then we can determine whether default for that is to render as paragraph or render as nothing, paragraph probably better ...
-  (from/to "{{{" "}}}"))
 
-;;; target
+  #; ; FIXME this is NOT doing shortest match ! somehow from/to is doing a greedy match ??? good to known
+  (from/to (:seq "{{{" alpha) "}}}")
 
-(define-lex-abbrev target ; TODO further restrictions
+  #; ; FIXME also fails due to matchin 4 nested as {{{{}}}
+  (:seq (from/stop-before "{{{" "}}}") "}")
+  (:seq (from/stop-before (:seq "{{{" alpha) "}}}") "}")
+  )
+
+(module+ test-macro
+  (require rackunit)
+  (define m-lexer
+    (lexer-srcloc
+     [macro-invocation (token 'MACRO lexeme)]))
+  (m-lexer (open-input-string "{{{a}}}}"))
+
+  (check-exn exn:fail? (λ () (m-lexer (open-input-string "{{{{}}}}"))))
+  (check-exn exn:fail? (λ () (m-lexer (open-input-string "{{{{ }}}}"))))
+  )
+
+;;; noweb target
+
+(define-lex-abbrev noweb-target ; TODO further restrictions
   (:seq "<<" (:* (:~ "<" ">" "\n")) ">>"))
 
 ;;; radio target
@@ -1040,16 +1110,6 @@ c
 (define-lex-abbrev stats-percent (:seq "[" (:* 0-9) "%" "]"))
 
 (define-lex-abbrev stats-quotient (:seq "[" (:* 0-9) "/" (:* 0-9) "]")) ; what the heck is [/0] or [0/] supposed to mean?
-
-;;; subscript
-
-(define-lex-abbrev subscript ; TODO
-  "_")
-
-;;; superscript
-
-(define-lex-abbrev superscript ; TODO
-  "^")
 
 ;;; timestamps ; FIXME somehow timestamp makes compile time long and runtime slow !?? (only if it is in paragraph-1 ???)
                ; FIXME in fact ... I wonder whether the grammar version of it was slowing down the grammar as well ...
@@ -1118,20 +1178,98 @@ c
 
   )
 
+;;; subscript
+
+; XXXXXXXXXXXXXXXXXXXXXXX I'm going to suggest that for the standard '|{}| be made the default behavior
+; for org-export-with-sub-superscripts for tier 1 conforming implementations defaulting to t leads to
+; 99% of files being rendered incorrectly because users never configure this behavior and the result
+; is surprising and undesireable in nearly every case e.g. when generating documentation
+
+(define-lex-abbrev script-body
+  ; FIXME this should be off by default, we can match it but should
+  ; return a non-latex token unless a parameter is set
+  (:or
+   ; org-match-substring-regexp
+   "*" ; this does not conflict with bold because the markup could not trigger
+   (:seq
+    (:? (:or "+" "-"))
+    (:* (:or alpha 0-9 "," "." "\\"))
+    (:or alpha 0-9))))
+
+
+(define-lex-abbrev script-marker (:or "_" "^"))
+
+(define-lex-abbrev script-body-start-b "{")
+(define-lex-abbrev script-body-start-p "(")
+
+; FIXME AAAAAAAAAAAAAAAAAAAAAAAAAAAA nested/balanced () and {} argh so all the right delimiters must be separate
+; XXX note that per org-match-sexp-depth and org-create-multibrace-regexp
+; these are not actually nested, they are artifically cut off at a nesting depth of 3
+
+; FIXME the :~ whitespace has to be in the grammar
+(define-lex-abbrev subscript (:seq #;(:~ whitespace) "_" script-body))
+(define-lex-abbrev subscript-start-b (:seq #;(:~ whitespace) "_" script-body-start-b))
+(define-lex-abbrev subscript-start-p (:seq #;(:~ whitespace) "_" script-body-start-p))
+
+;;; superscript
+
+(define-lex-abbrev superscript (:seq #;(:~ whitespace) "^" script-body))
+(define-lex-abbrev superscript-start-b (:seq #;(:~ whitespace) "^" script-body-start-b))
+(define-lex-abbrev superscript-start-p (:seq #;(:~ whitespace) "^" script-body-start-p))
+
+
+;;; script markup interaction
+
+; subsets we need are
+; set before script but not before markup
+; set before script and set before markup
+; set before markup but not before script
+
+#; ; bad
+(define-lex-abbrev pre+s-m ; also don't use this one because it will gobble
+  (:& (:~ whitespace)
+      ; things we have to exclude to avoid gobbling other critical elements that we will then need to restore in the grammar
+      (:~ (:or script-marker mu-marker
+               "{" "}"
+               "(" ")"
+               #; "[" "]"
+               "<" ">"
+               ))
+      (:~ (:or "-" "{" "(" "'" "\""))))
+
+(define-lex-abbrev pre+s+m
+  (:or "-" "{" "(" "'" "\""))
+
+(define-lex-abbrev pre-s+m ; don't use this, it is just for record keeping, should go in the grammar
+  wsnn)
+
 ;;; markup
 
+(define-lex-abbrev mu-pre-safe-1 ; subset with no participation in other places
+  (:or "-" "'" "\"")) 
 
+(define-lex-abbrev mu-pre-safe
+  (:+ mu-pre-safe-1))
+
+(define-lex-abbrev mu-pre-1 ; still missing the whitespace
+  (:or mu-pre-safe-1 "{" "("))
+
+#;
 (define-lex-abbrev mu-pre-not-newline-not-lcb (:or " " "\t" "-" "(" "'" "\""))
+#;
 (define-lex-abbrev mu-pre-1 (:or #;"\n" mu-pre-not-newline-not-lcb "{"))
+
+
 #;
 (define-lex-abbrev mu-pre (:+ mu-pre-1))
 #;
 (define-lex-abbrev mu-pre-n (:>= 2 mu-pre-1))
+#;
 (define-lex-abbrev mu-pre-n-not-lcb (:or (:>= 2 mu-pre-not-newline-not-lcb) #;"\n"))
 ; FIXME mu-post can also be newline, which is a problem due to newline
 ; first from/stop-before solves this
-(define-lex-abbrev mu-post-not-newline (:or " " "\t" "-" "." "," ";" ":" "!" "?" "'" ")" "}" "[" "\""))
-(define-lex-abbrev mu-post-1 (:or "\n" mu-post-not-newline))
+(define-lex-abbrev mu-post-less-whitespace-delim (:or "[" "-" "." "," ";" ":" "!" "?" "'" "\""))
+(define-lex-abbrev mu-post-1 (:or ")" "}" #;"[" whitespace mu-post-less-whitespace-delim))
 (define-lex-abbrev mu-post (:+ mu-post-1))
 
 (define-lex-abbrev mu-border (:~ whitespace))
@@ -1175,7 +1313,7 @@ c
                 (:seq
                  mu-border
                  delimiter
-                 mu-post))
+                 mu-post-1))
                (:seq delimiter mu-border any-string) ; ensure starts with delimiter
                (:>= 3 any-char) ; exclude degnerate cases
                ; ensure ends with delimiter to avoid eof issues
@@ -1187,7 +1325,14 @@ c
                ; ensure ends with delimiter to avoid eof issues
                (:seq any-string mu-border delimiter)))
          ; using token-back-1 in the lexer is required for this to work correctly
-         (define-lex-abbrev markup-delim (:seq markup-delim-eof? mu-post)))]))
+         (define-lex-abbrev markup-delim
+           ; XXX sadly it seems that we still have to step back 1 here
+           (:seq markup-delim-eof? mu-post-1)
+           #; ; XXX you cannot peek this because it will just stop short and match, and then not backtrack
+           (:& markup-delim-eof?
+            (from/stop-before
+              markup-delim-eof?
+              mu-post-1))))]))
 
 (define-markup "=")
 (define-markup "~")
@@ -1229,64 +1374,6 @@ c
   (=-lexer (open-input-string "==x==\n"))
 
   )
-
-
-#;
-(define-lex-abbrev markup-=-eof? (:or (:seq (from/stop-before (:seq #;mu-pre "=" mu-border)
-                                                              (:seq mu-border "=" #;mu-post))
-                                            mu-border "=")
-                                      (:seq #;mu-pre "=" mu-border "=")))
-
-#;
-(define-lex-abbrev markup-~-eof? (:or (:seq (from/stop-before (:seq #;mu-pre "~" mu-border) (:seq mu-border "~" #;mu-post)) mu-border "~")
-                                      (:seq #;mu-pre "~" mu-border "~")))
-
-; FIXME TODO investigate interactions between verbatim/code and other markup XXXXXXXXXX
-; technically org immplements this by applying the paragraph parser repeatedly to the
-; internal contents of markup, which is ... probably less than optimal to say the least
-
-#; ; no longer used
-(define-syntax (make-markup-abbrevs stx)
-  (let ([combs (map (λ (chars) (apply string chars))
-                    (cdr (combinations (string->list "*/_+"))))])
-    #`(begin #,@
-        (for/list ([c combs])
-          (list 'begin
-                (list 'provide (string->symbol (format "markup-~a" c)))
-                (list 'define-lex-abbrev
-                      (string->symbol (format "markup-~a" c))
-                      (cons ':or
-                            (for/list ([mut (map (λ (chars) (apply string chars))
-                                                 (permutations (string->list c)))])
-                              (define stop (list->string (reverse (string->list mut))))
-                              ; TODO check behavior to make sure cases like =* a b * c d e *= work
-                              #`(from/stop-before
-                                 (:seq #,mut mu-border (:? (:seq (:* (:~ #,stop)) mu-border)) #,stop)
-                                 mu-post)
-                              #;
-                              #`(:or (:seq (from/stop-before (:seq #;mu-pre #,mut mu-border)
-                                                             (:seq mu-border #,stop mu-post))
-                                           mu-border
-                                           #,stop)
-                                     (from/stop-before (:seq #;mu-pre #,mut mu-border #,stop) mu-post)))))
-                #;
-                (list 'provide (string->symbol (format "markup-~a-eof?" c)))
-                #;
-                (list 'define-lex-abbrev
-                      (string->symbol (format "markup-~a-eof?" c))
-                      (cons ':or
-                            (for/list ([mut (map (λ (chars) (apply string chars))
-                                                 (permutations (string->list c)))])
-                              (define stop (list->string (reverse (string->list mut))))
-                              ; TODO check behavior to make sure cases like =* a b * c d e *= work
-                              #`(:or (:seq (from/stop-before (:seq #;mu-pre #,mut mu-border)
-                                                             (:seq mu-border #,stop #;(:? mu-post)))
-                                           mu-border
-                                           #,stop)
-                                     (:seq #;mu-pre #,mut mu-border #,stop))))))))))
-
-#;
-(make-markup-abbrevs)
 
 ;; other parser bits
 

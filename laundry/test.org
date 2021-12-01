@@ -120,6 +120,20 @@ contents?!?
 
 :end:
 
+
+* property drawers
+
+** with footnote
+:PROPERTIES:
+:TEST: [fn:: inline footnote in a property drawer]  
+:END:
+
+** with citation
+:PROPERTIES:
+:TEST: [cite:asdf]
+:END:
+
+
 * dynamic blocks
 #+begin: block
 :hello:

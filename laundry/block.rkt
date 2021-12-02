@@ -109,3 +109,10 @@ block-type-rest : @not-whitespace
 ; TODO other escape sequences
 ;string-contents : ( @not-bs-dq | /BS DQ | BS )+
 
+; make tests pass
+wsnn : NOP
+newline : NOP
+nlpws : NOP
+blk-line-contents : NOP
+no-headlines : NOP
+not-whitespace : NOP

@@ -8,15 +8,14 @@ An attempt to specify a formal grammar for [[https://orgmode.org/worg/dev/org-sy
 
 The grammar itself lives in [[file:./laundry/parser.rkt][parser.rkt]]. It is implemented using Racket's \\
 [[https://docs.racket-lang.org/brag/#%28part._.The_language%29][#lang brag]]. The details of the implementation are in the comments.
+
+For an overview of the approach see [[file:./docs/overview.org]].
 * Getting started
 Install [[https://download.racket-lang.org/][Racket]] for your platform.
 From the location of this readme run the following.
 #+begin_src bash
-raco pkg install laundry/
+raco pkg install laundry/ org/
 #+end_src
-There is another package named =org-mode= in the Racket package
-manager so the trailing slash is required. Eventually we'll get around
-to working out the naming issues.
 
 Once everything is installed you can run the tests by invoking the
 following in the directory of this readme.
@@ -26,15 +25,15 @@ raco test laundry
 
 You can also parse individual Org files using [[file:./laundry/cli.rkt]].
 #+begin_src bash :results drawer
-laundry/cli.rkt docs/thoughts.org org-mode/test.org
+laundry/cli.rkt docs/thoughts.org laundry/test.org
 #+end_src
 * Status
-Most of the core elements of Org syntax have been fully specified,
-however other important forms such as the markup syntax have not been
-fully implemented.
+Laundry can parse most of Org syntax, though there are still issues
+with the correctness of the parse in a number of cases.
 
-The second pass operations needed to define Org semantics has not been
-implemented yet.
+In particular there are a number of edge cases in the interaction
+between the syntax for various Org objects that have not been
+resolved.
 * Objectives
 The primary objective of this work is to provide a reference grammar
 and implementation that can be used to test other implementations of

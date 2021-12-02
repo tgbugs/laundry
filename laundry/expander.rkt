@@ -319,6 +319,8 @@
   tags ; XXX internal should probably be a struct field
   archive
 
+  planning-malformed
+
   plain-list-element
   plain-list-line
   descriptive-list-line

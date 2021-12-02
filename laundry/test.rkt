@@ -696,7 +696,7 @@
   (laundry-tokenizer-debug #f)
 
   (dotest "  #+begin_src")
-  (dotest "  #+begin_srclol" #:node-type 'paragraph)
+  (dotest "  #+begin_srclol" #:node-type 'paragraph) ; FIXME ... eof issue ?
   (dotest "  #+begin_src\n")
   (dotest "  #+begin_")
   (dotest "  #+begin_-") ; -> block
@@ -1229,6 +1229,7 @@ echo oops a block
       (values count batched)))
 
   (define (make-test-strings)
+    #f
     )
   )
 
@@ -2331,7 +2332,7 @@ don't affilaite to other unaff keyword
 
 (define h-l1
   '(org-file
-    (headline-node (heading 1)))) ; don't have to have (tags) if there are no tags
+    (headline-node (heading 1 "\n")))) ; don't have to have (tags) if there are no tags
 
 (module+ test-sentinel
   (current-module-path)

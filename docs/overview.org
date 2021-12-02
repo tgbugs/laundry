@@ -1,0 +1,101 @@
+#+title: Overview
+* Current approach
+There are currently two Org syntax parsers implemented in laundry.
+The first produces a canonical abstract syntax tree, the second is
+used for Dr Racket syntax highlighting. Their approaches are slightly
+different due to the fact that the tokenizer for Dr Racket must
+conform to more restricted behavior required for syntax highlighting.
+
+In principle the approach used for Dr Racket seems like it could be
+more efficient than the one that is used in the AST parser. This is
+because the AST parser has a step where it reassembles whole sections
+before passing them to a nested tokenizer/parser.
+
+The current implementation of the Org syntax parser in laundry works
+as follows. The full parsing process involves multiple nested passes
+that all have the same basic steps: tokenize, parse, expand. Nested
+steps are triggered during the expansion step where the raw stream is
+reconstructed prior to being passed to the nested parser. This all
+happens at compile time during syntax expansion.
+
+The current approach makes a trade off to push significant complexity
+into the tokenization step and to use nested tokenizers/parsers. Many
+of the tokenization patterns are shared between colorization and AST.
+However as mentioned, the approach in the AST is not optimal.
+
+Having tried the "put everything in the grammar" approach to parsing
+org, I can state that it does not work for LR parsers due to numerous
+cases of ambiguity in such a grammar. There were also nasty
+performance issues with trying to implement everything in the grammar,
+though that may be a issue in the implementation of the grammar
+library.
+
+* Considerations
+The primary challenge in parsing Org syntax is that the formal
+grammar must not be an ambiguous grammar. The first attempt at
+a formal grammar was essentially a direct translation of the
+Org syntax specification document, however such a translation
+produces an ambiguous grammar. This is a well known issue with
+semi-formal language specifications [fn:: See the note in the
+[[https://tree-sitter.github.io/tree-sitter/creating-parsers#writing-the-grammar][tree-sitter documentation]]].
+
+The alternative is to use a parser/grammar that is more powerful than
+the an LR parser/transitional eBNF grammar. One example would be to
+use a PEG grammar which avoids ambiguity via arbitrary lookahead.
+
+While such an approach is of interest, providing an unambiguous eBNF
+grammar that can be used with widely implemented LR-style parsers is
+of significant interest due to the fact that they are available in
+many languages.
+
+Without having actually attempted to write a PEG grammar and tokenizer
+for Org, it seems that the key trade off between using an LR vs PEG
+parser when specifying Org with respect to implementation complexity
+is likely to be that the tokenizer for the LR parser needs to do
+significantly more heavy lifting in order to avoid ambiguous
+constructions. In addition, it seems that in order for an LR parser to
+avoid ambiguity a single eBNF grammar cannot be used, instead nested
+subgrammars must be used since each requires a different tokenizer due
+to the fact that the top level tokenizer must be written in such a way
+as to avoid ambiguous pareses in the grammar.
+* How to parse Org syntax
+There are 4 axes which have to be considered when parsing org syntax.
+
+1. tokenizer/lexer complexity
+2. parser complexity
+3. nested grammars requiring multiple passes/phases of parsing, and
+   how parallel the parser can be
+4. newline first vs newline last, bof and eof
+
+I have explored some of the space defined by these dimensions.
+
+Using nested grammars is attractive, because it vastly simplifies the
+implementation of nested forms when by construction they do not have
+to worry about interactions with a form that has high
+priority. Consider for example the interaction between headings and
+source blocks.
+
+On the other hand, if your lexer supports certain features, it is possible
+to handle high priority forms if you construct you tokens with great care.
+
+However, this leads to grammars and tokenizers that are harder to
+understand.
+
+Org syntax also has many ambiguities. These often cannot be dealt with
+sufficiently in the grammar, and worse, apparently correct behavior
+becomes the result of quirks in the implementation rather than as a
+result of a correct and unambiguous grammar.
+
+More grammars with less complexity? Or fewer grammars with more complexity?
+
+In a newline first grammar headings must be parsed as a subgrammar
+because the start of the line and the end of the line must be
+identified at all times because they induce major changes on the
+interpretation of forms, leading to e.g. the inability to correctly
+parse tags without having either a newline or an explicit eof token
+that can be matched.
+
+If your tokenizer cannot emit/detect bof/eof for inclusion in the
+grammar, you are going to have a bad time, because a regular org
+grammar needs newlines at both ends. That said, a few more iterations
+may reveal that this does not necessarily have to be the case.

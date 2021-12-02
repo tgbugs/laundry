@@ -60,3 +60,16 @@ cb-done : CHAR-UPPER-X ; AAAAAAAAAAAAAAAAAAAAAAAA ;_; complexity XXX
 plain-list-tag-text : @not-newline
 plain-list-tag : pl-tag-end
 pl-tag-end : COLON COLON
+
+; make tests pass
+not-newline : NOP
+not-rsb-newline : NOP
+digits : NOP
+not-digits-newline : NOP
+not-at-newline1 : NOP
+not-lsb-at-digits-newline : NOP
+not-rsb-newline1 : NOP
+not-space-X-hyphen-newline1 : NOP
+not-lsb-space-X-hyphen-newline : NOP
+space : NOP
+not-colon-newline : NOP

@@ -10,7 +10,7 @@
          ; the only other thing that even comes close is something from stxparam
          ; ah, the slowness in racket-mode is because error-trace is enabled by default
          ; FIXME consider (compile-context-preservation-enabled) ??
-         laundry/grammar/parser
+         laundry/grammar/org
          (only-in laundry/tokenizer
                   laundry-tokenizer-debug
                   laundry-make-tokenizer

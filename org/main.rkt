@@ -2,7 +2,7 @@
 (require syntax/strip-context
          laundry/tokenizer
          laundry/colorer
-         laundry/grammar/parser)
+         laundry/grammar/org)
 (require racket/pretty)
 
 (define printed #t)

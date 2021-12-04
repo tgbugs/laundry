@@ -8,7 +8,7 @@
            syntax/parse
            )
  racket/pretty
- (only-in laundry/grammar/parser make-rule-parser)
+ (only-in laundry/grammar/org make-rule-parser)
  ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
  (for-syntax
   (only-in laundry/tokenizer

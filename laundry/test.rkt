@@ -10,14 +10,14 @@
          ; the only other thing that even comes close is something from stxparam
          ; ah, the slowness in racket-mode is because error-trace is enabled by default
          ; FIXME consider (compile-context-preservation-enabled) ??
-         laundry/parser
+         laundry/grammar/parser
          (only-in laundry/tokenizer
                   laundry-tokenizer-debug
                   laundry-make-tokenizer
                   laundry-final-port
                   bind-runtime-todo-keywords)
          (only-in laundry/expander) ; hack to pull expander for compile since in testing we only invoke at runtime
-         (rename-in (only-in laundry/heading make-rule-parser)
+         (rename-in (only-in laundry/grammar/heading make-rule-parser)
                     [make-rule-parser heading-rule-parser])
          syntax/strip-context
          (for-syntax

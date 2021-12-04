@@ -322,7 +322,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   heading-make-tokenizer)
 
 (module+ test-heading
-  (require laundry/heading)
+  (require laundry/grammar/heading)
   (define heading-make-tokenizer (bind-runtime-todo-keywords '("TODO" "DONE" "CERT")))
   (get-tokens (heading-make-tokenizer (open-input-string "\n* h :t:\n")))
   (get-tokens (heading-make-tokenizer (open-input-string "\n* TODO h :t:\n")))

@@ -8,20 +8,20 @@
            syntax/parse
            )
  racket/pretty
- (only-in laundry/parser make-rule-parser)
+ (only-in laundry/grammar/parser make-rule-parser)
  ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
  (for-syntax
   (only-in laundry/tokenizer
            table-make-tokenizer
            paragraph-make-tokenizer
            bind-runtime-todo-keywords)
-  (rename-in (only-in laundry/heading parse parse-to-datum)
+  (rename-in (only-in laundry/grammar/heading parse parse-to-datum)
              [parse parse-heading]
              [parse-to-datum parse-heading-to-datum])
-  (rename-in (only-in laundry/paragraph parse parse-to-datum)
+  (rename-in (only-in laundry/grammar/paragraph parse parse-to-datum)
              [parse parse-paragraph]
              [parse-to-datum parse-paragraph-to-datum])
-  (rename-in (only-in laundry/table parse parse-to-datum)
+  (rename-in (only-in laundry/grammar/table parse parse-to-datum)
              [parse parse-table]
              [parse-to-datum parse-table-to-datum])
   racket/base
@@ -143,7 +143,7 @@
   (module+ test-merge
     (require rackunit)
     (require (only-in "tokenizer.rkt" paragraph-make-tokenizer))
-    (require (rename-in "paragraph.rkt" [parse parse-paragraph]))
+    (require (rename-in "grammar/paragraph.rkt" [parse parse-paragraph]))
     (check-equal?
      (merge-strings
       '("a" "b" c "d" "e" f g "h"))

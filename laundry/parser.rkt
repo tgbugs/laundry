@@ -61,15 +61,11 @@ org-file : org-node*
 empty-line : newline
 
 @org-node-basic-element : drawer
-                        ;| blk-dyn
                         | dynamic-block
                         | org-nbe-less-d
                         | paragraph-node ;paragraph-line
-                        ; | detached-block-node ; still causing too many issues for well formed blocks
 
 @org-nbe-less-df : greater-block ; block-less-dyn
-                 ;| block-end-line
-                 ;| babel-call
                  ;| keyword ; lol yep you can affiliate keywords to keywords
                  | keyword-node
                  | comment-element
@@ -108,10 +104,6 @@ paragraph-core : PARAGRAPH
 ; note stars is safe here because headlines don't use the standalone stars token
 paragraph-line : newline ( LSB
                          | RSB
-                         ;| HASH
-                         ;| PLUS
-                         ;| UNDERSCORE
-                         ;| ASTERISK
                          | NEGATED-SET
                          | wsnn
                          | ALPHA
@@ -180,32 +172,11 @@ stars : STARS ; ASTERISK+ destorys performance
 ; XXX and yet here we are, we need those to parse dates correctly
 ; anyway, so we can probably manage
 
-;-not-plan-keyword-timestamp-newline : not-newline ; TODO
-;not-plan-keyword-timestamp-newline : ( unsyms-less-timestamp | ns-nwt-less-negated | wsnn | word-char-n ) ; not-timestamp-plan-newline
-                                   ;| plan-keyword not-colon-newline
-
 planning : PLANNING-ELEMENT
 planning-malformed : PLANNING-ELEMENT-MALFORMED
 planning-detached : PLANNING-ELEMENT | PLANNING-ELEMENT-MALFORMED
 
--planning : ( plan-sep plan-info )+ /wsnn* ;not-plan-keyword-timestamp-newline?
-plan-sep : /wsnn*
-;plan-sep : /wsnn* | not-plan-keyword-timestamp-newline /wsnn
-
--planning-malformed : plan-mal-info+
-plan-mal-info : plan-mal-sep? plan-keyword /COLON plan-mal-sep? ; XXX will gobble?
-plan-mal-sep : plan-keyword ; not-colon-newline
-             ;| not-plan-keyword-timestamp-newline ; FIXME do it in the lexer
-
-plan-info : plan-keyword /COLON /wsnn* plan-timestamp?
-plan-keyword : plan-dead | plan-sched | plan-open | plan-close
-plan-timestamp : timestamp
-plan-dead : CHARS-DEADLINE
-plan-sched : CHARS-SCHEDULED
-plan-open : CHARS-OPENED ; XXX suggested improvement
-plan-close : CHARS-CLOSED
-
-planning-dissociated : planning
+planning-dissociated : planning ; XXX ambig
 
 ;; comment
 
@@ -226,24 +197,24 @@ planning-dissociated : planning
 ;;; drawers
 
 ; property drawers are defined by both position and by structure
-; due to the bad backtracking behavior in brag it is not possible
-; to parse a property drawer correctly if it hits a point where it
-; must backtrack because the regular drawer will take precednece
-; this is EXTREMELY annoying and there is no way around it
+; this is a mistake in the design the the grammar because it induces
+; ambiguity and a will cause the classification of the drawer to change
+; while a user is typing, probably want the concept of a malformed
+; property drawer, otherwise the contents will incorrectly render
+; as plain text which is undesirable and could pose a security risk
+; for certain ill-advised, but still possible workflows
 property-drawer : pdrawer-unparsed ;| newline wsnn* properties node-property* /nlws end-drawer
 ; NOTE when this fails to parse, it WILL parse as a regular drawer
 pdrawer-unparsed : DRAWER-PROPS | DRAWER-PROPS-EOF
 properties : PROPERTIES-D ; COLON "properties" COLON
-;plus : PLUS
-;node-property : /newline wsnn* /COLON property-name plus? /COLON [ property-value ] ; the spec does not say it but the implementation allows value to be empty
+;node-property : /newline wsnn* /COLON property-name plus? /COLON [ property-value ]
+; the spec does not say it but the implementation allows value to be empty
 ; the spec for node-property and the implementation are different
 ; the second wsnn is not documented but is required
 ; plus is optional but the spec says that empty names are not allowed
 ; this is false :+: will produce a property whose value is the empty string
 ; our implementation _will_ break in the case where the elisp one succeeds
 ; note also that elisp org upcases all property values
-;property-name : @not-whitespace* @not-plus-whitespace1
-;property-value : wsnn+ not-newline{,1} ; wsnn{1} also valid here since not-newline will matchs wsnn{2,}
 
 ; NOTE you cannot nest drawers, an internal drawer heading inside another drawer
 ; is just text, though it does highlight incorrectly
@@ -256,55 +227,22 @@ drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues he
 
 ;;; comments
 
-comment-element : ( COMMENT-ELEMENT
-                    ; | comment-line
-                    )+ ; remember kids one-or-more != one-and-maybe-more?
-                    NEWLINE?
-; comment-line : newline wsnn* HASH ( wsnn+ @not-newline? )?
+comment-element : COMMENT-ELEMENT+ NEWLINE? ; remember kids one-or-more != one-and-maybe-more?
 
 ;;; keywords
 
 @nlwsnn : /newline wsnn*
-;babel-call : nlwsnn CALL /COLON not-newline? ; FIXME indentation should NOT be in here it should be higher
-; todo-spec-line : TODO-SPEC-LINE
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
-keyword-node : keyword-whole-line NEWLINE?
-             ; | /HASH /PLUS kw-key-options? /COLON /wsnn* kw-value? ; somehow the /wsnn* is not matching?
-keyword-whole-line : KEYWORD-ELEMENT
-;keyword-whole-line : KEYWORD-LINE ; XXX this isn't quite working for some reason but that may be ok
 ; XXX in order to get consistent behavior the keyword grammar needs to be a subparser
-; kw-options here is required to handle cases with whitespace, it needs a post-processing pass
-; kw-key-options : @kw-key @keyword-options? ; splice out because we have to reparse
+keyword-node : keyword-whole-line NEWLINE?
+keyword-whole-line : KEYWORD-ELEMENT
 
-; kw-key : not-whitespace ; XXX there is a tradeoff here between implementation complexity and ambiguity
-;kw-value : not-colon-whitespace not-colon-newline* ; ensure that the value does not gobble leading whitespace
-; kw-value : not-newline ; but ambiguity ...
-
-; keyword : todo-spec-line | nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-; keyword : nlwsnn @keyword-line ; FIXME todo-spec-line probably needs to be top level
-;keyword-line : ( /HASH /PLUS keyword-key | kw-prefix ) keyword-options? /COLON ( /wsnn* keyword-value )? /wsnn*
-;             | /HASH /PLUS keyword-key-sigh ( /wsnn* keyword-value )? /wsnn*
-
-; kw-prefix : AUTHOR | DATE | TITLE | END-DB | BEGIN-DB ; FIXME author date time should just go in not-whitespace probably FIXME END-DB and BEGIN-DB are only keywords if there is no trailing whitespace ?! this is a messy bit
-; keyword-options : LSB not-newline? RSB ; FIXME this is almost certainly incorrectly specified
-
-; last colon not followed by whitespace is what we expect here
+; last colon not followed by whitespace is what we expect for keyword-key?
 ; XXX NOTE current elisp behavior has ~#+begin:~ as a keyword, I think this is incorrect
-;keyword-key : not-sb-colon-whitespace ; XXX paragraph is not set up to handle this, and they need to be keywords
-; keyword-key : not-whitespace ; FIXME this should include author date and title surely? ; XXX will match #+k[x]:
-; keyword-value : not-colon-newline
-
-; keyword-key-sigh : not-whitespace? ( END-D | PROPERTIES-D )
-; keyword-value-sigh : not-colon-newline ; like with paragraph we have to defend against colons down the line
-;                   | not-whitespace-l-d? /wsnn* not-newline? COLON not-newline? ; FIXME this seems wrong
 
 ;;; affiliated keywords (do not implement as part of the grammar)
-
-; ak-key : CAPTION | HEADER | NAME | PLOT | RESULTS | ak-key-attr
-; ak-key-attr : ATTR-PREFIX attr-backend
-; attr-backend : @wordhyus
 
 ;;; blocks
 
@@ -320,26 +258,17 @@ greater-block : GREATER-BLOCK NEWLINE?
 ; of an org-file from just its syntax because you need
 ; a stack to keep track of which block you are in
 
-;@block-less-dyn : ( blk-src | blk-unknown ) @empty-line?
-
 dynamic-block : DYNAMIC-BLOCK NEWLINE?
 
-;blk-dyn : /newline blk-dyn-begin blk-dyn-contents newline blk-dyn-end
+;; old comment on issues with dynamic blocks
 ; XXX elisp impl requires at least wsnn after #+begin: to work
 ; FIXME NOTE #+begin: asdf is just a keyword if there is no #+end found
 ;blk-dyn-begin : BEGIN-DB /COLON wsnn blk-line-contents? | BEGIN-DB /COLON ; XXX suggested improvement
 ; #+begin: without at least whitespace is tably and org-elemently not the start of a dynamic block
 ; I suppose there might be some completely insane people that use #+begin: without anything following
 ; it for some other purpose, but really?
-;blk-dyn-end : END-DB /COLON
-;blk-dyn-contents : org-node-dyn* ;anything except #+end: basically
-;org-node-dyn : affiliated-keyword* ( drawer | org-nbe-less-d | paragraph-line | newline )
-;org-node-dyn : drawer | org-nbe-less-d | paragraph-line | newline
 
-;@no-headlines : ( PARAGRAPH @not-newline? | line-not-headline)+
-; @line-not-headline : newline+ @start-not-headline @not-newline?
-                  ; | paragraph ; XXX pretty sure that paragraph should not be needed here and that #+end_ forms should never be parl
-                  ;| newline ; XXX not-newline? other elements? XXX cannot have newline by itself it will eat incorrectly
+;; old comment on issues with parsing drawers and dynamic blocks
 ; not clear what order to do this in, parse to the end of the drawer in one go and then
 ; reparse its contents as org elements? we don't have an intersectional parser here
 ; using no-headlines it is possible to parse blocks all the way to the end without issue, which
@@ -354,20 +283,21 @@ dynamic-block : DYNAMIC-BLOCK NEWLINE?
 ; are parsed in the same way, this is not the case for blocks, the alternative (current approach)
 ; is to parse the strings for the whole drawer in a second pass, but this is bad because the port
 ; positions are completely out of sync from the original file so more bookkeeping is required
+
 ;;;; |
 
 ;;; tables
 
 ; XXX technically the tokenizer manages the + here
 ; FIXME newline is not being handled correctly here yet
-table-element : ( TABLE-ELEMENT )+ NEWLINE?
+table-element : TABLE-ELEMENT+ NEWLINE?
 
 ;;;;
 
 ;;; plain lists
 
 ; maybe this will work ... it is a putative plain list but what to do about empty-line terminating?
-plain-list-element : plain-list-line ( plain-list-line | paragraph-core )* NEWLINE?
+plain-list-element : plain-list-line ( plain-list-line | paragraph-core )* NEWLINE? ; FIXME definitely wrong as written because paragraph-core could be de-indented
 
 plain-list-line : ( ordered-list-line | descriptive-list-line )
 ordered-list-line : ORDERED-LIST-LINE

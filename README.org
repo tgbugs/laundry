@@ -57,7 +57,7 @@ to some hidden quadratic behavior in Racket =parser-tools=. To work
 around this issue the tokenizer has been made more complex, so sometimes
 you may find that there is an opaque token appearing in the grammar
 that obscures some of the details. In most cases the full grammar
-is retained, but unless it has been test with less complex and thus
+is retained, but unless it has been tested with the less complex and
 slower tokenizer the full grammar may be incorrect.
 * A note on terminology
 The current terminology used in [[file:./laundry/parser.rkt][parser.rkt]] matches the terminology

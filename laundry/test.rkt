@@ -224,6 +224,26 @@
  - g
   h
 ")
+  (dotest "
++ This is a list item
+  #+begin_src text
+with a source block
+  #+end_src
+  with some more text
+  - a nested list
+  and then another paragraph")
+
+  (dotest "
+#+name[opt]: val
+#+caption[opt]: val
+some text
+")
+
+  (dotest "
+#+name[opt [brk: ets]]: val
+#+caption[opt [brk: ets]]: val
+some text
+")
 
   )
 

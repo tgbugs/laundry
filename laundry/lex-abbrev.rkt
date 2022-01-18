@@ -467,7 +467,7 @@ c
   (:or (:& (from/stop-before
             (:seq "\n" wsnn* ":properties:" wsnn*)
             ; FIXME NOTE there are cases where the pattern in the
-            ; names of the property values for a draw cause it to NO
+            ; names of the property values for a drawer cause it to NO
             ; LONGER BE a property drawer, this is almost certainly a
             ; design flaw in org mode which makes it difficult to
             ; parse the property drawers correctly and efficiently in

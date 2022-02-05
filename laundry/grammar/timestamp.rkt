@@ -1,3 +1,4 @@
+#lang brag
 ;;; timestamps
 
 ; the org spec is currently silent on how org will handle dates beyond
@@ -85,3 +86,7 @@ ts-rod-entry : ts-rod-mark ts-rod-value ts-rod-unit
 ts-rod-mark : "+" | "++" | ".+" | "-" | "--"
 ts-rod-value : digits
 ts-rod-unit : "h" | "d" | "w" | "m" | "y"
+
+space : SPACE
+digits : DIGITS
+not-lsb-hy-plus-digit-whitespace : WAT

@@ -301,7 +301,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (token 'TAGS lexeme)]
        ["COMMENT" (token 'CHARS-COMMENT lexeme)] ; this must come befor RTK
        [(:or #,@keywords) (token 'RUNTIME-TODO-KEYWORD lexeme)]
-       [(:seq "[#" (0-9 alpha) "]") (token 'PRIORITY lexeme)] ; lower case allowed but it is upcased internally (base36)
+       [(:seq "[#" (:or 0-9 alpha) "]") (token 'PRIORITY lexeme)] ; lower case allowed but it is upcased internally (base36)
        [(:or " " "\t") (token 'BLANK lexeme)] ; unfortunately we still have to split on space
        [(:seq (:+ (:~ #;"*" "[" "]" ":" "\n" " " "\t")))
         (token 'OTHER lexeme)]

@@ -14,3 +14,5 @@ plan-open : CHARS-OPENED ; XXX suggested improvement
 plan-close : CHARS-CLOSED
 
 timestamp : TIMESTAMP
+
+wsnn : WSNN

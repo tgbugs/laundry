@@ -1,0 +1,33 @@
+# /etc/profile
+
+ri () {
+    set -x
+    raco pkg install --deps search-auto laundry
+    { retval="$?"; } 2>/dev/null
+    { set +x; } 2>/dev/null
+    return $retval
+}
+
+rt () {
+    set -x
+    raco test --package laundry
+    { retval="$?"; } 2>/dev/null
+    { set +x; } 2>/dev/null
+    return $retval
+}
+
+go () {
+    ri && rt
+}
+
+cat << EOF
+=========================================
+  ____ _   _ _   _    ____       _
+ / ___| \ | | | | |  / ___|_   _(_)_  __
+| |  _|  \| | | | | | |  _| | | | \ \/ /
+| |_| | |\  | |_| | | |_| | |_| | |>  <
+ \____|_| \_|\___/   \____|\__,_|_/_/\_\\
+
+Available commands: ri rt go
+=========================================
+EOF

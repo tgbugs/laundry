@@ -39,7 +39,7 @@ laundry/cli.rkt docs/thoughts.org laundry/test.org
 * Reproducible Development Environment
 To have a (GNU Guix) fully Reproducible Development Environment run
 #+begin_src bash :results drawer
-./run.sh
+./guix-rde/run-rde.sh
 #+end_src
 
 * Status

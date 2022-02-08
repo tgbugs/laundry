@@ -30,9 +30,9 @@ guix shell \
      --container --network --no-cwd \
      racket bash grep coreutils which openssl nss-certs \
      --preserve='^DISPLAY$' --preserve='^XAUTHORITY$' --expose=$XAUTHORITY \
-     --share=$WD/.bash_profile=$HOME/.bash_profile \
-     --share=$WD/.bashrc=$HOME/.bashrc \
-     --share=$WD/etc=/usr/etc \
+     --share=$WD/guix-rde/.bash_profile=$HOME/.bash_profile \
+     --share=$WD/guix-rde/.bashrc=$HOME/.bashrc \
+     --share=$WD/guix-rde/etc=/usr/etc \
      --share=/etc/ssl/certs \
      --share=$WD \
      -- bash

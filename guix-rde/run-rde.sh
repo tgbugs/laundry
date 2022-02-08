@@ -6,7 +6,6 @@ WD=$(pwd) # WD=$(dirname "$0") # i.e. path to this file
 
 # --container   run command within an isolated container
 # --network     allow containers to access the network
-# --no-cwd      don't share current working directory with an isolated container
 # --preserve    preserve environment variables that match the REGEXP
 # --expose      expose read-only host file system according to SPEC
 # The --preserve and --expose parameters are needed so that `raco test laundry`
@@ -27,7 +26,7 @@ WD=$(pwd) # WD=$(dirname "$0") # i.e. path to this file
 set -x
 
 guix shell \
-     --container --network --no-cwd \
+     --container --network \
      racket bash grep coreutils which openssl nss-certs \
      --preserve='^DISPLAY$' --preserve='^XAUTHORITY$' --expose=$XAUTHORITY \
      --share=$WD/guix-rde/.bash_profile=$HOME/.bash_profile \

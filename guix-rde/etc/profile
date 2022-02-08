@@ -1,23 +1,23 @@
 # /etc/profile
 
-ri () {
+inst () {
     set -x
     raco pkg install --deps search-auto laundry
-    { retval="$?"; } 2>/dev/null
-    { set +x; } 2>/dev/null
+    { retval="$?";
+      set +x; } 2>/dev/null
     return $retval
 }
 
-rt () {
+test () {
     set -x
     raco test --package laundry
-    { retval="$?"; } 2>/dev/null
-    { set +x; } 2>/dev/null
+    { retval="$?";
+      set +x; } 2>/dev/null
     return $retval
 }
 
-go () {
-    ri && rt
+inst_test () {
+    inst && test
 }
 
 cat << EOF
@@ -28,6 +28,6 @@ cat << EOF
 | |_| | |\  | |_| | | |_| | |_| | |>  <
  \____|_| \_|\___/   \____|\__,_|_/_/\_\\
 
-Available commands: ri rt go
+Available commands: inst, test, inst_test
 =========================================
 EOF

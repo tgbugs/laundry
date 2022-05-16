@@ -4,7 +4,10 @@
 
 (define drracket-tools '("mode.rkt"))
 
-(define deps '("base"
+(define deps '("draw-lib"
+               "drracket-plugin-lib"
+               "gui-lib"
+               "base"
                "laundry"))
 
 (define build-deps '())

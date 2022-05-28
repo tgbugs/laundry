@@ -23,7 +23,7 @@
     (define (phase1) (void))
     (define (phase2) (void))))
 
-; so it turns out if you just use hte right style prefix then the
+; so it turns out if you just use the right style prefix then the
 ; default token-sym->style will just work (namely
 ; racket:short-sym->style-name)
 (define style-base "framework:syntax-color:scheme:")

@@ -2,12 +2,8 @@
 
 (define collection "laundry")
 
-(define deps '("math-lib"
-               "plot-gui-lib"
-               "plot-lib"
-               "rackunit-lib"
+(define deps '("rackunit-lib"
                "base"
                "brag"))
 
-(define build-deps '("gui-lib"
-                     ))
+(define build-deps '())

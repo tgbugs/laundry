@@ -147,7 +147,7 @@ keyword-malformed : KEYWORD-ELEMENT-MALFORMED
 headline-node : headline ( planning | planning-malformed )? property-drawer?
 headline : HEADING
 
-stars : STARS ; ASTERISK+ destorys performance
+stars : STARS | ASTERISK ; ASTERISK+ destorys performance
 
 ;;; planning
 

@@ -2590,6 +2590,14 @@ a
 
   ; this goes last so we can sort out remaining issues
 
+  (dotest "\n**\n" #:node-type 'paragraph)
+  (dotest "\n** \n" #:node-type 'headline)
+
+  (dotest "\n*\n" #:node-type 'paragraph)
+  (dotest "+\n*\n")
+  (dotest "-\n*\n")
+  (dotest "- \n*\n")
+
   ; from test-paragraph-start
   (dotest "#+end ")
   (dotest "#+end-")

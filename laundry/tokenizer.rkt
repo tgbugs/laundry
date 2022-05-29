@@ -676,10 +676,25 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                         (cumulative-offset (+ (cumulative-offset) (- span actual-span)))
                         actual-span)
                       span))]
-         [srcloc-token-out (make-srcloc-token token srcloc)])
+         [srcloc-token-out (do-make-srcloc-token token srcloc)])
     (when (debug)
       (println (list "fix-srcloc-mod out:" srcloc-token-out)))
     srcloc-token-out))
+
+(define (do-make-srcloc-token tok srcloc)
+  "srcloc-token's don't show up in the debug info embed the location information in just the token"
+  ; FIXME the lines etc. on this is OBVIOUSLY wrong
+  ; 14 lines off in cursed.org
+  (make-srcloc-token
+   (token-struct
+    (token-struct-type tok)
+    (token-struct-val tok)
+    (srcloc-position srcloc)
+    (srcloc-line srcloc)
+    (srcloc-column srcloc)
+    (srcloc-span srcloc)
+    #f)
+   srcloc))
 
 (define (fix-srcloc-eof srcloc-token-instance actual-start end-consumed)
   (let* ([stt (srcloc-token-token srcloc-token-instance)]
@@ -699,7 +714,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                   (if nl-end?
                       (sub1 (srcloc-span sl))
                       (srcloc-span sl)))]
-         [srcloc-token-out (make-srcloc-token token srcloc)])
+         [srcloc-token-out (do-make-srcloc-token token srcloc)])
     (when (debug)
       (println (list "fix-srcloc-eof out:" srcloc-token-out)))
     srcloc-token-out))
@@ -719,7 +734,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                           (car first-token))
                         first-token)]
          [out-raw
-          (make-srcloc-token
+          (do-make-srcloc-token
            (let* ([t first-out]
                   #;
                   [__ (println (cons 'qq t))]
@@ -797,7 +812,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
                         [nl-end? (error "srcloc: nl-end? should not happen ~a" stt)]
                         [(eq? (token-struct-type stt) 'NEWLINE) (srcloc-span sl)]
                         [else (error "srcloc: else should not happen ~a" stt)]))])
-    (make-srcloc-token token srcloc)))
+    (do-make-srcloc-token token srcloc)))
 
 (define (process-first port)
   (let* ([port-end (open-input-string "\n")] ; FIXME there are forms that end in a double blank line: footnotes.

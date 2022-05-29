@@ -183,6 +183,8 @@ sup-p : /SUP-START-P suffix-p
 
 script-malformed-eof : ( SUP-START-B suffix-b-pre )*
                      | ( SUP-START-P suffix-p-pre )*
+                     | ( SUB-START-B suffix-b-pre )*
+                     | ( SUB-START-P suffix-p-pre )*
 
 ;;; timestamp 
 

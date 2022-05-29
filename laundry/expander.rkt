@@ -296,6 +296,8 @@
   footnote-inline-malformed
   footnote-inline-malformed-eof
 
+  script-malformed-eof
+
   keyword-malformed
   )
 
@@ -658,6 +660,7 @@
                                 [end-drawer (make-rename-transformer #'sa-node)]
                                 [footnote-inline-malformed (make-rename-transformer #'sa-node)]
                                 [footnote-inline-malformed-eof (make-rename-transformer #'sa-node)]
+                                [script-malformed-eof (make-rename-transformer #'sa-node)]
                                 [keyword-malformed (make-rename-transformer #'sa-node)]
                                 )
             (sa-malformed body ...))))

@@ -1155,7 +1155,9 @@ echo oops a block
   (dotest "x_{y}_{z}")
 
   (dotest "a_{src_elisp[:exports both :eval never]{(+ 1 2)}}")
-  (dotest "a_{x_{y}_{z} b_{c_{_d{") ; XXX broken
+  (dotest "b_{")
+  (dotest "b^{")
+  (dotest "a_{x_{y}_{z} b_{c_{_d{")
 
   )
 

@@ -616,6 +616,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [keyword-element-malformed (token 'KEYWORD-ELEMENT-MALFORMED lexeme)]
 
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
+   [(from/stop-before (:seq "\n" wsnn* "#") "\n")
+    ; FIXME HACK
+    (if (regexp-match #rx"^\n[ \t]*#$" lexeme) ; apparently #px [:blank:] isn't working here ??
+        (token 'COMMENT-ELEMENT lexeme)
+        (token 'PARAGRAPH lexeme))]
 
    [drawer-props
     (token 'DRAWER-PROPS lexeme)]

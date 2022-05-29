@@ -758,6 +758,8 @@ some text
   (dotest " * ")
   (dotest "*")
 
+  (dotest "  #\n* \n") ; this is why you have to peek 1
+
   (dotest "  #" #:node-type 'comment) ; -> comment XXX FIXME broken comment element should be matching this
   (dotest "#" #:node-type 'comment) ; -> comment
   (dotest "# " #:node-type 'comment) ; -> comment

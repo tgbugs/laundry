@@ -1052,12 +1052,14 @@ echo oops a block
   (dotest "A [fn:1].\n[fn:1] footnote.\n** \n")
 
   ; FIXME none of these should be inline ! which means that we have to update the paragraph tokenizer to skip ^[fn:
-  (dotest "[fn::]")
-  (dotest "[fn::::::::::]")
+  (dotest "[fn::]") ; XXX
+  (dotest "[fn::::::::::]") ; XXX
 
   (dotest "[fn:: hello =]= there ]")
 
   (dotest "[fn:: [ hello =]= there ]")
+
+  (dotest "[fn:: [\n\n\n")
 
   (dotest "[fn:: [ hello =]= there\n\n\nanother p]")
 

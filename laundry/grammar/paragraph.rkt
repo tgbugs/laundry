@@ -202,7 +202,13 @@ paragraph-inline-safe : markup? ( paragraph-common
                                 | LSB ( paragraph-common | @stuff-less-rsb )* RSB
                                 | @stuff-less-rsb )*
 
-footnote-inline-malformed-eof : FOOTNOTE-START-INLINE paragraph-inline?
+@paragraph-inline-bad : markup? ( paragraph-common
+                                | LSB ( paragraph-common | @stuff-less-rsb )*
+                                )*
+
+footnote-inline-malformed-eof : FOOTNOTE-START-INLINE ( @paragraph-inline
+                                                      | paragraph-inline-bad
+                                                      )?
 
 ;paired-square : ( FOOTNOTE-START-INLINE | LSB ) stuff-less-rsb? RSB
 ;footnote-inline-simple : FOOTNOTE-INLINE-SIMPLE

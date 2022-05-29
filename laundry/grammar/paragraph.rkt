@@ -74,9 +74,10 @@ paragraph : markup? ( paragraph-common
         ; note: markup is also listed here in the spec but for now has a special place given its behavior
 
 @stuff-base : STUFF-B ( mu-free | script )?
-            | STUFF-A
+            | STUFF-A mu-free? ; /_+b+_ / case ?
             | STUFF-C script?
             | SCRIPT-DISABLED script?
+            | LSB-PLUS ; FIXME not clear this goes here ??
             ;| LSB mu-free? script?
             ;| LCB script? ; FIXME mismatch I htink
             ;| LP script?  ; FIXME mismatch I htink

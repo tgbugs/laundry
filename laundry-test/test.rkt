@@ -1349,10 +1349,28 @@ echo oops a block
   (dotest "_ * *")
 
 
+  (dotest "_+b+_")
+  (dotest "/_+b+_/")
+  (dotest "/_+b+_/*")
+  (dotest "*/_+b+_/")
+  (dotest "*/_+b+_/*")
+
+  (dotest "*/_+b+_") ; XXX
+
+  (dotest "*_+b+_*")
+  (dotest "*_b_*")
+  (dotest "*_b")
+  (dotest "_b*")
+
   (dotest
-   "*/_+b+_ _+bus+_ /*"
+   "*_b_"
    #:eq-root
-   '(org-file (paragraph (bold "/_+b+_ " (underline (strike-through "bus")) " /"))))
+   '(org-file (paragraph "*_b_")))
+
+  (dotest
+   "/_+b+_ _+bus+_ /"
+   #:eq-root
+   '(org-file (paragraph "/_+b+_ " (underline (strike-through "bus")) " /")))
 
   (dotest
    "/_+x+_ _+bus+_ /"

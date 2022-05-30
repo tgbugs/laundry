@@ -1454,6 +1454,16 @@ then another paragraph
 
   )
 
+(module+ test-fixed-width
+  (current-module-path)
+
+  (dotest ":-" #:nte 'paragraph)
+  (dotest ": -" #:nte 'fixed-width-element)
+  (dotest ":" #:nte 'fixed-width-element)
+  (dotest ": asdf:" #:nte 'fixed-width-element)
+
+  )
+
 (module+ test-rando
   (current-module-path)
   (laundry-tokenizer-debug #f)
@@ -2638,7 +2648,8 @@ a
    (submod ".." test-paragraphs)
    (submod ".." test-markup)
    (submod ".." test-macros)
-   (submod ".." test-comments) ; XXX
+   (submod ".." test-comments)
+   (submod ".." test-fixed-width)
    (submod ".." test-rando)
    (submod ".." test-drawers)
    (submod ".." test-string)

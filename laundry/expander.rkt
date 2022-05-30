@@ -310,6 +310,8 @@
   comment-element
   comment-line
 
+  fixed-width-element
+
   headline-node
   ;headline
   ;heading ; FIXME we need to deal with the number of stars here

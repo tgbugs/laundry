@@ -69,6 +69,7 @@ empty-line : newline
                  ;| keyword ; lol yep you can affiliate keywords to keywords
                  | keyword-node
                  | comment-element
+                 | fixed-width-element
                  | table-element
                  | plain-list-line
 
@@ -228,6 +229,10 @@ drawer : DRAWER | DRAWER-EOF | pdrawer-unparsed ; XXX pdrawer-unparsed issues he
 ;;; comments
 
 comment-element : COMMENT-ELEMENT+ NEWLINE? ; remember kids one-or-more != one-and-maybe-more?
+
+;;; fixed width
+
+fixed-width-element : FIXED-WIDTH-ELEMENT+ NEWLINE?
 
 ;;; keywords
 

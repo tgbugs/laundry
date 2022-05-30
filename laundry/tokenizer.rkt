@@ -617,10 +617,20 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [keyword-element-malformed (token 'KEYWORD-ELEMENT-MALFORMED lexeme)]
 
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
-   [(from/stop-before (:seq "\n" wsnn* "#") "\n")
+   [(from/stop-before (:seq "\n" wsnn* "#") "\n") ; FIXME BIG RISK of capturing other elements with this?
     ; FIXME HACK
+    ; NOTE empty fixed width elements break up non-empty fixed width elements from the lexer
+    ; I think we might be able to handle that via 3 special cases in the abbrevs: start, middle, end
+    ; ACTUALLY never mind, it is trivial to handle in the grammar
     (if (regexp-match #px"^\n[[:blank:]]*#$" lexeme)
         (token 'COMMENT-ELEMENT lexeme)
+        (token 'PARAGRAPH lexeme))]
+
+   [fixed-width-element (token 'FIXED-WIDTH-ELEMENT lexeme)]
+   [(from/stop-before (:seq "\n" wsnn* ":") "\n") ; FIXME BIG RISK of capturing other elements with this?
+    ; FIXME HACK
+    (if (regexp-match #px"^\n[[:blank:]]*:$" lexeme)
+        (token 'FIXED-WIDTH-ELEMENT lexeme)
         (token 'PARAGRAPH lexeme))]
 
    [drawer-props

@@ -102,6 +102,9 @@
 (define-lex-abbrev comment-element
   (:+ (:seq "\n" wsnn* "#" (:seq wsnn (:* (:~ "\n"))))))
 
+(define-lex-abbrev fixed-width-element
+  (:+ (:seq "\n" wsnn* ":" (:seq wsnn (:* (:~ "\n"))))))
+
 (define-lex-abbrev runtime-todo-keyword (:or "TODO" "DONE")) ; FIXME SIGH SIGH SIGH
 
 ;;; keywords

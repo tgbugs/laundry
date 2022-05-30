@@ -1538,7 +1538,7 @@ OH NO
  (+ 1 2)
 #+end_src
 WHEEEEEEEEEE
-" #:nte 'blk-src) ; FIXME now broken
+" #:nte 'greater-block)
 
   (dotest "
 BEF PAR
@@ -1840,7 +1840,7 @@ drawer contents
 #+begin_h
 * h
 #+end_h
-")
+" #:nte 'heading)
 
   (dotest "
 #+begin_h
@@ -2025,6 +2025,8 @@ y y:
 * oops
 #+end_src
 ")
+
+  (dotest "#+begin_src")
 
   )
 

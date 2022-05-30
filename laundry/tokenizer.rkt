@@ -59,7 +59,8 @@
                              "\n")
                        (:seq any-string (:or "#+end_" "#+END_") #,block-type any-string))))
              ; FIXME may need a few more values out of this
-             (let ([was-heading (regexp-match #rx"\n[*]+$" lexeme)])
+             (let ([was-heading (regexp-match #rx"\n[*]+$" lexeme)]
+                   [no-more (regexp-match #px"^[[:space:]]*$" lexeme)])
                ; TODO there are two ways that hitting a heading can
                ; proceed one is to back up past the last newline and
                ; mark everything in between as malformed, turning into
@@ -68,7 +69,7 @@
                ; start line as malformed but paragraph and the rest as
                ; whatever it would parse to at top level, will need to
                ; explore the tradeoffs
-               (and (not was-heading) lexeme))
+               (and (not was-heading) (not no-more) lexeme))
              ])])
     #;
     (log-error "make-lexer stx: ~a" stx)

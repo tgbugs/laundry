@@ -940,16 +940,16 @@
       real))
 
   (begin-for-syntax
-    (pretty-write (time-it (make-string 10000 #\Space)))
-    (pretty-write (let ([n 100]) (list n (time-it (make-string n #\[)))))
-    (pretty-write (let ([n 200]) (list n (time-it (make-string n #\[)))))
-    (pretty-write (let ([n 400]) (list n (time-it (make-string n #\[)))))
-    (pretty-write (let ([n 800]) (list n (time-it (make-string n #\[)))))
-    (pretty-write (let ([n 10]) (list n (time-it (make-string n #\{)))))
-    (pretty-write (let ([n 20]) (list n (time-it (make-string n #\{)))))
-    (pretty-write (let ([n 40]) (list n (time-it (make-string n #\{)))))
+    (when (debug)
+      (pretty-write (time-it (make-string 10000 #\Space)))
+      (pretty-write (let ([n 100]) (list n (time-it (make-string n #\[)))))
+      (pretty-write (let ([n 200]) (list n (time-it (make-string n #\[)))))
+      (pretty-write (let ([n 400]) (list n (time-it (make-string n #\[)))))
+      (pretty-write (let ([n 800]) (list n (time-it (make-string n #\[)))))
+      (pretty-write (let ([n 10]) (list n (time-it (make-string n #\{)))))
+      (pretty-write (let ([n 20]) (list n (time-it (make-string n #\{)))))
+      (pretty-write (let ([n 40]) (list n (time-it (make-string n #\{))))))
     )
-
   )
 
 (module+ test-paragraph

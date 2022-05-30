@@ -50,7 +50,14 @@
 
 ;;; file
 
-org-file : org-node*
+org-file : org-node+
+; XXX insane performance pitfall here if any one of the following forms is used
+; org-node*
+; ( org-node+ )?
+; org-node+ | org-node?
+; it is clear that zero-or-more or some equivalent somehow induces staggering overhead
+; we also happen to know that the tokenizer will always emit at least a single newline
+; so we are safe to write the grammar using one-or-more, but still, what the !??!?!
 
 @org-node : headline-node | org-node-basic
 
@@ -302,7 +309,7 @@ table-element : TABLE-ELEMENT+ NEWLINE?
 ;;; plain lists
 
 ; maybe this will work ... it is a putative plain list but what to do about empty-line terminating?
-plain-list-element : plain-list-line ( plain-list-line | paragraph-core )* NEWLINE? ; FIXME definitely wrong as written because paragraph-core could be de-indented
+; plain-list-element : plain-list-line ( plain-list-line | paragraph-core )* NEWLINE? ; FIXME definitely wrong as written because paragraph-core could be de-indented
 
 plain-list-line : ( ordered-list-line | descriptive-list-line )
 ordered-list-line : ORDERED-LIST-LINE
@@ -350,10 +357,6 @@ timestamp : TIMESTAMP
 ;; the elisp org parser parses whitespace as significant
 ;; XXX suggestion: disallow all leading whitespace or invoke undefined behavior
 
-@newline-or-eof : newline? ; XXXXXXXXXXXXXXXXX this might might might work if no major structure starts with a newline, we will be able to test that once the newline first form is working
-nlws : newline ( tab | space )* ; TODO FIXME this has to be parsed as significant whitespace
-nlpws : newline+ ( tab | space )* ; variant to handle cases like #+end_src ; TODO FIXME this has to be parsed as significant whitespace
-whitespace : newline | space | tab
 @wsnn : tab | space ; FIXME need other whitespace chars FIXME need to move multi whitespace to tokenizer
 
 ;; this isn't going to work is in ;_;

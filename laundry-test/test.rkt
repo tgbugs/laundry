@@ -784,11 +784,11 @@ some text
   (dotest "  #+call:eeeeeeeeee")
   (dotest "  #+calla") ; XXX TODO malformed case
   (dotest "#+:end")
-  (dotest "#+:end: lol: oops") ; -> keyword
+  (dotest "#+:end: lol: oops" #:node-type 'keyword) ; -> keyword
   (dotest "#+:end: asdf") ; -> keyword
   (dotest "#+:end:lol: oops") ; -> keyword
   (dotest "#+:properties: lol: oops") ; -> keyword
-  (dotest "#+:properties:lol: oops") ; -> keyword
+  (dotest "#+:properties:lol: oops" #:node-type 'keyword) ; -> keyword
 
   (dotest "  -") ; -> descriptive-list
   (dotest "-") ; -> descriptive-list
@@ -1460,7 +1460,7 @@ then another paragraph
 
   (dotest "“
 (k)
-* h") ; very broken
+* h")
 
   (dotest
    "* w
@@ -1490,11 +1490,9 @@ w1 [[* w][w]]
 
   (dotest "This is a paragraph sigh.") ; lol this breaks because there is something else that expects yet another newline
 
-  ;(dotest "")
+  (dotest "")
 
   (dotest "1. a plain list maybe?")
-
-  ;(dotest "")
 
   (dotest "0.
 yes
@@ -2017,7 +2015,7 @@ y y:
 #+end_src
 ")
 
-  (dotest " \"") ; broken
+  (dotest " \"")
   (dotest "\n \"")
 
   (dotest "
@@ -2641,7 +2639,6 @@ a
    (submod ".." test-markup)
    (submod ".." test-macros)
    (submod ".." test-comments) ; XXX
-   #; ; multibyte char issues, not ready
    (submod ".." test-rando)
    (submod ".." test-drawers)
    (submod ".." test-string)

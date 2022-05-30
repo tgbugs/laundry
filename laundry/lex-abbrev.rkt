@@ -69,6 +69,7 @@
 
    "|" ; XXX maybe we can remove this
    ":" ; XXX maybe we can remove this
+   "#"
    ;"%" ; this is sandboxed in timestamps or paragraphs and is no longer and issue
    ;"_" ; XXX sandboxed in ??? but definitely not an issue to star with it
 
@@ -656,6 +657,7 @@ c
            wsnn* ; FIXME hits a nasty issue with "  #+end:" due to the leading whitespace shere somehow
            (:or
             (:or
+             negated-set ; XXX I think this is the right thing to put here ??? I could be wrong ??
              "~"
              "="
              "/"

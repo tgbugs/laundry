@@ -275,7 +275,7 @@
   ;detached-block-node
   detached-block ; FIXME not sure if we need this
   ; blk-src-begin sa variant
-  planning-dissociated
+  planning-detached
   )
 
 (define-sa-alt-nodes

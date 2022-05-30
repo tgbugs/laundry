@@ -590,8 +590,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   (lexer-srcloc
 
    [heading (token 'HEADING lexeme)]
-   [planning-line (token 'PLANNING-ELEMENT)]
-   [planning-line-malformed (token 'PLANNING-ELEMENT-MALFORMED)]
+   [planning-line (token 'PLANNING-ELEMENT lexeme)]
+   [planning-line-malformed (token 'PLANNING-ELEMENT-MALFORMED lexeme)]
 
    [(from/stop-before unknown-block-line-end "\n")
     ; if we run into one of these by itself it is malformed because it is disconnect

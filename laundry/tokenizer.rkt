@@ -652,6 +652,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
    [(:>= 2 "*") (token 'STARS lexeme)] ; need this in lexer otherwise performance tanks in the parser
    ["*" (token 'ASTERISK lexeme)]
+   #; ; I don't think we actually need this ? it is sort of a sentinel for other issues with holes in the grammar though?
+   ["-" (token 'HYPHEN-OOPS lexeme)] ; apparently there are some cases where this can fall through ?
    ["\n" (token 'NEWLINE lexeme)]
    [" " (token 'SPACE)]
    #; ; TODO should help with perf

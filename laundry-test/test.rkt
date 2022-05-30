@@ -2531,8 +2531,8 @@ p 2
 (module+ test-files
   (current-module-path)
 
-  (define test-raw (dotest-file "test.org" #:expand #f))
-  (define test (dotest-file "test.org"))
+  (define test-org-raw (dotest-file "test.org" #:expand #f))
+  (define test-org (dotest-file "test.org"))
 
   (define cursed-raw (dotest-file "cursed.org" #:expand #f))
   (define cursed (dotest-file "cursed.org"))
@@ -2598,18 +2598,14 @@ wat
   (dotest "\na\n,")
 
   (define simple (dotest-file "simple.org"))
-  (dotest-file "simple.org")
-
-  (define test-org (dotest-file "test.org")) ; WOOOOOOOOOOOOOOO all working ?! yay for tokenizers simplifying things?
 
   (define test-pos-vs-loc-org (dotest-file "test-pos-vs-loc.org"))
 
-  #; ; #+results[a]: issue
   (define dev-guide (dotest-file "~/git/sparc-curation/docs/developer-guide.org"))
 
   (dotest "
 #+RESULTS[99f2d5eba83acdff6934d4fdfe64da4170348550]:
-") ; x
+")
 
   (dotest "***nasdf")
   (dotest "***n")
@@ -2622,6 +2618,27 @@ wat
 #+begin_src wat
 a
 #+end_src")
+
+  #; ; too big for now it seems?
+  (define dev-notes
+    (parameterize ([laundry-tokenizer-debug #f])
+      ; WOW ... off by more than 5000 lines and 350000 chars for
+      ; position ... wat, srcloc is seriously messed up due to all the
+      ; hacks I shoved in for backtracking or something
+      (dotest-file "~/ni/dev/notes.org")))
+
+  (dotest "`-")
+  (dotest "-")
+  (dotest "`-")
+  (dotest "`+")
+
+  (dotest " =-")
+  (dotest " =C-")
+  (dotest "℘ -")
+  (dotest "℘ +")
+  (dotest "℘ *")
+
+  (dotest "℘ =")
 
   )
 

@@ -663,6 +663,7 @@ c
              "<" ">" ; anything that would collide here will be parsed in the nested paragraph parser
              "'"
              "\""
+             "`" ; XXX does this go here or somewhere more general?
              "(" ")"
              "{" "}"
                  "]" ; no left square bracket due to footnote definitions

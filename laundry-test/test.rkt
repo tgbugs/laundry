@@ -136,36 +136,6 @@
       (let ()
         (define str (file->string real-path))
         (dotest str))
-      #; ; SIGH impossible an to debug error appears
-      (when expand?
-        (define quiet #t)
-        (define modname (string->symbol (format "org-module-~a" (gensym))))
-        (define hrms
-          (with-input-from-file real-path
-            (λ ()
-              (port-count-lines! (current-input-port))
-              (strip-context ; required to avoid hygene errors in expand and eval-syntax below
-               ; for some reason raco make doesn't seem to care
-               #`(module #,modname laundry/expander
-                   #,(parameterize ([laundry-final-port #f])
-                       ((testing-parse) ; watch out for the 2 arity case in the case-lambda here
-                        #; ; NAH just a completely insane case-lambda
-                        ; that causes the call to revert to the full grammar
-                        (format "test-source ~s" test-value-inner)
-                        (current-input-port))))))
-            #:mode 'text))
-        (print "what the fuck")
-        (pretty-write (syntax->datum hrms))
-        (parameterize ([current-namespace ns-test])
-          (unless (or quiet (dotest-quiet)) ; FIXME this logic is broken
-            (pretty-write (list 'expanded:
-                                (syntax->datum (expand hrms)))))
-          #; ; FIXME for whatever reason drracket cannot manage to use eval-syntax here
-          ; so we use eval syntax->datum instead, sigh
-          (eval-syntax hrms)
-          (eval (syntax->datum hrms))
-          (define root (dynamic-require (list 'quote modname) 'root))
-          root))
       (let ()
         (define hrm
           (with-input-from-file real-path

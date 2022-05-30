@@ -619,7 +619,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [comment-element (token 'COMMENT-ELEMENT lexeme)]
    [(from/stop-before (:seq "\n" wsnn* "#") "\n")
     ; FIXME HACK
-    (if (regexp-match #rx"^\n[ \t]*#$" lexeme) ; apparently #px [:blank:] isn't working here ??
+    (if (regexp-match #px"^\n[[:blank:]]*#$" lexeme)
         (token 'COMMENT-ELEMENT lexeme)
         (token 'PARAGRAPH lexeme))]
 

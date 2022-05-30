@@ -14,7 +14,7 @@ hello
 
 #+keyword: hello
 
-
+#+|{/hello/}|world: sigh
 
 # (((((((( rainbow delims or my version of it is dumb
 
@@ -144,6 +144,16 @@ asdf
 #+begin:
 #+end:
 
+#+begin:
+peekaboo
+#+end:
+
+#+begin:
+peekaboo
+#+end:
+
+
+
 #+begin: not a dynamic block
 ** oops
 #+end:
@@ -167,6 +177,13 @@ B. there
   this seems strange to me? | no, you can't
 
 * export snip
+@@html:/hello/@@world
+@@org:/hello/@@world
+@@:/hello/@@world
+
+# org-element-export-snippet-parser
+# org-element-at-point
+
 @@something: some words
 and a newline too?
 @@
@@ -205,7 +222,11 @@ Inline anchor [fn:y:Because we are going to reference this somewhere else.] foot
 
 Somewhere else [fn:y].
 
+Anchor [fn:oops] oops.
+
 [fn:x] Definition
+
+ [fn:oops] what is this?
 
 ** here we go
 

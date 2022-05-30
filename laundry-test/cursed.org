@@ -65,6 +65,14 @@ some text
 # lol
 # wut
 
+#
+x
+  #
+x
+  # 
+x
+# 
+
 * :tag:gat:
 * I don't have a priority [#D] woah dude.                               :tag:
 That's not a real priority but you can change it ...
@@ -717,6 +725,8 @@ However 3 is.
  *x * /z/ *y*
 
  */_+b+_ _+bus+_ /*
+
+ *_b_
 
  */_+b+_ +_bsu_+ /*
 

@@ -127,28 +127,64 @@
             #f)
     (error "Should have failed.")))
 
-(define (dotest-file path #:eq [eq #f] #:parse-to-datum [parse-to-datum #f])
+(define (dotest-file path #:eq [eq #f] #:parse-to-datum [parse-to-datum #f] #:expand [expand? #t])
   ; FIXME super inefficient
   #;
   (define (t) (laundry-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
-  (define hrm
-    (with-input-from-file (expand-user-path (string->path path))
-      (λ ()
-        (port-count-lines! (current-input-port)) ; XXXXXXXXXXXXXX YAY this is what causes our backtracking issues :D :D
-        (parameterize ([laundry-final-port #f])
-          (let ([t (laundry-make-tokenizer (current-input-port))])
-            ((if parse-to-datum
-                 parse-to-datum
-                 (compose syntax->datum (testing-parse)))
-             path
-             t))))
-      #:mode 'text))
-  (if eq
-      (unless (equal? eq hrm)
-        (error (format "path bar ~s" path)))
-      #;
-      (pretty-print hrm)
-      hrm))
+  (define real-path (expand-user-path (string->path path)))
+  (if expand?
+      (let ()
+        (define str (file->string real-path))
+        (dotest str))
+      #; ; SIGH impossible an to debug error appears
+      (when expand?
+        (define quiet #t)
+        (define modname (string->symbol (format "org-module-~a" (gensym))))
+        (define hrms
+          (with-input-from-file real-path
+            (λ ()
+              (port-count-lines! (current-input-port))
+              (strip-context ; required to avoid hygene errors in expand and eval-syntax below
+               ; for some reason raco make doesn't seem to care
+               #`(module #,modname laundry/expander
+                   #,(parameterize ([laundry-final-port #f])
+                       ((testing-parse) ; watch out for the 2 arity case in the case-lambda here
+                        #; ; NAH just a completely insane case-lambda
+                        ; that causes the call to revert to the full grammar
+                        (format "test-source ~s" test-value-inner)
+                        (current-input-port))))))
+            #:mode 'text))
+        (print "what the fuck")
+        (pretty-write (syntax->datum hrms))
+        (parameterize ([current-namespace ns-test])
+          (unless (or quiet (dotest-quiet)) ; FIXME this logic is broken
+            (pretty-write (list 'expanded:
+                                (syntax->datum (expand hrms)))))
+          #; ; FIXME for whatever reason drracket cannot manage to use eval-syntax here
+          ; so we use eval syntax->datum instead, sigh
+          (eval-syntax hrms)
+          (eval (syntax->datum hrms))
+          (define root (dynamic-require (list 'quote modname) 'root))
+          root))
+      (let ()
+        (define hrm
+          (with-input-from-file real-path
+            (λ ()
+              (port-count-lines! (current-input-port)) ; XXXXXXXXXXXXXX YAY this is what causes our backtracking issues :D :D
+              (parameterize ([laundry-final-port #f])
+                (let ([t (laundry-make-tokenizer (current-input-port))])
+                  ((if parse-to-datum
+                       parse-to-datum
+                       (compose syntax->datum (testing-parse)))
+                   path
+                   t))))
+            #:mode 'text))
+        (if eq
+            (unless (equal? eq hrm)
+              (error (format "path bar ~s" path)))
+            #;
+            (pretty-print hrm)
+            hrm))))
 
 (module+ test-bof
   (current-module-path)
@@ -2508,8 +2544,34 @@ p 2
   (dotest "* Heading\n  Leading whitspace followed by an uppercase is not")
   )
 
+(module+ test-profile
+  #;
+  (define notes (dotest-file "~/git/sparc-curation/docs/notes.org"))
+  ; FIXME relative paths sigh
+  (define cursed (dotest-file "cursed.org"))
+
+  )
+
 (module+ test-files
   (current-module-path)
+
+  (define test-raw (dotest-file "test.org" #:expand #f))
+  (define test (dotest-file "test.org"))
+
+  (define cursed-raw (dotest-file "cursed.org" #:expand #f))
+  (define cursed (dotest-file "cursed.org"))
+
+  (define (time-it path #:expand [expand? #t])
+    (let-values ([(out cpu real gc) (time-apply (λ () (dotest-file path #:expand expand?)) '())])
+      real))
+
+  ; FIXME hilariously bad performance in the expander, even without parsing paragraphs
+  (pretty-write (list 'notes-raw (time-it "~/git/sparc-curation/docs/notes.org" #:expand #f)))
+  (pretty-write (list 'notes (time-it "~/git/sparc-curation/docs/notes.org")))
+  (pretty-write (list 'test-raw (time-it "test.org" #:expand #f)))
+  (pretty-write (list 'test (time-it "test.org")))
+  (pretty-write (list 'cursed-raw (time-it "cursed.org" #:expand #f)))
+  (pretty-write (list 'cursed (time-it "cursed.org")))
 
   #; ; #+CAPTION: Value bug ...
   (define setup (dotest-file "~/git/sparc-curation/docs/setup.org"))

@@ -12,6 +12,7 @@
  ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
  (for-syntax
   (only-in laundry/tokenizer
+           get-tokens ; XXX remove when perf debug complete
            table-make-tokenizer
            paragraph-make-tokenizer
            bind-runtime-todo-keywords)
@@ -882,10 +883,27 @@
   ; eol induced ambiguity
   #;
   (println (list "do-paragraph in:" str))
+  #; ; no tokenization
+  (list 'paragraph str)
+  #; ; at least tokenize
+  (let ([tokenizer
+         (paragraph-make-tokenizer
+          (let ([port (open-input-string (string-append "\n" str "\n"))])
+            (port-count-lines! port)
+            ; FIXME get a real port kids!
+            port))])
+    (let ([tokens (get-tokens tokenizer)])
+      (void)
+      #;
+      (pretty-write tokens))
+    (if (= (string-length str) 0)
+        (list)
+        (list 'paragraph str)))
+  ;#; ; XXX FIXME we have fallen off the quadratic cliff in the grammar again :/
   (with-handlers ([exn:fail? (λ (e) ((error-display-handler) (exn-message e) e)
                                (raise-syntax-error #f "happened in" original-syntax))])
     (let* ([out-helper
-            (parse-paragraph-to-datum
+            (parse-paragraph-to-datum ; FIXME parse-paragraph-to-datum is INSANELY QUADRATICALLY SLOW
              (paragraph-make-tokenizer
               (let ([port (open-input-string (string-append "\n" str "\n"))])
                 (port-count-lines! port)
@@ -915,6 +933,24 @@
               (cons (do-fun (apply string-append a)) (merge-thing do-fun b)))
             (let-values ([(a b) (splitf-at l (compose not string?))])
               (append a (merge-thing do-fun b)))))))
+
+(module+ test-do-paragraph
+  (define-for-syntax (time-it str)
+    (let-values ([(out cpu real gc) (time-apply do-paragraph (list str))])
+      real))
+
+  (begin-for-syntax
+    (pretty-write (time-it (make-string 10000 #\Space)))
+    (pretty-write (let ([n 100]) (list n (time-it (make-string n #\[)))))
+    (pretty-write (let ([n 200]) (list n (time-it (make-string n #\[)))))
+    (pretty-write (let ([n 400]) (list n (time-it (make-string n #\[)))))
+    (pretty-write (let ([n 800]) (list n (time-it (make-string n #\[)))))
+    (pretty-write (let ([n 10]) (list n (time-it (make-string n #\{)))))
+    (pretty-write (let ([n 20]) (list n (time-it (make-string n #\{)))))
+    (pretty-write (let ([n 40]) (list n (time-it (make-string n #\{)))))
+    )
+
+  )
 
 (module+ test-paragraph
   (require racket)

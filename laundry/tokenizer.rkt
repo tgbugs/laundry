@@ -20,6 +20,7 @@
          set-port-next-location-from
          (rename-out [debug laundry-tokenizer-debug]
                      [final-port laundry-final-port])
+         get-tokens ; debug only
          )
 
 (define (find-last char str)
@@ -345,6 +346,14 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
 (define paragraph-lexer
   (lexer-srcloc
+   [(:seq (:+ (:~ (:or "\n" "[" "]" "{" "}" "(" ")" "_" "^" "~" "=" "/" "*" "+" "<" ">" "@"))) "\n")
+    ; XXX this goes a long way to reducing the most common quadratic slowdowns
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME lexeme input-port)]
+
+   #; ; don't bother right now ; XXX apparently having this and the one above can cause a nearly infinite hang !?
+   [(:seq (:* (:~ (:or "\n" "[" "]" "{" "}" "(" ")" "_" "^" "~" "=" "/" "*" "+" "<" ">" "@"))) mu-pre-safe)
+    (token-back-1 'MU-PRE-SAFE lexeme input-port)]
+
    [wsnn+ (token 'WSNN lexeme)]
    ["\n" (token 'NEWLINE lexeme)]
    ["[" (token 'LSB lexeme)] ; this cannot be parsed by itself due to ambiguity with [=hello=]\nlol (=oops=)

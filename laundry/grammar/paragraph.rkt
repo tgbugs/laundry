@@ -22,6 +22,7 @@ paragraph : markup? ( paragraph-common
 
 
 @paragraph-common : mu-pre-less-whitespace ( markup | script )
+                  | PAY-NO-ATTENTION-TO-ME
                   | whitespace markup
                   | UNDERSCORE ; tokenizer handles all combined cases for this but it still has to be broken out
                   | object ( mu-free | script )?

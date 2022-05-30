@@ -1084,6 +1084,12 @@ echo oops a block
 (module+ test-script
   (current-module-path)
 
+  (dotest "^")
+  (dotest " ^ x")
+  (dotest " ^x")
+  (dotest "w^x")
+  (dotest "w^{x}")
+
   ; follows the same pattern as footnotes
 
   ; series

@@ -25,6 +25,7 @@ paragraph : markup? ( paragraph-common
                   | PAY-NO-ATTENTION-TO-ME
                   | whitespace markup
                   | UNDERSCORE ; tokenizer handles all combined cases for this but it still has to be broken out
+                  | HAT
                   | object ( mu-free | script )?
                   | WSNN
 

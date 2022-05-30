@@ -361,6 +361,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["{" (token 'LCB lexeme)] ["}" (token 'RCB lexeme)]
    ["(" (token 'LP lexeme)]  [")" (token 'RP lexeme)]
    ["_" (token 'UNDERSCORE lexeme)]
+   ["^" (token 'HAT lexeme)]
 
    [mu-pre-safe (token 'MU-PRE-SAFE lexeme)]
 

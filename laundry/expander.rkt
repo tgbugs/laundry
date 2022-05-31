@@ -634,16 +634,22 @@
 
 (define-syntax (subscript-ambig stx)
   (syntax-parse stx
-    [(_ body)
+    [(_ body (~optional rsb))
      ; 1. remove trailing underline
      ; 2. parse with do-paragraph
      ; 3. emit both and have paragraph merge them as usual ; FIXME merge happens in do-paragraph, not paragraph
      #:with (expanded ...)
      (let* ([str (syntax->datum #'body)]
+            ;[sd (syntax->datum #'body)]
+            ;[_ (pretty-write (list 'subscript-ambig--1: sd))]
+            ;[str (string-join sd "")]
+            ;[_ (pretty-write (list 'subscript-ambig-0: str))]
             [l (string-length str)]
+            ; FIXME ss is wrong when RSB is present at the end, and we can't use do-paragraph in the RSB case :/
             [ss (string-append "x" (substring str 0 (- l 1)))] ; need non-whitespace up front, no underline in the back
             [wat (append (cddr (do-paragraph ss this-syntax)) '("_"))] ; add the final underscore back in
             )
+       ; FIXME branch on #'rsb
        (when (debug)
          (pretty-write (list 'subscript-ambig-1: wat)))
        (local-expand

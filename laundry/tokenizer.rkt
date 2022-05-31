@@ -395,7 +395,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (token 'LSB-PLUS lexeme)]
    [(:seq ; interactions between markup and pb-script
      script-marker
-     (:~ (:or "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" whitespace))
+     ; FIXME this matches __ which breaks __{sub}
+     (:~ (:or script-marker "[" "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" whitespace))
      #;
      (:+ (:&
           (:~ (:or "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" ))

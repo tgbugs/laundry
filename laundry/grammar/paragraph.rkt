@@ -44,12 +44,13 @@ paragraph : newline
 
 @paragraph-common : mu-pre-less-whitespace ( markup | script )
                   | PAY-NO-ATTENTION-TO-ME
-                  | whitespace ( markup | markup-rec-ok )
-                  | UNDERSCORE ; tokenizer handles all combined cases for this but it still has to be broken out
+                  | whitespace ( markup | markup-rec-ok | script-no ) ; not script here but we need to match it
+                  | UNDERSCORE script? ; tokenizer handles all combined cases for this but it still has to be broken out
                   | HAT
                   | object ( mu-free | script )?
                   | WSNN
                   | paired ; XXX I think
+                  | nested-delims script?
 
 @paragraph-common-open : paragraph-common | nested-delims | open-delim
 
@@ -63,12 +64,12 @@ paragraph : newline
 ; into just the delimiters TODO implement this
 @nested-delims : nested-square | nested-curlie | nested-parens
 ; TODO also need to handle [fn:: [cite: and any other cases
-@nested-square : ( LSB | LSB-PLUS ) ( nested-square | paragraph-common | @stuff-less-rsb )+ RSB
+@nested-square : ( LSB | LSB-PLUS ) ( nested-square | paragraph-common | @stuff-less-lsb-rsb )+ RSB
                | LSB-RSB
                | LSB-PLUS RSB
-@nested-curlie : LCB ( nested-curlie | paragraph-common | @stuff-less-rcb )+ RCB ; FIXME -less-lcb too
+@nested-curlie : LCB ( nested-curlie | paragraph-common | @stuff-less-lcb-rcb )+ RCB ; FIXME -less-lcb too
                | LCB-RCB
-@nested-parens : LP  ( nested-parens | paragraph-common | @stuff-less-rp  )+ RP ; FIXME must also be -less-lb to avoid ambig
+@nested-parens : LP ( nested-parens | paragraph-common | @stuff-less-lp-rp )+ RP ; FIXME must also be -less-lb to avoid ambig
                | LP-RP
 
 @open-delim : ( LSB | LSB-PLUS ) ( paragraph-common-open | @stuff-less-rsb )+
@@ -109,9 +110,9 @@ paragraph : newline
 
 @stuff-base-base : STUFF-B ( mu-free | script )?
                  | STUFF-A mu-free?
-                 | STUFF-C script?
+                 | STUFF-C script? ; FIXME fails because STUFF-C matches __
                  | SCRIPT-DISABLED script?
-                 | paired ( mu-free | UNDERSCORE | HAT | script )
+                 | paired ( mu-free | UNDERSCORE | HAT | script ) ; FIXME can paired be alone here or not?
                  | MU-PRE-SAFE
                  | WSNN
                  | newline
@@ -145,11 +146,19 @@ stuff-less-rcb : stuff-less-rcb-1+
                       | newline
                       | RSB mu-free? | RP mu-free?
 
-@stuff-less-lcb-rcb-1 : stuff-base-base | LP |  RP mu-free? | LSB-PLUS | RSB mu-free?
+@stuff-less-lcb-rcb-1 : stuff-base-base | LP | RP mu-free? | LSB-PLUS | RSB mu-free?
 stuff-less-lcb-rcb : stuff-less-lcb-rcb-1+
+
+
+@stuff-less-lsb-rsb-1 : stuff-base-base | LP | RP mu-free? | LCB | RCB mu-free? ; FIXME missing script kinda?
+stuff-less-lsb-rsb : stuff-less-lsb-rsb-1+
 
 @stuff-less-rp-1 : stuff-base | RCB mu-free? | RSB mu-free?
 stuff-less-rp : stuff-less-rp-1+
+
+; remind me why LSB is left out from these?
+@stuff-less-lp-rp-1 : stuff-base-base | LCB | RCB mu-free? | LSB-PLUS | RSB mu-free?
+stuff-less-lp-rp : stuff-less-lp-rp-1+
 
 newline : NEWLINE
 
@@ -207,11 +216,11 @@ stats-quotient : STATS-QUOTIENT
 
 ;;; sub super script
 
-@script : subscript | superscript | subscript-ambig
+@script : ( subscript | superscript | subscript-ambig )+
 
 subscript : SUBSCRIPT | subscript-bp
 
-subscript-ambig : UNDERLINE-AMBIG
+subscript-ambig : UNDERLINE-AMBIG RCB?
 
 superscript : SUPERSCRIPT | superscript-bp
 
@@ -231,9 +240,12 @@ superscript : SUPERSCRIPT | superscript-bp
 @suffix-b-pre : markup? ( paragraph-common ; we have to recurse here to ensure we don't leak trailing RCBs and violate the grammar
                         ; FIXME AAAAAAAAAAAAAAAAAAAAA yeah, it is ambiguous :/
                         | LCB ( suffix-b-pre | paragraph-common | @stuff-less-lcb-rcb ) RCB ; XXX note the recursion
-                        | LSB script?
-                        | LP script?
+                        | LSB ; XXX not sure if we can actually allow this?
+                        ;| RSB
+                        ;| LP ; script?
+                        ;| RP
                         ;| /LCB-RCB
+                        | script
                         | @stuff-less-lcb-rcb )+
               | markup?
 
@@ -249,12 +261,12 @@ script-malformed-eof : ( (SUP-START-B | LCB ) suffix-b-pre )+
                      ;| ( SUP-START-P suffix-p-pre )+
                      ;| ( SUB-START-P suffix-p-pre )+
 
-;@script-not : SUBSCRIPT
-;            | SUPERSCRIPT
-;            | SUB-START-B suffix-b-pre RCB
-;            | SUB-START-P suffix-p-pre RP
-;            | SUP-START-B suffix-b-pre RCB
-;            | SUP-START-P suffix-p-pre RP
+@script-no : SUBSCRIPT
+           | SUPERSCRIPT
+           | SUB-START-B suffix-b-pre RCB
+           | SUP-START-B suffix-b-pre RCB
+           ;| SUB-START-P suffix-p-pre RP
+           ;| SUP-START-P suffix-p-pre RP
 
 ;;; timestamp 
 
@@ -269,7 +281,7 @@ footnote-anchor : FOOTNOTE-ANCHOR
 ; FIXME RSB fighting with markup e.g. [fn:: hello =]= there ] vs [fn:: [ hello =]= there ]
 paragraph-inline : @paragraph-inline-safe ;| paired-square
 paragraph-inline-safe : markup? ( paragraph-common
-                                | LSB ( paragraph-common | @stuff-less-rsb )+ RSB
+                                | LSB ( paragraph-common | @stuff-less-rsb )+ RSB ; FIXME surely we are missing script here
                                 | LSB-RSB
                                 | LSB RSB
                                 | @stuff-less-rsb )+

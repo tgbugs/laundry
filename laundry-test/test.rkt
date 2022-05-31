@@ -1084,9 +1084,37 @@ echo oops a block
 (module+ test-script
   (current-module-path)
 
+  (dotest "[[[]]]")
+  (dotest "[{(o)}]")
+  (dotest "[{o}]")
+  (dotest "[o]")
+
+  (dotest "[]_{}")
+  (dotest "{}_{}")
+  (dotest "()_{}")
+  (dotest "[o]_{}")
+  (dotest "{o}_{}")
+  (dotest "(o)_{}")
+  (dotest "__{}") ; FIXME broken due to STUFF-C
+  (dotest "_^{}") ; FIXME broken due to STUFF-C
+
+  (dotest "(o)_()")
+
+  (dotest " y_{a}_{1}\n y_{b}^{2}\n y_[c]")
+  (dotest "                         y_[c]_{3}\n y_[d]")
+  (dotest "                        _y_[c]_{3}\n y_[d]")
   (dotest " y_{a}_{1}\n y_{b}^{2}\n y_[c]_{3}\n y_[d]")
   (dotest " y_{a}_{1}\n y_{b}^2")
   (dotest " y_{b}^2\n y_[c]")
+  (dotest "a_{}_{a}")
+  (dotest "a_{}_{1}")
+  (dotest "a_{}_{=}")
+  (dotest "a_{}_{~}")
+  (dotest "a_{}_{*}")
+  (dotest "a_{}_{/}")
+  (dotest "a_{}_{+}")
+  (dotest "a_{}_{]}")
+  (dotest "a_{}_{[}")
 
   (dotest "y_{b}^{2}\ny_[c]")
 
@@ -1100,7 +1128,7 @@ echo oops a block
   (dotest "_{_}_") ; now ok using UNDERLINE-AMBIG -> underline-ok -> underline
   (dotest "_{}}}{{{}_")
   (dotest "_{}}}{{{}}_")
-  (dotest "_{}}} *b* {{{}}_" #:nte 'bold) ; FIXME doesn't bold correctly
+  (dotest "_{}}} *b* {{{}}_" #:nte 'bold)
 
   (dotest "_{b}\ny_" #:nte 'underline)
   (dotest
@@ -1114,7 +1142,7 @@ echo oops a block
   (dotest "y_{b}\ny_" #:expand? #f)
   (dotest "y_{b}\ny_") ; sigh underline issues
 
-  (dotest "y_{_b_}\ny_") ; FIXME this should parse as (subscript (underline "b")) and is a reverse ambig issue
+  (dotest "y_{_b_}\ny_") ; XXX FIXME this should parse as (subscript (underline "b")) and is a reverse ambig issue
 
   (dotest "y_{x{}z_
 y_{x}}z_") ; FIXME seems broken ??
@@ -1241,19 +1269,30 @@ y_{x}}z_") ; FIXME seems broken ??
    '(org-file (paragraph "[" (subscript "oof"))))
   (dotest "[^{oof}")
   (dotest "(_oh body_)")
-  (dotest "(_{oh}_)" #:nte 'underline)
+  (dotest "(_{oh}_)" #:nte 'subscript) ; according to ox-html this is subscript NOT underline
+  (dotest "_{no}")
+  (dotest "_{no} x")
   (dotest
    "(__{no} x_)"
    #:eq-root
+   ; XXX according to ox-html there is no subscript here, which seems incorrect, but given that
+   ; this shows the same behavior ... well, it is a pain to have nested paragraphs that need
+   ; to know the full context to know how to parse, does markup count as "not whitespace" in
+   ; the syntax? what about the char before the markup? super confusing
+   '(org-file (paragraph "(" (underline "_{no} x") ")"))
+   #; ; this seems it should be the right answer but is not what the elisp does
    '(org-file (paragraph "(" (underline (subscript "no") " x") ")")))
+  (dotest "(_{_no_} _x_)") ; FIXME this is broken
+  ; should parse to (paragraph "(" (subscript (underline "no")) " " (underline "x") ")")
+  ; but is hitting underline-ambig first
 
   ; markup interaction
   ; XXX oh but this one is worse and different because {} and () are valid markup pre chars
   ; the fontification agrees with me here ... but export very much does not
   (dotest "x_{=}=}") ; XXX divergence
   (dotest "x_{={=}") ; XXX divergence
-  (dotest "x_(=)=)") ; XXX divergence
-  (dotest "x_(=(=)") ; XXX divergence
+  (dotest "x_(=)=)")
+  (dotest "x_(=(=)")
 
   (dotest "x_{ =y= }")
 

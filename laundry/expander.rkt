@@ -1149,6 +1149,10 @@
 
 ;; table
 
+(define-syntax table-row-before-rule (make-rename-transformer #'table-row))
+
+(define-syntax table-cell-degenerate (make-rename-transformer #'table-cell))
+
 (define-for-syntax (do-table str)
   (let* ([table-input (with-newlines str)]
          #;

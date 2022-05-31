@@ -275,6 +275,8 @@ some text
   (dotest "|||||||||||||||||||||||||||||||||||||")
   (dotest "||||||||||||||||||||||||||||||||||||||")
 
+  (dotest "|a| ") ; any trailing whitespace becomes a new cell
+
   (dotest "|a")
   (dotest "|a|")
   (dotest "|a||")
@@ -339,6 +341,8 @@ some text
 (module+ test-table
   (current-module-path)
   (define t 'table)
+
+  (dotest "|\n|-\n|-\n|-\n|a\n|b\n|-\n|-")
 
   (dotest "|\nx ")
   (dotest "|\n\nx")
@@ -474,6 +478,36 @@ some text
 :e:
 * f
 ")
+
+  )
+
+(module+ test-table-perf
+  (current-module-path)
+
+  (define (time-it n)
+    (let-values ([(out cpu real gc) (time-apply (λ () (dotest (make-string n #\|))) '())])
+      (list n cpu)))
+
+  (let* ([res (list
+          (time-it 10)
+          (time-it 50)
+          (time-it 100)
+          (time-it 200)
+          (time-it 300)
+          (time-it 400)
+          (time-it 500)
+          (time-it 600))]
+         [x (map car res)]
+         [y (map cadr res)]
+         [dy (for/list ([num (cdr y)] [den y]) (exact->inexact (/ num den)))]
+         [dx (for/list ([num (cdr x)] [den x]) (exact->inexact (/ num den)))]
+         [dy/dx (for/list ([y dy] [x dx]) (/ y x))])
+    ; first run of this is highly variable for real time
+    ; looks like dy/dx stabilizes in subsequent runs at around 1.3
+    ; in the absolute be case, so quadratic with a factor around 1.3
+    ; some tweaks seem to get us down to 1.2 ?
+    (list
+     x y dx dy dy/dx))
 
   )
 

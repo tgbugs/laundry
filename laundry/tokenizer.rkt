@@ -549,13 +549,10 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (token 'TABLE-ROW-RULE lexeme)]
    [(:seq "\\" "|") (token 'ESC-PIPE "|")]
    ["|" (token 'PIPE lexeme)]
-   #;
-   ["-" (token 'HYPHEN lexeme)]
+   [(:seq "|" "\n") (token 'PIPE-FINAL lexeme)]
    ["\n" (token 'NEWLINE lexeme)]
-   ["\t" (token 'TAB)]
-   [(:>= 2 " ") (token 'SPACES lexeme)]
-   [" " (token 'SPACE)]
-   [(:+ (:~ (:or "|" #;"-" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
+   [wsnn+ (token 'WSNN1-N lexeme)]
+   [(:+ (:~ (:or "|" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
 
 (module+ test-table
   ; table element stop before is not straight forward

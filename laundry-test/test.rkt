@@ -127,7 +127,7 @@
             #f)
     (error "Should have failed.")))
 
-(define (dotest-file path #:eq [eq #f] #:parse-to-datum [parse-to-datum #f] #:expand [expand? #t])
+(define (dotest-file path #:eq [eq #f] #:parse-to-datum [parse-to-datum #f] #:expand? [expand? #t])
   ; FIXME super inefficient
   #;
   (define (t) (laundry-make-tokenizer (open-input-string (file->string (string->path path) #:mode 'text))))
@@ -1084,11 +1084,102 @@ echo oops a block
 (module+ test-script
   (current-module-path)
 
+  (dotest " y_{a}_{1}\n y_{b}^{2}\n y_[c]_{3}\n y_[d]")
+  (dotest " y_{a}_{1}\n y_{b}^2")
+  (dotest " y_{b}^2\n y_[c]")
+
+  (dotest "y_{b}^{2}\ny_[c]")
+
+  (dotest "y_{b}\n_")
+
+  ; markup and script interaction :/
+  (dotest "_u_")
+  (dotest "_u{}_")
+  (dotest "_{_")
+  (dotest "_}_")
+  (dotest "_{_}_") ; now ok using UNDERLINE-AMBIG -> underline-ok -> underline
+  (dotest "_{}}}{{{}_")
+  (dotest "_{}}}{{{}}_")
+  (dotest "_{}}} *b* {{{}}_" #:nte 'bold) ; FIXME doesn't bold correctly
+
+  (dotest "_{b}\ny_" #:nte 'underline)
+  (dotest
+   "_{_b_}\ny_"
+   #:eq-root ; super confusing, but matches ox-html
+   '(org-file (paragraph (underline "{_b") "}\ny_"))
+   )
+
+  (dotest "y^{b}\ny_") ; ok
+
+  (dotest "y_{b}\ny_" #:expand? #f)
+  (dotest "y_{b}\ny_") ; sigh underline issues
+
+  (dotest "y_{_b_}\ny_") ; FIXME this should parse as (subscript (underline "b")) and is a reverse ambig issue
+
+  (dotest "y_{x{}z_
+y_{x}}z_") ; FIXME seems broken ??
+
+  (dotest "y_{b}\ny_[c]") ; WAT WAT
+
+  (dotest " y_{a}_{1}\n y_{b}^2\n y_[c]") ; WAT WAT
+  (dotest " y_{a}_{1}\n y_{b}^2\n y_[c]_{3}") ; WAT
+
+
   (dotest "^")
   (dotest " ^ x")
   (dotest " ^x")
   (dotest "w^x")
   (dotest "w^{x}")
+
+  (dotest
+   "{}_{1}"
+   #:eq-root
+   '(org-file (paragraph "{}" (subscript "1")))
+   )
+
+  (dotest
+   "{}^{2}"
+   #:eq-root
+   '(org-file (paragraph "{}" (superscript "2")))
+   )
+
+  (dotest "[]_{3}")
+  (dotest "[]^{4}")
+  (dotest "()_{5}")
+  (dotest "()^{6}")
+
+  (dotest "{}_(7)")
+  (dotest "{}^(8)")
+  (dotest "[]_(9)")
+  (dotest "[]^(10)")
+  (dotest "()_(11)")
+  (dotest "()^(12)")
+
+  (dotest "a_(13)")
+  (dotest "b^(14)")
+  (dotest "c_{15}")
+  (dotest "d^{16}")
+
+  (dotest
+   "x_{}_{17}"
+   #:eq-root
+   '(org-file (paragraph "x" (subscript) (subscript "17")))
+   )
+
+  (dotest "x_{}^{18}")
+  (dotest "x_[]_{19}")
+  (dotest "x_[]^{20}")
+  (dotest "x_()_{21}")
+  (dotest
+   "x_()^{22}"
+   #:eq-root
+   '(org-file (paragraph "x_()" (superscript "22")))
+   )
+
+  (dotest "x_{[^{y}}")
+  (dotest "x_{]^{y}}")
+  (dotest "x_{(^{y}}")
+  (dotest "x_{)^{y}}")
 
   ; follows the same pattern as footnotes
 
@@ -1133,6 +1224,17 @@ echo oops a block
             "f")))))))))
 
   (dotest "at the limit x_{{{{}}}}\n\n") ; XXX same footnote pairing issue
+  (dotest "at the limit x_{{{()}}}\n\n")
+  (dotest "at the limit x^{{{{}}}}\n\n")
+  (dotest "at the limit x^{{{_}}}\n\n")
+  (dotest "x^{{y}}\n\n")
+  (dotest "x^{y}\n\n")
+  (dotest "x^{{y}}\n\n")
+  (dotest "x^{{{y}}}\n\n")
+  (dotest "x^{{{{y}}}}\n\n")
+  (dotest "x^{{{{{y}}}}}\n\n")
+  (dotest "x^{{{{{{y}}}}}}\n\n")
+
   (dotest
    "[_{oof}"
    #:eq-root
@@ -1364,7 +1466,7 @@ echo oops a block
   (dotest "_+b+_")
   (dotest "/_+b+_/")
   (dotest "/_+b+_/*")
-  (dotest "*/_+b+_/")
+  (dotest "*/_+b+_/") ; no markup at all
   (dotest "*/_+b+_/*")
 
   (dotest "*/_+b+_") ; XXX
@@ -2521,32 +2623,33 @@ p 2
   )
 
 (module+ test-profile
+  (laundry-tokenizer-debug #f)
   #;
   (define notes (dotest-file "~/git/sparc-curation/docs/notes.org"))
   ; FIXME relative paths sigh
-  (define cursed (dotest-file "cursed.org"))
+  (define cursed (dotest-file "cursed.org" #:expand? #f))
 
   )
 
 (module+ test-files
   (current-module-path)
 
-  (define test-org-raw (dotest-file "test.org" #:expand #f))
+  (define test-org-raw (dotest-file "test.org" #:expand? #f))
   (define test-org (dotest-file "test.org"))
 
-  (define cursed-raw (dotest-file "cursed.org" #:expand #f))
+  (define cursed-raw (dotest-file "cursed.org" #:expand? #f))
   (define cursed (dotest-file "cursed.org"))
 
-  (define (time-it path #:expand [expand? #t])
-    (let-values ([(out cpu real gc) (time-apply (λ () (dotest-file path #:expand expand?)) '())])
+  (define (time-it path #:expand? [expand? #t])
+    (let-values ([(out cpu real gc) (time-apply (λ () (dotest-file path #:expand? expand?)) '())])
       real))
 
   ; FIXME hilariously bad performance in the expander, even without parsing paragraphs
-  (pretty-write (list 'notes-raw (time-it "~/git/sparc-curation/docs/notes.org" #:expand #f)))
+  (pretty-write (list 'notes-raw (time-it "~/git/sparc-curation/docs/notes.org" #:expand? #f)))
   (pretty-write (list 'notes (time-it "~/git/sparc-curation/docs/notes.org")))
-  (pretty-write (list 'test-raw (time-it "test.org" #:expand #f)))
+  (pretty-write (list 'test-raw (time-it "test.org" #:expand? #f)))
   (pretty-write (list 'test (time-it "test.org")))
-  (pretty-write (list 'cursed-raw (time-it "cursed.org" #:expand #f)))
+  (pretty-write (list 'cursed-raw (time-it "cursed.org" #:expand? #f)))
   (pretty-write (list 'cursed (time-it "cursed.org")))
 
   #; ; #+CAPTION: Value bug ...

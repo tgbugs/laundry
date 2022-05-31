@@ -1,8 +1,17 @@
 #lang brag
 
-paragraph : markup? ( paragraph-common
+paragraph : newline
+          | ( markup | markup-rec-ok
+            |          pc-s-lc
+            |                    fime-sme
+            |                               pc-s-lc fime-sme
+            | ( markup | markup-rec-ok ) ( pc-s-lc | fime-sme | pc-s-lc fime-sme )
+            ) newline
+
+; FIXME make all of the variants concrete to avoid potential performance pitfalls
+-paragraph : markup? ( paragraph-common
                     | stuff
-                    | left-common
+                    | left-common script?
                     ;| malformed ; XXX note that if malformed is placed here it MUST terminate the paragraph
                     ;| sigh
                     )* ( footnote-inline-malformed-eof
@@ -10,10 +19,22 @@ paragraph : markup? ( paragraph-common
                        ; | open-delim ; can't do this because it introduces ambiguity
                        )? newline ; markup-eof? ; markup-eof no longer needed and no tokens are being produced
 
-@left-common : LSB script?
+
+@pc-s-lc : ( paragraph-common
+           | stuff
+           | left-common script?
+           )+
+
+@fime-sme : ( footnote-inline-malformed-eof
+            | script-malformed-eof
+            )
+
+@left-common-wat : LSB script?
              | LCB script?
              | LP script?
              | LSB-PLUS script? ; XXX not sure if this is actually safe ?
+
+@left-common : ( LSB | LCB | LP | LSB-PLUS ) ; script?
 ; I'm fairly certain that the current state of this grammar has
 ; many hidden failure modes where certain strings simply cannot
 ; be expressed need to fuzz or far better, switch to using a syntax
@@ -23,11 +44,12 @@ paragraph : markup? ( paragraph-common
 
 @paragraph-common : mu-pre-less-whitespace ( markup | script )
                   | PAY-NO-ATTENTION-TO-ME
-                  | whitespace markup
+                  | whitespace ( markup | markup-rec-ok )
                   | UNDERSCORE ; tokenizer handles all combined cases for this but it still has to be broken out
                   | HAT
                   | object ( mu-free | script )?
                   | WSNN
+                  | paired ; XXX I think
 
 @paragraph-common-open : paragraph-common | nested-delims | open-delim
 
@@ -41,13 +63,21 @@ paragraph : markup? ( paragraph-common
 ; into just the delimiters TODO implement this
 @nested-delims : nested-square | nested-curlie | nested-parens
 ; TODO also need to handle [fn:: [cite: and any other cases
-@nested-square : ( LSB | LSB-PLUS ) ( nested-square | paragraph-common | @stuff-less-rsb )* RSB
-@nested-curlie : LCB ( nested-curlie | paragraph-common | @stuff-less-rcb )* RCB
-@nested-parens : LP  ( nested-parens | paragraph-common | @stuff-less-rp  )* RP
+@nested-square : ( LSB | LSB-PLUS ) ( nested-square | paragraph-common | @stuff-less-rsb )+ RSB
+               | LSB-RSB
+               | LSB-PLUS RSB
+@nested-curlie : LCB ( nested-curlie | paragraph-common | @stuff-less-rcb )+ RCB ; FIXME -less-lcb too
+               | LCB-RCB
+@nested-parens : LP  ( nested-parens | paragraph-common | @stuff-less-rp  )+ RP ; FIXME must also be -less-lb to avoid ambig
+               | LP-RP
 
-@open-delim : ( LSB | LSB-PLUS ) ( paragraph-common-open | @stuff-less-rsb )*
-            | LCB ( paragraph-common-open | @stuff-less-rcb )*
-            | LP  ( paragraph-common-open | @stuff-less-rp  )*
+@open-delim : ( LSB | LSB-PLUS ) ( paragraph-common-open | @stuff-less-rsb )+
+            | LCB ( paragraph-common-open | @stuff-less-rcb )+ ; FIXME -less-lcb too
+            | LP  ( paragraph-common-open | @stuff-less-rp  )+
+            | LSB
+            | LSB-PLUS
+            | LCB
+            | LP
 
 ; notes on whether certain things can be done entirely during tokenization
 ; nested structures that are not shortest match (i.e. markup) such as inline
@@ -70,16 +100,28 @@ paragraph : markup? ( paragraph-common
         | noweb-target ; aka target
         | radio-target
         | stats-cookie
-        | script ; XXX TODO #+options: likely needs to be able to modify the tokenizer
+        ;| script ; XXX TODO #+options: likely needs to be able to modify the tokenizer ; script cannot go in as object, because objects can be preceeded by whitespace! (DUH)
         ; note: tabel cells are included in this list in the spec but do not appear at all in this parser
         | timestamp
         ; note: markup is also listed here in the spec but for now has a special place given its behavior
+
+@paired : LSB-RSB | LCB-RCB | LP-RP
+
+@stuff-base-base : STUFF-B ( mu-free | script )?
+                 | STUFF-A mu-free?
+                 | STUFF-C script?
+                 | SCRIPT-DISABLED script?
+                 | paired ( mu-free | UNDERSCORE | HAT | script )
+                 | MU-PRE-SAFE
+                 | WSNN
+                 | newline
 
 @stuff-base : STUFF-B ( mu-free | script )?
             | STUFF-A mu-free? ; /_+b+_ / case ?
             | STUFF-C script?
             | SCRIPT-DISABLED script?
             | LSB-PLUS ; FIXME not clear this goes here ??
+            | paired ( mu-free | UNDERSCORE | HAT | script )
             ;| LSB mu-free? script?
             ;| LCB script? ; FIXME mismatch I htink
             ;| LP script?  ; FIXME mismatch I htink
@@ -93,6 +135,18 @@ stuff-less-rsb : stuff-less-rsb-1+
 
 @stuff-less-rcb-1 : stuff-base | RSB mu-free? | RP mu-free?
 stuff-less-rcb : stuff-less-rcb-1+
+
+@stuff-less-lcb-rcb-1- : STUFF-B ( mu-free | script )?
+                      | STUFF-A mu-free?
+                      | STUFF-C script?
+                      | SCRIPT-DISABLED script?
+                      | paired ( mu-free | UNDERSCORE | HAT | script )
+                      | ( MU-PRE-SAFE | LP | WSNN | newline )+
+                      | newline
+                      | RSB mu-free? | RP mu-free?
+
+@stuff-less-lcb-rcb-1 : stuff-base-base | LP |  RP mu-free? | LSB-PLUS | RSB mu-free?
+stuff-less-lcb-rcb : stuff-less-lcb-rcb-1+
 
 @stuff-less-rp-1 : stuff-base | RCB mu-free? | RSB mu-free?
 stuff-less-rp : stuff-less-rp-1+
@@ -153,41 +207,54 @@ stats-quotient : STATS-QUOTIENT
 
 ;;; sub super script
 
-@script : subscript | superscript
+@script : subscript | superscript | subscript-ambig
 
 subscript : SUBSCRIPT | subscript-bp
 
+subscript-ambig : UNDERLINE-AMBIG
+
 superscript : SUPERSCRIPT | superscript-bp
 
-@subscript-bp : sub-b | sub-p
+@subscript-bp : sub-b ; | sub-p
 @sub-b : /SUB-START-B suffix-b
-sub-p : /SUB-START-P suffix-p
+;sub-p : /SUB-START-P suffix-p
 
-@superscript-bp : sup-b | sup-p
+@superscript-bp : sup-b ; | sup-p
 @sup-b : /SUP-START-B suffix-b
-sup-p : /SUP-START-P suffix-p
+;sup-p : /SUP-START-P suffix-p
 
 ; FIXME not sure whether markup? can actually happen here for bol or bof yes, but for some of these
 ; nested cases I'm thinking probably not?
 @suffix-b : suffix-b-pre /RCB
-@suffix-p : suffix-p-pre /RP
+;@suffix-p : suffix-p-pre /RP
 
-@suffix-b-pre : markup? ( paragraph-common
-                        | LCB ( paragraph-common | @stuff-less-rcb ) RCB
+@suffix-b-pre : markup? ( paragraph-common ; we have to recurse here to ensure we don't leak trailing RCBs and violate the grammar
+                        ; FIXME AAAAAAAAAAAAAAAAAAAAA yeah, it is ambiguous :/
+                        | LCB ( suffix-b-pre | paragraph-common | @stuff-less-lcb-rcb ) RCB ; XXX note the recursion
                         | LSB script?
                         | LP script?
-                        | @stuff-less-rcb )*
+                        ;| /LCB-RCB
+                        | @stuff-less-lcb-rcb )+
+              | markup?
 
-@suffix-p-pre : markup? ( paragraph-common
-                        | LP ( paragraph-common | @stuff-less-rp ) RP
-                        | LSB script?
-                        | LCB script?
-                        | @stuff-less-rp )*
+;@suffix-p-pre : markup? ( paragraph-common
+;                        | LP ( paragraph-common | @stuff-less-rp ) RP
+;                        | LSB script?
+;                        | LCB script?
+;                        | @stuff-less-rp )+
+;              | markup?
 
-script-malformed-eof : ( SUP-START-B suffix-b-pre )*
-                     | ( SUP-START-P suffix-p-pre )*
-                     | ( SUB-START-B suffix-b-pre )*
-                     | ( SUB-START-P suffix-p-pre )*
+script-malformed-eof : ( (SUP-START-B | LCB ) suffix-b-pre )+
+                     | ( (SUB-START-B | LCB ) suffix-b-pre )+
+                     ;| ( SUP-START-P suffix-p-pre )+
+                     ;| ( SUB-START-P suffix-p-pre )+
+
+;@script-not : SUBSCRIPT
+;            | SUPERSCRIPT
+;            | SUB-START-B suffix-b-pre RCB
+;            | SUB-START-P suffix-p-pre RP
+;            | SUP-START-B suffix-b-pre RCB
+;            | SUP-START-P suffix-p-pre RP
 
 ;;; timestamp 
 
@@ -202,12 +269,17 @@ footnote-anchor : FOOTNOTE-ANCHOR
 ; FIXME RSB fighting with markup e.g. [fn:: hello =]= there ] vs [fn:: [ hello =]= there ]
 paragraph-inline : @paragraph-inline-safe ;| paired-square
 paragraph-inline-safe : markup? ( paragraph-common
-                                | LSB ( paragraph-common | @stuff-less-rsb )* RSB
-                                | @stuff-less-rsb )*
+                                | LSB ( paragraph-common | @stuff-less-rsb )+ RSB
+                                | LSB-RSB
+                                | LSB RSB
+                                | @stuff-less-rsb )+
+                      | markup?
 
 @paragraph-inline-bad : markup? ( paragraph-common
-                                | LSB ( paragraph-common | @stuff-less-rsb )*
-                                )*
+                                | LSB ( paragraph-common | @stuff-less-rsb )+
+                                | LSB
+                                )+
+                      | markup?
 
 footnote-inline-malformed-eof : FOOTNOTE-START-INLINE ( @paragraph-inline
                                                       | paragraph-inline-bad
@@ -253,7 +325,7 @@ footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnote
 ;; be a second tier implementation, a first tier would only be required to handle
 ;; a specific set of defaults
 
-@whitespace : ( WSNN | newline ) +
+@whitespace : ( WSNN | newline )+
 @mu-pre : ( mu-pre-less-whitespace | WSNN | newline )+
 @mu-pre-less-whitespace : MU-PRE-SAFE | LCB | LP 
 ;@-mu-pre : ( MU-PRE-N-NOT-LCB | MU-PRE-1 | WSNN | newline )+
@@ -262,12 +334,14 @@ footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnote
 @markup : markup-rec | markup-terminal
 
 markup-rec : bold | italic | underline | strike-through
+markup-rec-ok : underline-ok ; must be preceeded by whitespace
 
 markup-terminal : code | verbatim
 
 bold : BOLD
 italic : ITALIC
 underline : UNDERLINE
+underline-ok : UNDERLINE-AMBIG
 strike-through : STRIKE
 code : CODE
 verbatim : VERBATIM

@@ -4,7 +4,7 @@
 # [[file:cursed.pdf]] won't export at all due to some issue
 # [[file:cursed.html]]
 
-#+options: broken-links:t ^:nil
+#+options: broken-links:t ^:{}
 #+property: header-args :eval no-export
 
 * 1
@@ -813,3 +813,103 @@ oh no
 : world
 : -
 :
+
+* script wat
+{}*b*
+[]*b*
+()*b*
+
+{}_{1}
+{}^{2}
+[]_{3}
+[]^{4}
+()_{5}
+()^{6}
+
+{}_(1)
+{}^(2)
+[]_(3)
+[]^(4)
+()_(5)
+()^(6)
+
+# bug in ox-html renders {} -> nil
+x_{}_{1}
+x_{}^{2}
+x_[]_{3}
+x_[]^{4}
+x_()_{5}
+x_()^{6}
+
+ y_{a}_{1}
+ y_{b}^{2}
+ y_[c]_{3}
+ y_[d]^{4}
+ y_(e)_{5}
+ y_(f)^{6}
+
+ y_{a}_{q}
+ y_{b}^{q}
+ y_[c]_{q}
+ y_[d]^{q}
+ y_(e)_{q}
+ y_(f)^{q}
+
+x_{y}_{z}
+
+x_{[}
+x_{]}
+x_{(}
+x_{)}
+
+* subscript underline interaction
+y_{b}
+y_
+
+y_{_b_}
+y_
+
+_{b}
+y_
+
+_{_b_}
+y_
+
+# the font locking is incorrect for the first 3 cases
+# note that these do not convert to be underline when ^:nil is set, which is probably good ??
+"_{x}z_
+'_{x}z_
+-_{x}z_
+
+y_{x}z_
+@_{x}z_
+
+-*{x}z*
+
+# observe the insanity, this is so so very cursed
+y_{x{}z_
+y_{x}}z_
+
+# this is handled incorrectly by ox-html
+y_{x{}{}z_
+y_{x{}}}z_
+
+# this is handled correctly
+y_{x(){}z_
+y_{x()}}z_
+
+# compared to being separated into two paragraphs
+a_{b{}c_
+
+a_{b}}c_
+
+a_{b{}{}c_
+
+a_{b{}}}c_
+
+# so apparenlty this is (paragraph (underline "{") "}_") !?
+_{_}_
+
+_{}}}{{{}_
+
+_{}}}{{{}}_

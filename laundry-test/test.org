@@ -3,6 +3,7 @@
 ; @@
 # [[file:test.pdf]]
 # [[file:test.html]]
+#+title: laundry test file
 
 #+options: debug:t
 
@@ -226,7 +227,9 @@ Anchor [fn:oops] oops.
 
 [fn:x] Definition
 
- [fn:oops] what is this?
+ [fn:oops] what is this? not a footnote definition
+
+[fn:oops] now a footnote definition
 
 ** here we go
 

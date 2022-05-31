@@ -360,6 +360,9 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["]" (token 'RSB lexeme)]
    ["{" (token 'LCB lexeme)] ["}" (token 'RCB lexeme)]
    ["(" (token 'LP lexeme)]  [")" (token 'RP lexeme)]
+   [(:seq "[" "]") (token 'LSB-RSB lexeme)]
+   [(:seq "{" "}") (token 'LCB-RCB lexeme)]
+   [(:seq "(" ")") (token 'LP-RP lexeme)]
    ["_" (token 'UNDERSCORE lexeme)]
    ["^" (token 'HAT lexeme)]
 
@@ -413,7 +416,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ; sadly we DO have to back up due to cases like x_{y}_{z}
    [markup-* (token-back-1 'BOLD lexeme input-port)]
    [markup-/ (token-back-1 'ITALIC lexeme input-port)]
-   [markup-_ (token-back-1 'UNDERLINE lexeme input-port)]
+   [markup-_-ok (token-back-1 'UNDERLINE lexeme input-port)] ; NASTY interaction with subscript
+   [markup-_-ambig (token-back-1 'UNDERLINE-AMBIG lexeme input-port)] ; I do NOT like how this is handled, but lookbehind seems worse
    [markup-+ (token-back-1 'STRIKE lexeme input-port)]
 
    [markup-= (token-back-1 'VERBATIM lexeme input-port)]
@@ -471,6 +475,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
     (if (export-with-sub-superscripts)
         (token 'SUP-START-B lexeme)
         (token 'SCRIPT-DISABLED lexeme))]
+   #;
    [superscript-start-p
     (if (export-with-sub-superscripts)
         (token 'SUP-START-P lexeme)
@@ -485,6 +490,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (token 'SUB-START-B lexeme)
         ; FIXME check to see if _{} is included verbatim
         (token 'SCRIPT-DISABLED lexeme))]
+   #;
    [subscript-start-p
     (if (export-with-sub-superscripts)
         (token 'SUB-START-P lexeme)
@@ -569,7 +575,11 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 (define (paragraph-make-tokenizer port)
   (define (next-token)
     (let ([out (paragraph-lexer port)])
-      (when (debug)
+      (when (debug) ; XXX (debug) as a parameter doesn't work when called
+               ; at syntax time because parameters can't cross phases,
+               ; even if syntax time is called at and inside runtime
+               ; and/org there are some module boundary issues related
+               ; to expanding at runtime that are getting tangled up
         (println ':paragraph-make-tokenizer)
         (pretty-print out))
       out))

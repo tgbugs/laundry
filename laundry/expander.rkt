@@ -12,6 +12,7 @@
  ;(only-in laundry/tokenizer ) ; FIXME -> syntax time
  (for-syntax
   (only-in laundry/tokenizer
+           laundry-tokenizer-debug
            get-tokens ; XXX remove when perf debug complete
            table-make-tokenizer
            paragraph-make-tokenizer
@@ -57,22 +58,68 @@
 (module merge-helper racket/base
   (require (only-in racket/list last))
 
-  (provide merge-strings merge-syntaxes)
+  (provide merge-strings merge-syntaxes do-splice-out)
+
+  (define (do-splice-out lst)
+    #;
+    (println (list 'do-splice-out-1: lst))
+    (define (splice new old)
+      (if (syntax? new)
+          (let ([se (syntax-e new)])
+            #;
+            (println (list 'do-splice-out-2: (syntax-e new) (syntax->list new) (syntax->datum new)))
+            (if (eq? (syntax->datum (car se)) 'splice-out)
+                ; cons all the elements onto old in reverse
+                (let ([out
+                       (for/fold
+                           ([acc old])
+                           ([e (reverse (cdr se))])
+                         (values (cons
+                                  (let ([d (syntax->datum e)]) ; FIXME vs local eval to remove the newlines
+                                    (if (string? d)
+                                        d
+                                        e))
+                                  acc)))])
+                  #;
+                  (println (list 'do-splice-out-3: out))
+                  out)
+
+                (cons new old)))
+          (cons new old)))
+    (foldl splice '() (reverse lst)))
 
   (define (merge-strings lst)
     "fold a list merging strings as we go"
     ; I have no idea if there is a faster way to do this, but it certainly feels elegant
     #;
     (log-error "merge-strings: ~a" lst)
-    (foldl
-     (λ (new old)
-       (cond
+    (define (merge new old)
+      (cond
          [(null? old)
           (cons new old)]
          [(and (string? new) (string? (car old)))
           (cons (string-append new (car old)) (cdr old))]
-         [else (cons new old)]))
-     '() ; old
+         #;
+         [(list? new)
+          (println (list 'merge-list-1: new))
+          (cons new old)
+          ]
+         #;
+         [(syntax? new)
+            (println (list 'merge-syntax-1: new))
+          (let ([dat (syntax->datum new)])
+            (println (list 'merge-syntax-2: dat))
+            (if (and (list? dat) (eq? (car dat) 'paragraph))
+                (foldl merge old (cdr dat))
+                (cons new old)))]
+         #;
+         [(and (syntax? new) (list? new) (eq? (car new) 'paragraph))
+          (foldl merge old (cdr new))]
+         [else
+          #;
+          (println (list 'merge-else: new))
+          (cons new old)]))
+    (foldl merge '() ; old
      (reverse lst)))
 
   (define (merge-syntaxes lst context) ; FIXME broken because some incoming syntaxes have #f locations
@@ -585,6 +632,41 @@
 
 ; paragraph
 
+(define-syntax (subscript-ambig stx)
+  (syntax-parse stx
+    [(_ body)
+     ; 1. remove trailing underline
+     ; 2. parse with do-paragraph
+     ; 3. emit both and have paragraph merge them as usual ; FIXME merge happens in do-paragraph, not paragraph
+     #:with (expanded ...)
+     (let* ([str (syntax->datum #'body)]
+            [l (string-length str)]
+            [ss (string-append "x" (substring str 0 (- l 1)))] ; need non-whitespace up front, no underline in the back
+            [wat (append (cddr (do-paragraph ss this-syntax)) '("_"))] ; add the final underscore back in
+            )
+       (when (debug)
+         (pretty-write (list 'subscript-ambig-1: wat)))
+       (local-expand
+        (datum->syntax
+         #'body
+         wat
+         )
+        'expression
+        #f))
+     (let ([hrm
+            #'(splice-out expanded ...)
+            #;
+            #'(list 'paragraph expanded ...)
+            #;
+            #'(paragraph expanded ...)])
+       (when (debug)
+         (pretty-write (list 'subscript-ambig-2 hrm)))
+       hrm
+       )]))
+
+(define-syntax underline-ok (make-rename-transformer #'underline))
+(define-syntax markup-rec-ok (make-rename-transformer #'markup-rec))
+
 (define-syntax (markup-terminal stx)
   (syntax-parse stx
     [(_ (type text:str))
@@ -610,7 +692,7 @@
                (case dat-type
                  ((bold) #rx"\\*")
                  ((italic) #rx"/")
-                 ((underline) #rx"_")
+                 ((or underline underline-ok) #rx"_") ; the rename transformer acts after this step
                  ((strike-through) #rx"\\+")
                  #; ; handled via terminal
                  ((verbatim) #rx"=")
@@ -792,15 +874,20 @@
                      (datum->syntax this-syntax s) ; FIXME URG PAIN
                      s))
           (merge-strings ; this is the correct place to do the merge
-           (map (λ (e)
-                  (when (syntax-property e 'malformed)
-                    ; TODO syntax warn probably? also this doesn't seem to work?
-                    ; maybe the malformed annotation is getting lost during an sa?
-                    (println (format "Found malformed structure! ~s" e)))
-                  (paragraph-expand-body e))
-                (syntax->list #'(body ...)))))
+           (do-splice-out
+            (map (λ (e)
+                   (when (debug)
+                     (println (list 'paragraph-merge-strings-1: e)))
+                   (when (syntax-property e 'malformed)
+                     ; TODO syntax warn probably? also this doesn't seem to work?
+                     ; maybe the malformed annotation is getting lost during an sa?
+                     (println (format "Found malformed structure! ~s" e)))
+                   (paragraph-expand-body e))
+                 (syntax->list #'(body ...))))))
      #:do [(when (debug)
-             (pretty-write (cons 'paragraph: (syntax->datum #'(expanded ...)))))]
+             (pretty-write (list 'paragraph: (syntax->datum #'(expanded ...)))))]
+     ; XXX NOTE we do not reinsert the paragraph heading here because paragraph node
+     ; adds it back on itself, this is kind of silly
      #'(expanded ...)]))
 
 (define-syntax (paragraph-inline stx)
@@ -843,7 +930,7 @@
      ; malformed, record their locations, and add them to syntax warn
      ; or something like that
      (let* ([expanded-raw
-            (local-expand
+            (local-expand ; XXX is this where the paragraph form acutally gets expanded?
              (datum->syntax
               #'(body ...)
               (do-paragraph
@@ -856,8 +943,10 @@
                ; nonsense I do here ... HRM we can't do it in the lexer itself
                ; but maybe we could do it in next-token ?
                (let ([wat (map (λ (e)
-                             (syntax->datum
-                              (local-expand e 'expression #f)))
+                                 (when (debug)
+                                   (pretty-write (list 'pn-dp-1: e)))
+                                 (syntax->datum
+                                  (local-expand e 'expression #f)))
                                (syntax-e #'(body ...)))])
                  (when (debug)
                    (println (format "paragraph-node wat: ~a" wat)))
@@ -865,9 +954,18 @@
                this-syntax))
              'expression
              #f)])
-       expanded-raw)
-
-     (let ([out #'(list 'paragraph expanded ...)])
+       (datum->syntax ; FIXME horribly inefficient, but finally newlines are merged
+        #'(body ...)
+        (merge-strings
+         (map (λ (e)
+                (when (debug)
+                  (pretty-write (list 'pn-dp-2: e)))
+                (syntax->datum
+                 (local-expand e 'expression #f)))
+              (syntax-e expanded-raw)))))
+     (let ([out
+            #'(list 'paragraph expanded ...)
+            ])
        (when (debug)
          (pretty-write (cons 'p1p1p1: (syntax->datum out))))
        out)]))

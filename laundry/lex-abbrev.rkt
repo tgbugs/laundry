@@ -1194,6 +1194,7 @@ c
 (define-lex-abbrev script-body
   ; FIXME this should be off by default, we can match it but should
   ; return a non-latex token unless a parameter is set
+  ; FIXME the observed behavior here does not match the current spec, () also work when ^:t is set
   (:or
    ; org-match-substring-regexp
    "*" ; this does not conflict with bold because the markup could not trigger
@@ -1202,11 +1203,10 @@ c
     (:* (:or alpha 0-9 "," "." "\\"))
     (:or alpha 0-9))))
 
-
 (define-lex-abbrev script-marker (:or "_" "^"))
 
 (define-lex-abbrev script-body-start-b "{")
-(define-lex-abbrev script-body-start-p "(")
+;(define-lex-abbrev script-body-start-p "(")
 
 ; FIXME AAAAAAAAAAAAAAAAAAAAAAAAAAAA nested/balanced () and {} argh so all the right delimiters must be separate
 ; XXX note that per org-match-sexp-depth and org-create-multibrace-regexp
@@ -1215,13 +1215,13 @@ c
 ; FIXME the :~ whitespace has to be in the grammar
 (define-lex-abbrev subscript (:seq #;(:~ whitespace) "_" script-body))
 (define-lex-abbrev subscript-start-b (:seq #;(:~ whitespace) "_" script-body-start-b))
-(define-lex-abbrev subscript-start-p (:seq #;(:~ whitespace) "_" script-body-start-p))
+;(define-lex-abbrev subscript-start-p (:seq #;(:~ whitespace) "_" script-body-start-p))
 
 ;;; superscript
 
 (define-lex-abbrev superscript (:seq #;(:~ whitespace) "^" script-body))
 (define-lex-abbrev superscript-start-b (:seq #;(:~ whitespace) "^" script-body-start-b))
-(define-lex-abbrev superscript-start-p (:seq #;(:~ whitespace) "^" script-body-start-p))
+;(define-lex-abbrev superscript-start-p (:seq #;(:~ whitespace) "^" script-body-start-p))
 
 
 ;;; script markup interaction
@@ -1345,8 +1345,23 @@ c
 
 (define-markup "*")
 (define-markup "/")
-(define-markup "_")
+(define-markup "_") ; XXX do not use directly, ok and ambig are required to handle subscript/underline ambiguity
 (define-markup "+")
+
+; subscript interaction approach
+; 1. we cannot use look-behind to see if we were preceeded by some char, even the markup pre safe activate subscript and block
+; 2. the key pattern the differentiates is _{ followed by at least one } and exactly one _, this covers the whole ambiguous case (also have to follow the usual markup conventions)
+; 3. if preceeded by whitespace it will be underline
+
+(define-lex-abbrev markup-_-ok
+  (:& markup-_
+      (:or
+       (:seq "_" (:~ "{") any-string)
+       (:seq "_" "{" (:+ (:~ "}"))))))
+
+(define-lex-abbrev markup-_-ambig
+  (:& markup-_
+      (:seq "_" "{" (:? any-string) "}" any-string)))
 
 (module+ test-mu
   (define *-lexer

@@ -553,6 +553,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["-" (token 'HYPHEN lexeme)]
    ["\n" (token 'NEWLINE lexeme)]
    ["\t" (token 'TAB)]
+   [(:>= 2 " ") (token 'SPACES lexeme)]
    [" " (token 'SPACE)]
    [(:+ (:~ (:or "|" #;"-" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
 

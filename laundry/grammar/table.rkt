@@ -17,4 +17,4 @@ wsnn: space | tab
 
 ; have to have explicit nodes for these since they aren't lexemes
 tab : TAB
-space : SPACE
+space : SPACE | SPACES

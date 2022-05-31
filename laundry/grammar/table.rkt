@@ -4,7 +4,7 @@
 ; table : ( /NEWLINE wsnn1-n? ( table-row | table-row-rule ) )+ /NEWLINE?
 ; however there is hidden quadratic behavior because there are optional elements inside table-row
 
-table : /NEWLINE wsnn1-n? ( table-row | table-row-rule | table-row-before-rule table-row-rule )+
+table : /NEWLINE ( wsnn1-n? ( table-row | table-row-rule | table-row-before-rule table-row-rule ) )+
 
 ; we special case this to avoid using ? in the definition of table-row
 table-cell-degenerate : /PIPE-FINAL

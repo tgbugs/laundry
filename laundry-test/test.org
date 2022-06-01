@@ -189,7 +189,10 @@ B. there
 and a newline too?
 @@
 Hrm
-   
+
+Inline snip pre@@html:html@@post
+Inline snip pre@@html:html@@@@latex:latex@@post
+
 *this
 is bold*
 

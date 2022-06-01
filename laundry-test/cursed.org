@@ -917,3 +917,50 @@ _{}}}{{{}}_
 (_{oh}_)
 (__{no} x_)
 (_{_no_} _x_)
+
+* script in footnote cursedness
+it seems that there are certain forms that don't "actually" count as
+"not whitespace" because the paragraph parsing starts as if from
+nothing (aka a newline) inside of them
+
+inline [fn::^{is this superscript?}] no, it is not
+inline [fn::_{is this subscript?}] no, it is not
+
+[fn::a] wait, since when can we start a line with an inline footnote!?
+
+evil [fn::] footnote
+
+[fn::]
+OH NO
+
+ok, so the spec is inaccurate, a footnote label cannot be a colon
+
+[fn:29:THERE's MORE] oh boy
+
+now reference [fn:29] here as well
+
+#+begin_src elisp
+(string-match "[[:word:]]" "Ǿ") ; does not match racket's [[:word:]]
+#+end_src
+
+* footnote hyperlink italic interactions
+[s/] [[http://asdf.com/ ][]]
+[[file:][*bold*]]
+[*bold*]
+[ *bold*]
+
+[ *bold* ]
+
+ *bold*[]
+
+ .*bold* ,*bold*
+
+oh body [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]] hrm
+
+s_s/s [s/ ]
+
+s_{s}/s [s/ ]
+
+s^s_s [s_ ]
+
+s_s_s [s_ ]

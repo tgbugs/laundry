@@ -524,9 +524,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ; not recover the correct value, on the other hand, this way we
    ; don't have to worry about it at all ...
    [superscript ; this is the non ^{} case
-    (if (eq? (export-with-sub-superscripts) #t)
-        (token 'SUPERSCRIPT lexeme)
-        (token 'SCRIPT-DISABLED lexeme))]
+    (peek-script-disabled 'SUPERSCRIPT lexeme input-port)]
    [superscript-start-b
     (if (export-with-sub-superscripts)
         (token 'SUP-START-B lexeme)
@@ -538,9 +536,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
         (token 'SCRIPT-DISABLED lexeme))]
 
    [subscript ; this is the non _{} case
-    (if (eq? (export-with-sub-superscripts) #t)
-        (token 'SUBSCRIPT lexeme)
-        (token 'SCRIPT-DISABLED lexeme))]
+    (peek-script-disabled 'SUBSCRIPT lexeme input-port)]
    [subscript-start-b
     (if (export-with-sub-superscripts)
         (token 'SUB-START-B lexeme)
@@ -578,6 +574,17 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    ["?" (token 'QM lexeme)]
 
    ))
+
+(define (peek-script-disabled type lexeme input-port)
+  (if (eq? (export-with-sub-superscripts) #t)
+      (token type lexeme)
+      (let ([next-char (peek-char input-port)])
+        (when (debug)
+          (pretty-write (list 'paragraph-lexer-subscript-1: next-char)))
+        (if (for/or ([mu '(#\~ #\= #\/ #\* #\+)]) (char=? next-char mu)) ; XXX note we skip _ because we handle that ambig elsewhere
+            ; FIXME surely read-char fails to update the srcloc
+            (token 'SCRIPT-DISABLED (string-append lexeme (string (read-char input-port))))
+            (token 'SCRIPT-DISABLED lexeme)))))
 
 (module+ test-paragraph
   ; FIXME terminal double newline never makes it through the top level lexer

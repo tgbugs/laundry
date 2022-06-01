@@ -1501,6 +1501,8 @@ y_{x}}z_") ; FIXME seems broken ??
   (dotest "[")
   (dotest "[=hello=")
 
+  (dotest "[=hello=]\n{=hello=}")
+
   (dotest "[fn::")
 
   (dotest "[c")
@@ -2982,6 +2984,7 @@ a
    (submod ".." test-table-perf)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
+   (submod ".." test-left-square-bracket)
    (submod ".." test-markup)
    (submod ".." test-script)
    (submod ".." test-macros)

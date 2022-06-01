@@ -632,6 +632,10 @@
 
 ; paragraph
 
+; handle the alternate case where UNDERLINE was emitted but we know it
+; is not in a valid position for markup
+(define-syntax underline-ambig (make-rename-transformer #'subscript-ambig))
+
 (define-syntax (subscript-ambig stx)
   (syntax-parse stx
     [(_ body (~optional rsb))
@@ -639,15 +643,22 @@
      ; 2. parse with do-paragraph
      ; 3. emit both and have paragraph merge them as usual ; FIXME merge happens in do-paragraph, not paragraph
      #:with (expanded ...)
-     (let* ([str (syntax->datum #'body)]
+     (let* ([str (syntax->datum #'body)] #;
             ;[sd (syntax->datum #'body)]
             ;[_ (pretty-write (list 'subscript-ambig--1: sd))]
             ;[str (string-join sd "")]
-            ;[_ (pretty-write (list 'subscript-ambig-0: str))]
+            [_ (pretty-write (list 'subscript-ambig-0: str))]
             [l (string-length str)]
             ; FIXME ss is wrong when RSB is present at the end, and we can't use do-paragraph in the RSB case :/
-            [ss (string-append "x" (substring str 0 (- l 1)))] ; need non-whitespace up front, no underline in the back
-            [wat (append (cddr (do-paragraph ss this-syntax)) '("_"))] ; add the final underscore back in
+            [ss (string-append "x" (substring str 0 (- l 1)))] #; ; need non-whitespace up front, no underline in the back
+            [_ (pretty-write (list 'subscript-ambig-.5: ss))]
+            [par (do-paragraph ss this-syntax)] #;
+            [_ (pretty-write (list 'subscript-ambig-.75: par))]
+            [wat (append
+                  (if (string=? (cadr par) "x") ; x will be merged if the script is malformed
+                      (cddr par)
+                      (cons (substring (cadr par) 1) (cddr par)))
+                  '("_"))] ; add the final underscore back in
             )
        ; FIXME branch on #'rsb
        (when (debug)

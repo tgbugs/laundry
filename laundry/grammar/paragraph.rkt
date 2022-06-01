@@ -109,9 +109,9 @@ paragraph : newline
 @paired : LSB-RSB | LCB-RCB | LP-RP
 
 @stuff-base-base : STUFF-B ( mu-free | script )?
-                 | STUFF-A mu-free?
+                 | STUFF-A mu-free? ; /_+b+_ / case ?
                  | STUFF-C script? ; FIXME fails because STUFF-C matches __
-                 | SCRIPT-DISABLED script?
+                 | SCRIPT-DISABLED underline-ambig? script?
                  | paired ( mu-free | UNDERSCORE | HAT | script ) ; FIXME can paired be alone here or not?
                  | MU-PRE-SAFE
                  | WSNN
@@ -140,7 +140,7 @@ stuff-less-rcb : stuff-less-rcb-1+
 @stuff-less-lcb-rcb-1- : STUFF-B ( mu-free | script )?
                       | STUFF-A mu-free?
                       | STUFF-C script?
-                      | SCRIPT-DISABLED script?
+                      | SCRIPT-DISABLED underline-ambig? script?
                       | paired ( mu-free | UNDERSCORE | HAT | script )
                       | ( MU-PRE-SAFE | LP | WSNN | newline )+
                       | newline
@@ -354,6 +354,7 @@ bold : BOLD
 italic : ITALIC
 underline : UNDERLINE
 underline-ok : UNDERLINE-AMBIG
+underline-ambig : UNDERLINE
 strike-through : STRIKE
 code : CODE
 verbatim : VERBATIM

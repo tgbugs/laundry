@@ -288,9 +288,9 @@ paragraph-inline-safe : markup? ( paragraph-common
                                 )+
                       | markup?
 
-footnote-inline-malformed-eof : FOOTNOTE-START-INLINE ( @paragraph-inline
-                                                      | paragraph-inline-bad
-                                                      )?
+footnote-inline-malformed-eof : FOOTNOTE-START-INLINE script-no? ( @paragraph-inline
+                                                                 | paragraph-inline-bad
+                                                                 )?
 
 ;paired-square : ( FOOTNOTE-START-INLINE | LSB ) stuff-less-rsb? RSB
 ;footnote-inline-simple : FOOTNOTE-INLINE-SIMPLE
@@ -298,7 +298,7 @@ footnote-inline-malformed-eof : FOOTNOTE-START-INLINE ( @paragraph-inline
 ; because footnote is longest match and because there is a collision with
 ; markup footnotes must be reparsed in a second pass, this is likely the case
 ; for script as well
-footnote-inline : FOOTNOTE-START-INLINE paragraph-inline? /RSB ; inline footnotes may contain at most a single paragraph
+footnote-inline : FOOTNOTE-START-INLINE script-no? paragraph-inline? /RSB ; inline footnotes may contain at most a single paragraph
                 ;| FOOTNOTE-INLINE-MALFORMED-EOF ; FIXME wrong because it somehow ends with the banned value, sigh EOF madness
 ;malformed : footnote-inline-malformed
 ;footnote-inline-malformed : FOOTNOTE-INLINE-MALFORMED-MALFORMED

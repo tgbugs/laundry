@@ -690,6 +690,8 @@ c
             (:seq "[" (:~ "f"))
             (:seq "[f" (:~ "n"))
             (:seq "[fn" (:~ ":")) ; TODO see if we can get the actual complement of footnote label?
+            ; XXX apparently inline footnotes can start a paragraph now
+            (:seq "[fn:" (:* (:& (:or alphabetic numeric "-" "_")) (:~ ":")) ":") ; FIXME aligh with footnote-label when :~ : is fixed
             (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
             (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
             (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))
@@ -923,8 +925,8 @@ c
 ;; footnotes are exceptionally tricky because they allow nesting other footnotes
 ;; so we can't actually use from/to for from/stop-before
 
-(define-lex-abbrev footnote-label
-  (:+ (:or 0-9 alpha "_" "-")))
+(define-lex-abbrev footnote-label ; FIXME should exclude :
+  (:+ (:or alphabetic numeric "_" "-"))) ; TODO extend a-z -> alphabetic 0-9 -> numeric
 
 (define-lex-abbrev footnote-anchor
   (:seq "[fn:" footnote-label "]")

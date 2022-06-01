@@ -1149,9 +1149,15 @@
 
 ;; table
 
-(define-syntax table-row-before-rule (make-rename-transformer #'table-row))
+(define-syntax (cell-hyphen stx) (syntax/loc stx "-"))
 
+(define-syntax table-row-open (make-rename-transformer #'table-row))
+
+(define-syntax table-row-degenerate (make-rename-transformer #'table-row))
 (define-syntax table-cell-degenerate (make-rename-transformer #'table-cell))
+
+(define-syntax table-cell-first (make-rename-transformer #'table-cell))
+(define-syntax table-cell-rest (make-rename-transformer #'table-cell))
 
 (define-for-syntax (do-table str)
   (let* ([table-input (with-newlines str)]

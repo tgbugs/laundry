@@ -342,7 +342,20 @@ some text
   (current-module-path)
   (define t 'table)
 
+  (dotest
+   "
+      |-----+---------+--------|
+      |  °C |   kg/m3 |  Δd/Δt |
+      |-----+---------+--------|"
+   )
+
   (dotest " |a|b|\n |   |   |") ; watch out for that leading whitespace
+
+  (dotest "||")
+
+  (dotest "||\n|-") ; FIXME TOO MAN CELLS
+
+  (dotest "|a|-b|c|")
 
   (dotest "|\n|-\n|-\n|-\n|a\n|b\n|-\n|-")
 

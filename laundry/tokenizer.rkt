@@ -543,16 +543,30 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
   )
 
-(define table-lexer
+(define table-lexer-nlf
   (lexer-srcloc
    [(:seq "\n" (:* (:or "\t" " ")) "|" "-" (:* (:~ "\n")))
     (token 'TABLE-ROW-RULE lexeme)]
    [(:seq "\\" "|") (token 'ESC-PIPE "|")]
    ["|" (token 'PIPE lexeme)]
+   #; ; gobbles the newline needed by table row ... sigh
    [(:seq "|" "\n") (token 'PIPE-FINAL lexeme)]
+   [(:seq "\n" wsnn+) (token 'NLWS lexeme)] ; beat the quadratic this way
    ["\n" (token 'NEWLINE lexeme)]
    [wsnn+ (token 'WSNN1-N lexeme)]
    [(:+ (:~ (:or "|" "\\" "\t" " " "\n"))) (token 'REST lexeme)]))
+
+(define table-lexer-nll
+  (lexer-srcloc
+   [(:seq "|" "-")
+    (token 'TABLE-ROW-RULE-START lexeme)]
+   [(:seq "\\" "|") (token 'ESC-PIPE "|")]
+   ["|" (token 'PIPE lexeme)]
+   [(:seq "|" "\n") (token 'PIPE-FINAL lexeme)]
+   ["\n" (token 'NEWLINE lexeme)]
+   [wsnn+ (token 'WSNN1-N lexeme)]
+   [(:+ (:~ (:or "|" "\\" "\t" " " "\n"))) (token 'REST lexeme)])
+  )
 
 (module+ test-table
   ; table element stop before is not straight forward
@@ -586,7 +600,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
 (define (table-make-tokenizer port)
   (define (next-token)
-    (let ([out (table-lexer port)])
+    (let ([out (table-lexer-nll port)])
       #;
       (begin
         (println ':table-make-tokenizer)

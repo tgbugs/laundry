@@ -2966,14 +2966,20 @@ a
   (require
    (submod ".." test-sentinel)
    (submod ".." test-headline-content)
+   (submod ".." test-planning)
+   (submod ".." test-priority)
+   (submod ".." test-headline)
    (submod ".." test-bof)
    (submod ".." test-wat)
    (submod ".." test-list)
    (submod ".." test-npnn)
    (submod ".." test-cell)
    (submod ".." test-row)
+   #; ; will be used to track down pos/scrloc issues
+   (submod ".." test-span-misalignment)
    (submod ".." test-table)
-   (submod ".." test-planning)
+   #; ; slow, used to check for quadratic behavior
+   (submod ".." test-table-perf)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
    (submod ".." test-markup)
@@ -2999,6 +3005,8 @@ a
    (submod ".." test-cite)
    (submod ".." test-word-char-vs-word-char-n)
    (submod ".." test-not-markup)
+   #; ; slow, utility module
+   (submod ".." test-profile)
    #; ; XXX big boy
    (submod ".." test-files)
    #; ; known broken

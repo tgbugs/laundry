@@ -678,10 +678,13 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    #; ; I don't think we actually need this ? it is sort of a sentinel for other issues with holes in the grammar though?
    ["-" (token 'HYPHEN-OOPS lexeme)] ; apparently there are some cases where this can fall through ?
    ["\n" (token 'NEWLINE lexeme)]
+   #;
    [" " (token 'SPACE)]
    #; ; TODO should help with perf
    [(:+ " ") (token 'SPACE-N lexeme)]
+   #;
    ["\t" (token 'TAB)]
+   [wsnn+ (token 'WSNN1-N lexeme)]
 
    [footnote-definition
     (token 'FOOTNOTE-DEFINITION lexeme)]

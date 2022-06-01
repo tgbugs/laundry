@@ -113,7 +113,7 @@ paragraph-core : PARAGRAPH
 paragraph-line : newline ( LSB
                          | RSB
                          | NEGATED-SET
-                         | wsnn
+                         | wsnn1-n
                          | ALPHA
                          | ALPHA-N
                          | DIGIT
@@ -243,7 +243,7 @@ fixed-width-element : FIXED-WIDTH-ELEMENT+ NEWLINE?
 
 ;;; keywords
 
-@nlwsnn : /newline wsnn*
+@nlwsnn : /newline wsnn1-n?
 
 ; there is no requirement that there be a space between the key and the value according to org-element
 ; XXX divergence: in order to make keyword syntax more regular and predicatable we allow the empty keyword
@@ -357,14 +357,10 @@ timestamp : TIMESTAMP
 ;; the elisp org parser parses whitespace as significant
 ;; XXX suggestion: disallow all leading whitespace or invoke undefined behavior
 
-@wsnn : tab | space ; FIXME need other whitespace chars FIXME need to move multi whitespace to tokenizer
+@wsnn1-n : WSNN1-N
 
 ;; this isn't going to work is in ;_;
 blank-line : newline /newline ; please tell me that cutting backtracks, that would be beyond wonderful noop
 double-blank-line : newline newline /newline
 
 newline : NEWLINE
-
-space : SPACE ; TODO SPACE-N needs to be a lexeme which will cause a branch in here
-tab : TAB
-; FIXME missing a bunch of other things that count as whitespace

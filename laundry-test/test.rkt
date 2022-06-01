@@ -975,6 +975,78 @@ AAAAAAAAAAAAAAAAAAAAAAA
   (dotest "0123456789A")
   (dotest "paragraph\n")
 
+  ; check this performance cliff out (now fixed via pay no attention to me)
+  (dotest " [fn::
+sssss ssss sssssssss ss sssssss sss ssssssss sssssss ssssssss ss ssssssssss sssssssssssssss ss ssssssss sssssss sss sss sss sssssss ss ss ssssss ssssssssss sss ssss ssssss ss sss sssssss ssssss. sssssss, ss sss sssssss ss ssss sssss sssssssssss sssss, sss ssss ssss ssss sssssss ss sssss ssssssss sssss sssssssssss ss ss ssssss sss sssssss ssssssssss ssssss ss ssss ssssss ss sssssssss sss ssss sss ssss ssssssss sssssssssss sssssss. sss sssssss ssss ssss sssssss ssss sss sssssssss ssssss ss sssssssss sss sss ss ssss ssss sss ssssss sssssssss ss sssssss sssss ss ss sss sss sssss ssssss ss sssssss ssss sssss ss ssssssss ss ssss (ssss ss ss ssssss sss sss ssss sssss ssssssssss s sssss ss s ssssss sss ssss ssssssss s sssssss sssssssssss).].")
+
+  (dotest " [fn::
+sssss ssss sssssssss ss sssssss sss ssssssss sssssss ssssssss ss ssssssssss sssssssssssssss ss ssssssss sssssss sss sss sss sssssss ss ss ssssss ssssssssss sss ssss ssssss ss sss sssssss ssssss. sssssss, ss sss sssssss ss ssss sssss sssssssssss sssss, sss ssss ssss ssss sssssss ss sssss ssssssss sssss sssssssssss ss ss ssssss sss sssssss ssssssssss ssssss =ss= ssss ssssss ss sssssssss sss ssss sss ssss ssssssss sssssssssss sssssss. sss sssssss ssss ssss sssssss ssss sss sssssssss ssssss ss sssssssss sss sss ss ssss ssss sss ssssss sssssssss ss sssssss sssss ss ss sss sss sssss ssssss ss sssssss ssss sssss ss ssssssss ss ssss (ssss ss ss ssssss sss sss ssss sssss ssssssssss s sssss ss s ssssss sss ssss ssssssss s sssssss sssssssssss).].")
+
+  (dotest " [fn::
+sssss ssss sssssssss ss sssssss sss ssssssss sssssss ssssssss ss ssssssssss sssssssssssssss ss ssssssss sssssss sss sss sss sssssss ss ss ssssss ssssssssss sss ssss ssssss ss sss sssssss ssssss. sssssss, ss sss sssssss ss ssss sssss sssssssssss sssss, sss ssss ssss ssss sssssss ss sssss ssssssss sssss sssssssssss ss ss ssssss sss sssssss ssssssssss s=ss=s ss ssss ssssss ss sssssssss sss ssss sss ssss ssssssss sssssssssss sssssss. sss sssssss ssss ssss sssssss ssss sss sssssssss ssssss ss sssssssss sss sss ss ssss ssss sss ssssss sssssssss ss sssssss sssss ss ss sss sss sssss ssssss ss sssssss ssss sssss ss ssssssss ss ssss (ssss ss ss ssssss sss sss ssss sssss ssssssssss s sssss ss s ssssss sss ssss ssssssss s sssssss sssssssssss).].")
+
+  (dotest "s (s s) -> #s => (s s) -> #s s (s s) s (s s) s")
+  (dotest "s (s s) -< #s => (s s) -> #s s (s s) s (s s) s")
+  (dotest "s (s s) -> #s =< (s s) -> #s s (s s) s (s s) s")
+  (dotest "s (s s) -> #s => (s s) -< #s s (s s) s (s s) s")
+
+  (dotest "
+s ssss ss ssss ssss (s s) -> #s => (s s) -> #s ss ssss (s s) sss (s s) sssssss ss s sss s
+sssss ssss sss ssss sssss. ssss ss ssss (s (s s)) = (s (s s))
+sssssssssss ss ssssss sssssss (s s) -> #s =/> (s s) -> #s, ss ssssss sssss sssssss ssss.")
+
+  ; wheee time to handle italic/hyperlink ambiguity
+  (dotest "[ss/]")
+  (dotest "[s/]")
+  (dotest "[s/] [/]")
+  (dotest "[s/] [[/ ][]]")
+  (dotest "[s/] [[http://asdf.com/ ][]]")
+
+  ; now we can finally see that there were multiple overlayed issues
+  ; the underlying one was that there is a SCRIPT-DISABLED match that
+  ; terminates in italics, and the italics run for way too long, but
+  ; we don't catch that case via pay no attention to me because of the
+  ; script disabled match
+
+  ; but there is YET ANOTHER issue which is that the first hyperlink
+  ; should have matched but somehow did not?
+  (dotest "
+[[https://docs.google.com/spreadsheets/d/ssssss_sssssssss/edit#gid=124356728][527]][fn::https://docs.google.com/spreadsheets/d/ssssssssss_ssssssss/edit?usp=sharing] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]
+")
+
+  (dotest "
+[fn::https://docs.google.com/spreadsheets/d/1cGtY2oIMfBzg6MKei_S2niCbu0Cici2n17dZNLgBdNw/edit?usp=sharing] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]" #:expand? #f)
+
+  (dotest " [fn::a] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]" #:expand? #f)
+  (dotest " [fn::a] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]")
+
+  (dotest "[fn::a] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]" #:expand? #f)
+  (dotest "[fn::a] x [[https://www.crossref.org/services/event-data/ ][Cross Ref’s Event]]")
+
+  (dotest "s_{/s [s/ ]") ; yeah, this one is actually italic
+
+  (dotest "s_s/s [s/ ]") ; finally got me to implement peeking in the lexer ... more bad pos/srcloc to come
+  (dotest "s_s*s [s* ]")
+  (dotest "s_s=s [s= ]")
+  (dotest "s_s~s [s~ ]")
+  (dotest "s_s+s [s+ ]")
+  (dotest "s_s_s [s_ ]") ; lol
+
+  (dotest "s^s/s [s/ ]")
+  (dotest "s^s*s [s* ]")
+  (dotest "s^s=s [s= ]")
+  (dotest "s^s~s [s~ ]")
+  (dotest "s^s+s [s+ ]")
+  (dotest "s^s_s [s_ ]") ; ok now but still AAAAAAAAAAAA
+
+  (dotest   "x_s [s")
+
+  (dotest "[fn:Ǿ: inline indeed]")
+
+  (regexp-match #px"[[:word:]]" "Ǿ")
+  (regexp-match #px"\\p{L}|\\p{N}" "Ǿ")
+
+
   )
 
 (module+ test-cite
@@ -1138,6 +1210,9 @@ echo oops a block
 (module+ test-script
   (current-module-path)
 
+  (dotest "_{script-no}")
+  (dotest " [fn::_{script-no}]")
+
   (dotest "[[[]]]")
   (dotest "[{(o)}]")
   (dotest "[{o}]")
@@ -1191,7 +1266,11 @@ echo oops a block
    '(org-file (paragraph (underline "{_b") "}\ny_"))
    )
 
-  (dotest "y^{b}\ny_") ; ok
+  (dotest
+   "y^{b}\ny_"
+   #:eq-root
+   '(org-file (paragraph "y" (superscript "b") "\ny_"))
+   )
 
   (dotest "y_{b}\ny_" #:expand? #f)
   (dotest "y_{b}\ny_") ; sigh underline issues

@@ -344,10 +344,64 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 ; markup but consider also that this may not be the best or even
 ; correct place to attempt such a thing
 
+; I think we don't need to stop for parens anymore ??
+(define-lex-abbrev little-black-raincloud
+  (:or "\n" "[" "]" "{" "}" #;"(" #;")" "<" #;">" "@" "^" "_" "~" "=" "/" "*" "+"))
+
+(define-lex-abbrev mu-check
+  (:or "\"" "'" "-" "{" "("))
+
 (define paragraph-lexer
-  (lexer-srcloc
-   [(:seq (:+ (:~ (:or "\n" "[" "]" "{" "}" "(" ")" "_" "^" "~" "=" "/" "*" "+" "<" ">" "@"))) "\n")
-    ; XXX this goes a long way to reducing the most common quadratic slowdowns
+
+  ; TODO peeking markup
+  ; we don't have to peek on every single char, we only have to peek on
+  ; whitespace and mu-pre, specifically #\newline #\space #\Tab #\" #\' #\- #\{ #\(
+  ; and actually we only have to peek on #\" #\' #\- #\{ #\(, in all other cases
+  ; we never match markup and continue
+
+  ; XXX the pay no attention to me variants go a long way to reducing the most common quadratic slowdowns
+  ; however it is clear that the paragraph grammar is still broken
+  (lexer-srcloc ; FIXME vs lexer-src-pos ????
+
+   #;
+   [(:+
+     (:~ mu-check mu-marker )
+     (:seq mu-marker)
+     )
+    (token 'LOL lexeme)
+    ]
+
+   #; ; not quite
+   [(:seq (:+ (:~ mu-marker mu-check #;(and some other stuff))))
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME-Z lexeme input-port)]
+
+   [(:seq
+     (:+
+      (:or
+       (:~ little-black-raincloud)
+       (:seq
+        (:~ (:or whitespace mu-check mu-marker "[" "<" "@" "^"))
+        (:or "*" "/" "+" "=" "~")) ; mu-marker not underline (because script)
+       ))
+     ; we can't stop for all elements of little black raincloud, due to markup being in there
+     ; we need a token back 2 variant for markup
+     (:or "\n" "[" "]" "{" "}" "<" #;">" "@" "^"))
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME lexeme input-port)]
+   [(:seq (:+ (:~ little-black-raincloud))
+          wsnn+
+          (:or "_" "~" "=" "/" "*" "+"))
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME-WHITESPACE lexeme input-port)]
+   [(:seq (:+ (:~ little-black-raincloud))
+          mu-pre-safe-1
+          (:or "_" "~" "=" "/" "*" "+"))
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME-MU-PRE-SAFE lexeme input-port)]
+   [(:seq (:+ (:~ little-black-raincloud))
+          (:~ (:or whitespace mu-pre-safe-1 mu-marker "}" "]" ">" "@" "^"))
+          (:or "_" "~" "=" "/" "*" "+"))
+    (token-back-1 'PAY-NO-ATTENTION-TO-ME-NOT-MU lexeme input-port)]
+
+   #;
+   [(:seq (:+ (:~ (:or "\n" "[" "]" "{" "}" #;"(" #;")" "_" "^" "~" "=" "/" "*" "+" "<" ">" "@"))) "]")
     (token-back-1 'PAY-NO-ATTENTION-TO-ME lexeme input-port)]
 
    #; ; don't bother right now ; XXX apparently having this and the one above can cause a nearly infinite hang !?
@@ -381,6 +435,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
              ; can't quite be mu-marker becuse _ is also subscript
              "=" "~" "*" "/" "+"))
     (token 'STUFF-A lexeme)]
+   #; ; no longer needed due to pay no attention to me
    [(:seq "[" ; ensure that markup doesn't run wild with an incorrect parse
           (:or
            ;"=" "~" "*" "/" "+"

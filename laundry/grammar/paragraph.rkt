@@ -42,8 +42,11 @@ paragraph : newline
 ; surface syntax of a markup language
 
 
-@paragraph-common : mu-pre-less-whitespace ( markup | script )
-                  | PAY-NO-ATTENTION-TO-ME
+@paragraph-common : mu-pre-less-whitespace ( markup | script ) ; may need this to be optional in some cases ???
+                  | PAY-NO-ATTENTION-TO-ME ( mu-free | script )?
+                  | PAY-NO-ATTENTION-TO-ME-WHITESPACE ( markup | markup-rec-ok | script-no )? ; not entirely sure why/whether this needs to be optional?
+                  | PAY-NO-ATTENTION-TO-ME-MU-PRE-SAFE ( markup | markup-rec-ok | script )?
+                  | PAY-NO-ATTENTION-TO-ME-NOT-MU ( mu-free | script )?
                   | whitespace ( markup | markup-rec-ok | script-no ) ; not script here but we need to match it
                   | UNDERSCORE script? ; tokenizer handles all combined cases for this but it still has to be broken out
                   | HAT

@@ -117,18 +117,13 @@ paragraph : newline
                  | WSNN
                  | newline
 
-@stuff-base : STUFF-B ( mu-free | script )?
-            | STUFF-A mu-free? ; /_+b+_ / case ?
-            | STUFF-C script?
-            | SCRIPT-DISABLED script?
+@stuff-base : stuff-base-base
             | LSB-PLUS ; FIXME not clear this goes here ??
-            | paired ( mu-free | UNDERSCORE | HAT | script )
             ;| LSB mu-free? script?
             ;| LCB script? ; FIXME mismatch I htink
             ;| LP script?  ; FIXME mismatch I htink
             | mu-pre
             ;| WSNN ; FIXME will this fight with mu-pre or no ?
-            | newline
 
 @stuff-less-rsb-1 : stuff-base | RCB mu-free? | RP mu-free?
 stuff-less-rsb : stuff-less-rsb-1+

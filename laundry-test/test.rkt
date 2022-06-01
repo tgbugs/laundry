@@ -204,6 +204,12 @@
 (module+ test-list
   (current-module-path)
   (define node-type 'plain-list-line)
+
+  (dotest "\n*\n" #:node-type 'paragraph)
+  (dotest "+\n*\n")
+  (dotest "-\n*\n")
+  (dotest "- \n*\n")
+
   (dotest "0." #:node-type node-type)
   (dotest "0)" #:node-type node-type)
   (dotest "0. " #:node-type node-type)
@@ -615,6 +621,9 @@ some text
   #;
   (dotest-quiet #f)
 
+  (dotest "\n**\n" #:node-type 'paragraph)
+  (dotest "\n** \n" #:node-type 'headline)
+
   (dotest "** COMMENT[#A]")
   (dotest "** COMMENT [#A] COMMENT")
 
@@ -774,6 +783,9 @@ some text
 (module+ test-paragraph-start
   (current-module-path)
   (laundry-tokenizer-debug #f)
+
+  (dotest "#+end " #:node-type 'paragraph)
+  (dotest "#+end-" #:node-type 'paragraph)
 
   (dotest "  #+begin_src")
   (dotest "  #+begin_srclol" #:node-type 'paragraph) ; FIXME ... eof issue ?
@@ -2948,18 +2960,6 @@ a
 
   ; this goes last so we can sort out remaining issues
 
-  (dotest "\n**\n" #:node-type 'paragraph)
-  (dotest "\n** \n" #:node-type 'headline)
-
-  (dotest "\n*\n" #:node-type 'paragraph)
-  (dotest "+\n*\n")
-  (dotest "-\n*\n")
-  (dotest "- \n*\n")
-
-  ; from test-paragraph-start
-  (dotest "#+end ")
-  (dotest "#+end-")
-
   )
 
 (module+ test
@@ -2972,11 +2972,12 @@ a
    (submod ".." test-npnn)
    (submod ".." test-cell)
    (submod ".." test-row)
-   (submod ".." test-table) ; XXX
+   (submod ".." test-table)
    (submod ".." test-planning)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
    (submod ".." test-markup)
+   (submod ".." test-script)
    (submod ".." test-macros)
    (submod ".." test-comments)
    (submod ".." test-fixed-width)
@@ -3002,4 +3003,5 @@ a
    (submod ".." test-files)
    #; ; known broken
    (submod ".." test-known-broken)
-   ))
+   )
+  )

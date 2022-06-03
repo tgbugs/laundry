@@ -1500,6 +1500,39 @@ y_{x}}z_") ; FIXME seems broken ??
 
   (dotest "[")
   (dotest "[=hello=")
+  (dotest "[_@@asdf: lol@@_")
+  (dotest "[_^{lol}_")
+  (dotest "[_hello_") ; nightmare to handle ?, maybe underline-ambig helps here? or just make the underscore?
+  ; no, underline-ambig breaks closing curlies ?
+  (dotest "[_he *b* ] o_")
+  (dotest "[_{he} *b* ] o_") ; XXX now incorrect ; script-ambig does this one for us, and it is correct, but the { is why it works?
+  ; XXX I'm sure there is an example somewhere that violates the underline ambig handline that we have ... where a simple reparse won't do it? maybe I'm wrong?
+  (dotest "x_{ [_he *b* } ] o_") ; actually ok?
+  ; the reason I'm worried about this is because matching UNDERLINE breaks paren nesting rules in the grammar
+  (dotest "[____hello_") ; XXX a bit worried that LSB-MU-MARKER kept running to eof here
+  (dotest "[____hello_ ")
+  (dotest "[____hello_] more?")
+  (dotest "[____{hello}_") ; x , should render as three underscores, subscript hello and then an underscore
+  (dotest "[____{he] } lo}_") ; x
+  (dotest "[_{oof}_{owie}]")
+
+  (dotest "[/_hello_")
+  (dotest "[*/+==+/*")
+  (dotest "[*/+=x=+/*")
+  (dotest "[*/__+=x=+__/*")
+  (dotest "[*/__+.x=+__/*") ; x OOF
+  (dotest "[*/_+=x=+_/*")
+  (dotest "[*/_{+=x=+_/*")
+  (dotest "[*/_{+=x=+}_/*")
+  (dotest "[*/_{+=x=+}__/*")
+  (dotest "[*/_{+=x=+}____/*")
+  (dotest "[*/____{+=x=+}____/*")
+  (dotest "[*/____asdf____/*")
+  (dotest "[*/____+asdf____/*") ; OH BABY
+  (dotest "[*/____.asdf____/*") ; OH BABY
+  (dotest "[*/____,asdf____/*") ; OH BABY
+  (dotest "[*/____\\asdf____/*") ; OH BABY
+  (dotest "[/*_{} sigh_")
 
   (dotest "[=hello=]\n{=hello=}")
 
@@ -1709,6 +1742,37 @@ y_{x}}z_") ; FIXME seems broken ??
         " "
         (underline (strike-through "bius"))
         " bi")))))
+
+  ; delimiter interactions
+  (dotest "_{b}\ny_" #:nte 'underline)
+
+  (dotest "/{}/")
+  (dotest "_{}_")
+  (dotest "*{}*")
+  (dotest "+{}+")
+  (dotest "={}=")
+  (dotest "~{}~")
+
+  (dotest "/{/")
+  (dotest "_{_")
+  (dotest "*{*")
+  (dotest "+{+")
+  (dotest "={=")
+  (dotest "~{~")
+
+  (dotest "/}{/")
+  (dotest "_}{_")
+  (dotest "*}{*")
+  (dotest "+}{+")
+  (dotest "=}{=")
+  (dotest "~}{~")
+
+  (dotest "/}/")
+  (dotest "_}_")
+  (dotest "*}*")
+  (dotest "+}+")
+  (dotest "=}=")
+  (dotest "~}~")
 
   )
 
@@ -2984,6 +3048,7 @@ a
    (submod ".." test-table-perf)
    (submod ".." test-paragraph-start)
    (submod ".." test-paragraphs)
+   (submod ".." test-inline-call)
    (submod ".." test-left-square-bracket)
    (submod ".." test-markup)
    (submod ".." test-script)

@@ -4,7 +4,7 @@
 # [[file:cursed.pdf]] won't export at all due to some issue
 # [[file:cursed.html]]
 
-#+options: broken-links:t ^:{}
+#+options: broken-links:t ^:t
 #+property: header-args :eval no-export
 
 * 1
@@ -738,6 +738,52 @@ However 3 is.
 
  */_+bius+_/*
 
+ (_wat_)
+ {_wat_}
+ [_wat_]
+
+ (/wat/)
+ {/wat/}
+ [/wat/]
+
+ /{*{_(+{=OH NO=}+)_}*}/
+
+ /{*(_(+{=OH NO=}+)_)*}/
+
+ /{*(_(+{~OH NO~}+)_)*}/
+
+ /{*[_(+{=OH NO=}+)_]*}/
+
+ /{*[_(+{~OH NO~}+)_]*}/
+
+ /{}/
+ _{}_
+ *{}*
+ +{}+
+ ={}=
+ ~{}~
+
+ /{/
+ _{_
+ *{*
+ +{+
+ ={=
+ ~{~
+
+ /}{/
+ _}{_
+ *}{*
+ +}{+
+ =}{=
+ ~}{~
+
+ /}/
+ _}_
+ *}*
+ +}+
+ =}=
+ ~}~
+
 * inline src blocks
 ** ob julia being weird
 :PROPERTIES:
@@ -964,3 +1010,24 @@ s_{s}/s [s/ ]
 s^s_s [s_ ]
 
 s_s_s [s_ ]
+
+[_{oof}_{owie}]
+
+[____{hello}_
+
+[*/____asdf____/*
+[*/____+asdf____/*
+
+asdf_+x
+fdsa_+x
+
+Ca^+2
+OH^-1
+
+[*/__+.x=+__/*
+
+[_hello_
+
+[_he *b* ] o_
+
+[_@@html: html@@@@latex: latex@@_]

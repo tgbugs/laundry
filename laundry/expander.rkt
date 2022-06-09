@@ -437,6 +437,8 @@
   noweb-target
   radio-target
   stats-cookie
+  stats-percent
+  stats-quotient
   superscript
   subscript
   script-paren
@@ -468,6 +470,21 @@
 (define-nodes ; test parsers
   --test--switches-sane
   --test--heading-rest
+  )
+
+(define-nodes ; new paragraph testing
+  bbs
+  other
+  todo
+  object
+  bracket
+  script-contents
+  script-disabled
+  script-super
+  script-sub
+  mu-marker-free
+  mu-hrm
+  footnote-inline-contents
   )
 
 (define-syntax (newline stx) (syntax/loc stx "\n"))
@@ -945,7 +962,7 @@
          (pretty-write (cons 'p1p1p1: (syntax->datum out))))
        out)]))
 
-(define-for-syntax (do-paragraph str [original-syntax #f])
+(define-for-syntax (do-paragraph str [original-syntax #f] [newline-first #t])
   ; FIXME this is gonna be a bit of work
   ; we use -to-datum here because there are two different paragraphs
   ; FIXME this is a bit busted maybe? yeah def busted, parse-paragraph should work but doesn't
@@ -978,19 +995,35 @@
     (let* ([out-helper
             (parse-paragraph-to-datum ; FIXME parse-paragraph-to-datum is INSANELY QUADRATICALLY SLOW
              (paragraph-make-tokenizer
-              (let ([port (open-input-string (string-append "\n" str "\n"))])
+              (let ([port (open-input-string
+                           (string-append "\n" str "\n")
+                           #;
+                           (if newline-first
+                               (string-append "\n" str "\n")
+                               str))])
                 (port-count-lines! port)
                 ; FIXME get a real port kids!
                 port)))]
-           [out (cons (car out-helper)
-                      ; FIXME needs a bit of work if there are cases where the newline gets eaten
-                      ; FIXME perf
-                      ; FIXME do merge strings in here for maximum efficiency, avoids 2 reverses
-                      (reverse (cdr (reverse (cddr out-helper)))))]
+           [out (if newline-first
+                    (cons (car out-helper)
+                          ; FIXME needs a bit of work if there are cases where the newline gets eaten
+                          ; FIXME perf
+                          ; FIXME do merge strings in here for maximum efficiency, avoids 2 reverses
+                          (reverse (cdr (reverse (cddr out-helper)))))
+                    out-helper ; FIXME trimming the trailing newline requires finding the final nested cdr
+                    ; TODO better to trim in merge-strings probably? might not work though
+                    )]
            [merged (merge-strings out)] ; FIXME not 100% sure this is actually the right place to do this since we have to do it again
+           #;
+           [delined (let ([first (car merged)]
+                          [rest (cdr merged)])
+                      (cons first ((car rest))
+                           (cdr merged)
+                           ))]
            )
-      #;
-      (pretty-write (list 'do-paragraph: out-helper out merged (when original-syntax (syntax-position original-syntax) original-syntax)))
+      ;#;
+      (when (debug)
+        (pretty-write (list 'do-paragraph: out-helper out merged (when original-syntax (syntax-position original-syntax) original-syntax))))
       merged)))
 
 #; ; a bad implementation

@@ -631,18 +631,21 @@ c
                        (:& (:~ "." ")") par-rest-ok)
                        (:+ par-rest-ok)))))
 
+(define-lex-abbrev paragraph-1.5
+  (:seq
+   "\n"
+   (:+
+    (:or
+     wsnn+
+     (:+ lower-case)
+     (:+ upper-case)
+     (:+ 0-9)))))
+
 (define-lex-abbrev paragraph-2
   ; cases where we can safely match whole lines because they are followed by paragraph-1
   (:seq
    (:* ; this allows us to subsume paragraph-1
-    (:seq
-     "\n"
-     (:+
-      (:or
-       wsnn+
-       (:+ lower-case)
-       (:+ upper-case)
-       (:+ 0-9)))))
+    paragraph-1.5)
    paragraph-1))
 
 (define-lex-abbrev paragraph-1
@@ -651,6 +654,12 @@ c
     ;hyperlink ; already covered below
     ;hyperlink-ab ; already covered below
     ;timestamp ; FIXME including this here massively increases compile times and runtime and we don't need it at this stage
+    #; ; WHY DOST THOU NOT WORK KNAVE; DUE TO IDIOCY ON THE PART OF THE AUTHOR
+    (:& ; allow paragraph-1.5 in tail position if it matches the whole line
+     (from/stop-before paragraph-1.5 "\n")
+     ; this will parse forward and stop right before the bullet marker
+     ; and thus we will fail
+     (:+ (:~ bullet-marker)))
     (from/stop-before
      (:seq "\n"
            ;(:~ "*" "")
@@ -691,7 +700,8 @@ c
             (:seq "[f" (:~ "n"))
             (:seq "[fn" (:~ ":")) ; TODO see if we can get the actual complement of footnote label?
             ; XXX apparently inline footnotes can start a paragraph now
-            (:seq "[fn:" (:* (:& (:or alphabetic numeric "-" "_")) (:~ ":")) ":") ; FIXME aligh with footnote-label when :~ : is fixed
+            ; FIXME apparently alphabetic or numeric includes @ !??!?!?
+            (:seq "[fn:" (:* (:& (:or alphabetic numeric "-" "_") (:~ ":"))) ":") ; FIXME aligh with footnote-label when :~ : is fixed ; FIXME :@: is valid in racket but no in emacs
             (:seq (:+ A-Z) (:~ (:or bullet-marker A-Z "\n")))
             (:seq (:+ a-z) (:~ (:or bullet-marker a-z "\n")))
             (:seq (:+ 0-9) (:~ (:or bullet-marker 0-9 "\n")))

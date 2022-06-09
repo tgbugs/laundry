@@ -8,7 +8,6 @@
          (only-in racket/port input-port-append peeking-input-port)
          (only-in racket/list cons? last)
          (for-syntax racket/base
-                     #;
                      syntax/parse
                      (only-in racket/list combinations permutations)
                      ))
@@ -340,18 +339,169 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
   )
 
+(define-syntax (paragraph-lexer-common stx)
+  (syntax-parse stx
+    [(_ body ...)
+     #'(lexer-srcloc
+
+        ; lexer specific forms
+
+        body ...
+
+        ;;; common
+
+        ["[" (token 'LSB lexeme)] ["]" (token 'RSB lexeme)]
+        ["{" (token 'LCB lexeme)] ["}" (token 'RCB lexeme)]
+        ["(" (token 'LP lexeme)]  [")" (token 'RP lexeme)]
+        ["<" (token 'LAB lexeme)]  [">" (token 'RAB lexeme)]
+
+        ["^"
+         (if (eq? (export-with-sub-superscripts) #t)
+             (token 'HAT lexeme)
+             (token 'HAT-SCRIPT-DISABLED lexeme))]
+
+        ["_"
+         (if (eq? (export-with-sub-superscripts) #t)
+             (token 'UNDERSCORE lexeme)
+             (token 'UNDERSCORE-SCRIPT-DISABLED lexeme))]
+
+        ["*" (token 'ASTERISK lexeme)]
+        ["/" (token 'SLASH lexeme)]
+        ["+" (token 'PLUS lexeme)]
+        ["~" (token 'TILDE lexeme)]
+        ["=" (token 'EQUALS lexeme)]
+
+        ["@" (token 'AT lexeme)]
+
+        ["\n" (token 'NEWLINE lexeme)]
+        [wsnn (token 'WSNN1 lexeme)]
+
+        [(:~ (:or whitespace paragraph-special)) (token 'OTHER lexeme)]
+
+
+        ; org objects
+
+        [latex-entity/fragment-1 (token 'LATEX-ENTITY-OR-FRAGMENT-1 lexeme)]
+        [latex-fragment-n (token 'LATEX-FRAGMENT-N lexeme)]
+        [latex-fragment-parens (token 'LATEX-FRAGMENT-PARENS lexeme)]
+
+        [export-snip (token 'EXPORT-SNIP lexeme)]
+
+        [citation (token 'CITATION lexeme)] ; FIXME annoying because it gets parsed twice
+
+        [footnote-anchor (token 'FOOTNOTE-ANCHOR lexeme)]
+        [footnote-inline-start (token 'FOOTNOTE-START-INLINE lexeme)]
+
+        [inline-call-start (token 'INLINE-CALL-START lexeme)]
+        [inline-src-block-start (token 'INLINE-SRC-BLOCK-START lexeme)]
+
+        [hyperlink (token 'LINK lexeme)]
+        [hyperlink-ab (token 'LINK-AB lexeme)]
+
+        [macro-invocation (token 'MACRO lexeme)]
+
+        [noweb-target (token 'NOWEB-TARGET lexeme)]
+        [radio-target (token 'RADIO-TARGET lexeme)]
+
+        [stats-percent (token 'STATS-PERCENT lexeme)]
+        [stats-quotient  (token 'STATS-QUOTIENT lexeme)]
+
+        [timestamp (token 'TIMESTAMP lexeme)]
+
+        )]))
+
+(define paragraph-lexer-alt
+  (paragraph-lexer-common
+   [(:>= 2 (:~ paragraph-special "\n" whitespace mu-post-less-whitespace-delim))
+    (let ([next-char (peek-char input-port)])
+      (if (for/or ([char '(#\space #\newline #\tab
+                           #\] #\- #\. #\, #\; #\: #\! #\? #\' #\"
+                           )]) (char=? next-char char))
+          (token 'OTHERN lexeme)
+          (token-back-1 'BEFORE-BEFORE-SPECIAL lexeme input-port)))]
+
+   [superscript-start-b ; massively simplifies the grammar
+    (if (export-with-sub-superscripts)
+        (token 'SUP-START-B lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+   [subscript-start-b ; massively simplifies the grammar
+    (if (export-with-sub-superscripts)
+        (token 'SUB-START-B lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+
+   ; this does not parse markup ? because ? ... no that can't quite be right
+   ; I think there is a variant that does parse markup ... ?
+   ; it would be amazing if there were only 3 contexts needed to account for all of the org paragraph
+   ; syntax at the level of the lexer ... we'll see if it pans out
+   ))
+
+(define paragraph-lexer-alt-markup
+  (paragraph-lexer-common
+   [(:>= 2 (:~ paragraph-special "\n" whitespace mu-post-less-whitespace-delim))
+    (let ([next-char (peek-char input-port)])
+      (if (for/or ([char '(#\space #\newline #\tab
+                           #\] #\- #\. #\, #\; #\: #\! #\? #\' #\"
+                           )]) (char=? next-char char))
+          (token 'OTHERN lexeme)
+          (token-back-1 'BEFORE-BEFORE-SPECIAL lexeme input-port)))]
+
+   [markup-* (token-back-1 'BOLD lexeme input-port)]
+   [markup-/ (token-back-1 'ITALIC lexeme input-port)]
+   [markup-_ (token-back-1 'UNDERLINE lexeme input-port)] ; FIXME handle the intersection of mu-pre and subscript-pre
+   [markup-+ (token-back-1 'STRIKE lexeme input-port)]
+
+   [markup-= (token-back-1 'VERBATIM lexeme input-port)]
+   [markup-~ (token-back-1 'CODE lexeme input-port)]
+
+   ))
+
+(define paragraph-lexer
+  (paragraph-lexer-common
+   [(:>= 2 (:~ paragraph-special "\n")) ; need newline to simplify adding and removing newlines during parsing (ick)
+    (if (char=? (peek-char input-port) #\newline)
+        (token 'OTHERN lexeme)
+        (token-back-1 'BEFORE-BEFORE-SPECIAL lexeme input-port))]
+
+   ; markup
+
+   ; XXX we may still need the -NP -PA split
+   ; or we can work around the issue by checking for unmached
+   ; in a second pass on nested in the expander if we REALLY have to
+   [markup-* (token-back-1 'BOLD lexeme input-port)]
+   [markup-/ (token-back-1 'ITALIC lexeme input-port)]
+   [markup-_ (token-back-1 'UNDERLINE lexeme input-port)] ; FIXME handle the intersection of mu-pre and subscript-pre
+   [markup-+ (token-back-1 'STRIKE lexeme input-port)]
+
+   [markup-= (token-back-1 'VERBATIM lexeme input-port)]
+   [markup-~ (token-back-1 'CODE lexeme input-port)]
+
+   ))
+
+
+(define paragraph-lexer-no-markup
+  (paragraph-lexer-common
+   [(:>= 2 (:~ paragraph-special "\n")) ; need newline to simplify adding and removing newlines during parsing (ick)
+    (if (char=? (peek-char input-port) #\newline)
+        (token 'OTHERN lexeme)
+        (token-back-1 'BEFORE-BEFORE-SPECIAL lexeme input-port))]
+
+   [superscript-start-b ; massively simplifies the grammar
+    (if (export-with-sub-superscripts)
+        (token 'SUP-START-B lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+   [subscript-start-b ; massively simplifies the grammar
+    (if (export-with-sub-superscripts)
+        (token 'SUB-START-B lexeme)
+        (token 'SCRIPT-DISABLED lexeme))]
+
+   ))
+
 ; FIXME TODO consider using parameters to avoid emitting duplicate
 ; markup but consider also that this may not be the best or even
 ; correct place to attempt such a thing
 
-; I think we don't need to stop for parens anymore ??
-(define-lex-abbrev little-black-raincloud
-  (:or "\n" "[" "]" "{" "}" #;"(" #;")" "<" #;">" "@" "^" "_" "~" "=" "/" "*" "+"))
-
-(define-lex-abbrev mu-check
-  (:or "\"" "'" "-" "{" "("))
-
-(define paragraph-lexer
+#;
+(define paragraph-lexer-old
 
   ; TODO peeking markup
   ; we don't have to peek on every single char, we only have to peek on
@@ -705,6 +855,7 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
 (module+ test-paragraph
   ; FIXME terminal double newline never makes it through the top level lexer
+  (debug #t)
   (paragraph-lexer (open-input-string "[fn::a[fn::b]]"))
 
   (paragraph-lexer (open-input-string "[fn:: sigh\n\nmore"))
@@ -719,6 +870,40 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   (let* ([port (open-input-string "[fn::sigh\nmore")] ; here's our problem, \n\n never shows up
          [next-token (paragraph-make-tokenizer port)])
     (list (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld* ")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld* more")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token) (next-token) (next-token)
+          (next-token) (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld*:more")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token) (next-token) (next-token)
+          (next-token) (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld*!more")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token) (next-token) (next-token)
+          (next-token) (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld*,more")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token) (next-token) (next-token)
+          (next-token) (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string " *bo ld*mo re")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list (next-token) (next-token) (next-token) (next-token) (next-token)
+          (next-token) (next-token) (next-token) (next-token)))
+
+  (let* ([port (open-input-string "oops")]
+         [next-token (paragraph-make-tokenizer port)])
+    (list  (next-token)   (next-token)
+             ))
 
   )
 
@@ -764,15 +949,73 @@ using from/stop-before where the stop-before pattern contains multiple charachte
 
   )
 
+(define break-on-alt (make-parameter #f))
+(define match-markup? (make-parameter #t))
 (define (paragraph-make-tokenizer port)
   (define (next-token)
-    (let ([out (paragraph-lexer port)])
+    (let* ([lexer (if (break-on-alt)
+                      (if (match-markup?)
+                          paragraph-lexer-alt-markup
+                          paragraph-lexer-alt)
+                      (if (match-markup?)
+                          paragraph-lexer
+                          paragraph-lexer-no-markup))]
+           [out (lexer port)])
+      (if (not (eq? out eof))
+          (let* ([token (srcloc-token-token out)]
+                 [token-type (token-struct-type token)])
+            (if (memq token-type
+                      '(
+                        LSB RSB
+                        LCB RCB
+                        LP RP
+                        LAB RAB
+                        HAT HAT-SCRIPT-DISABLED
+                        UNDERSCORE UNDERSCORE-SCRIPT-DISABLED
+                        ; markup markers must be included so that we can
+                        ; catch markup post without introspecting tokens
+                        ASTERISK
+                        SLASH
+                        PLUS
+                        TILDE
+                        EQUALS
+                        AT
+
+                        ; don't need this because only the occurance of single alt chars
+                        ; directly after some of the above matter for this
+                        ;OTHERN ; needed to be able to read the alt char by itself?
+
+                        ))
+                ; FIXME - ' "
+                (let ()
+                  (break-on-alt #t)
+                  (match-markup? #f)
+                  (when (memq token-type '(LCB LP))
+                    ; we only need to match markup on these two here
+                    ; because all other markup cases are handled below
+                      (match-markup? #t)))
+                (let ()
+                  (break-on-alt #f)
+                  (if (memq token-type '(
+                                         NEWLINE WSNN1 MU-PRE-SAFE
+                                         ; LCB LP ; these two are unreachable here because
+                                         ; the other branch will always be selected
+                                         ))
+                      ; we only need to switch lexer when we hit the BEFORE-SPECIAL slot
+                      (match-markup? #t)
+                      (match-markup? #f)
+                      )
+                  ))
+
+            )
+        (break-on-alt #f)
+        )
       (when (debug) ; XXX (debug) as a parameter doesn't work when called
                ; at syntax time because parameters can't cross phases,
                ; even if syntax time is called at and inside runtime
                ; and/org there are some module boundary issues related
                ; to expanding at runtime that are getting tangled up
-        (println ':paragraph-make-tokenizer)
+        (println (list ':paragraph-make-tokenizer lexer))
         (pretty-print out))
       out))
   next-token)
@@ -866,6 +1109,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [wsnn+ (token 'WSNN1-N lexeme)]
 
    [footnote-definition
+    ; FIXME isn't this stop before broken or did I fix this in some other way at some point?
+    ; maybe I did it my introspecting the span vs the current port position or something !? no?
     (token 'FOOTNOTE-DEFINITION lexeme)]
 
    [(eof) (return-without-srcloc eof)]
@@ -881,6 +1126,15 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(:>= 2 alpha) (token 'ALPHA-N lexeme)]
 
    [(:+ negated-set) (token 'NEGATED-SET lexeme)]))
+
+(module+ test-laundry-lexer
+  ; two paragraphs here !? malformed triggering too quickly ??
+  ; I think this is because we have a paragraph-2 in the second position somehow?
+  ; yes, that is why, there isn't a way around this right now
+  (laundry-lexer (open-input-string "\n[fn:: sigh\nwhat\n"))
+  (laundry-lexer (open-input-string "\nsigh\nwhat\n"))
+
+  )
 
 (define (fix-srcloc-mod srcloc-token-instance)
   (let* ([token (srcloc-token-token srcloc-token-instance)]

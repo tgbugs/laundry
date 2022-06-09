@@ -784,6 +784,27 @@ However 3 is.
  =}=
  ~}~
 
+
+# ox-html produces (underline "{" (underline "{_"))
+# which I guess is technically correct here?
+
+ _{_{___
+
+ _{_(___
+
+ _{_[___
+
+ _{_{_x_
+
+ _{_(_x_
+
+ _{_[_x_
+
+
+check this font locking bug out! want to see a newline render with underline IN A COMMENT !?
+# {_x
+_{_{___
+
 * inline src blocks
 ** ob julia being weird
 :PROPERTIES:
@@ -990,9 +1011,22 @@ now reference [fn:29] here as well
 #+end_src
 
 * footnote hyperlink italic interactions
+[s/] [[/ ][]]
+
+[s/] [[/ ][x]]
+
 [s/] [[http://asdf.com/ ][]]
+
+[s/] [[http://asdf.com/][]]
+
+[s/] [[http://asdf.com/][wat]]
+
+[s/] [[http://asdf.com/ ][x]]
+
 [[file:][*bold*]]
+
 [*bold*]
+
 [ *bold*]
 
 [ *bold* ]
@@ -1031,3 +1065,13 @@ OH^-1
 [_he *b* ] o_
 
 [_@@html: html@@@@latex: latex@@_]
+
+* timestamps
+
+org export shows that the first 3 are timestamps
+and the last one is a hyperlink
+
+[2020-06-08]
+[[[[[[[[[[[[[[[[[[[[[[[[[2022-06-08]
+[2022-06-08]]]]]]]]]]]]]]]]]]]]]]]]]
+[[[[[[[[[[[[[[[[[[[[[[[[[2022-06-08]]]]]]]]]]]]]]]]]]]]]]]]]

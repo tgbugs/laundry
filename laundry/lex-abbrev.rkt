@@ -1303,10 +1303,21 @@ c
 (define-syntax (define-markup stx)
   (syntax-parse stx
     [(_ delimiter:str)
-     #:with (markup-delim-eof? markup-delim)
+     #:with (
+             markup-delim-eof? markup-delim
+             markup-delim-nopar-eof? markup-delim-nopar
+             markup-delim-paren-eof? markup-delim-paren
+             )
      (list
       (format-id #'delimiter #:source #'delimiter "markup-~a-eof?" (syntax-e #'delimiter))
-      (format-id #'delimiter #:source #'delimiter "markup-~a" (syntax-e #'delimiter)))
+      (format-id #'delimiter #:source #'delimiter "markup-~a" (syntax-e #'delimiter))
+
+      (format-id #'delimiter #:source #'delimiter "markup-~a-nopar-eof?" (syntax-e #'delimiter))
+      (format-id #'delimiter #:source #'delimiter "markup-~a-nopar" (syntax-e #'delimiter))
+
+      (format-id #'delimiter #:source #'delimiter "markup-~a-paren-eof?" (syntax-e #'delimiter))
+      (format-id #'delimiter #:source #'delimiter "markup-~a-paren" (syntax-e #'delimiter))
+      )
      #; ; XXX have to use format-id for things to work in module+ apparently
      (string->symbol (format "markup-~a" (syntax-e #'delimiter)))
      #'(begin
@@ -1332,6 +1343,23 @@ c
                (:>= 3 any-char) ; exclude degnerate cases
                ; ensure ends with delimiter to avoid eof issues
                (:seq any-string mu-border delimiter)))
+
+         (define-lex-abbrev markup-delim-paren-eof?
+           (:& markup-delim-eof?
+               (:seq any-string (:or "{" "}" "[" "]" "(" ")") any-string) ; match if there is a paren
+               ))
+
+         (define-lex-abbrev markup-delim-nopar-eof?
+           (:& markup-delim-eof?
+               (:+ (:~ (:or "{" "}" "[" "]" "(" ")"))) ; don't match if we contain a paren, needed to avoid potential nesting issues
+               ))
+
+         (define-lex-abbrev markup-delim-paren
+           (:seq markup-delim-paren-eof? mu-post-1))
+
+         (define-lex-abbrev markup-delim-nopar
+           (:seq markup-delim-nopar-eof? mu-post-1))
+
          ; using token-back-1 in the lexer is required for this to work correctly
          (define-lex-abbrev markup-delim
            ; XXX sadly it seems that we still have to step back 1 here
@@ -1401,3 +1429,21 @@ c
 ;; other parser bits
 
 (define-lex-abbrev section (from/stop-before heading heading)) ; FIXME BOF EOF issues
+
+;; paragraph attempt 1.5
+
+; I think we don't need to stop for parens anymore ??
+(define-lex-abbrev little-black-raincloud
+  (:or "\n" "[" "]" "{" "}" #;"(" #;")" "<" #;">" "@" "^" "_" "~" "=" "/" "*" "+"))
+
+(define-lex-abbrev mu-check
+  (:or "\"" "'" "-" "{" "("))
+
+(define-lex-abbrev mu-marker-less-_
+  (:or "~" "=" "/" "+" "*"))
+
+(define-lex-abbrev paragraph-special
+  (:or "[" "]" "{" "}" "(" ")" "~" "=" "/" "+" "*" "_" "^" "<" ">" "@")
+  ; src_
+  ; call_
+  )

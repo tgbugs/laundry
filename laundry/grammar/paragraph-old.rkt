@@ -34,7 +34,7 @@ paragraph : newline
              | LP script?
              | LSB-PLUS script? ; XXX not sure if this is actually safe ?
 
-@left-common : ( LSB | LCB | LP | LSB-PLUS ) ; script?
+@left-common : ( LSB | LCB | LP | LSB-PLUS | LSB-MU-MARKER ) ; script?
 ; I'm fairly certain that the current state of this grammar has
 ; many hidden failure modes where certain strings simply cannot
 ; be expressed need to fuzz or far better, switch to using a syntax
@@ -54,6 +54,7 @@ paragraph : newline
                   | WSNN
                   | paired ; XXX I think
                   | nested-delims script?
+                  | BEFORE-BEFORE-SPECIAL
 
 @paragraph-common-open : paragraph-common | nested-delims | open-delim
 
@@ -67,19 +68,23 @@ paragraph : newline
 ; into just the delimiters TODO implement this
 @nested-delims : nested-square | nested-curlie | nested-parens
 ; TODO also need to handle [fn:: [cite: and any other cases
-@nested-square : ( LSB | LSB-PLUS ) ( nested-square | paragraph-common | @stuff-less-lsb-rsb )+ RSB
+@nested-square : ( LSB | LSB-PLUS | LSB-UNDERSCORE | LSB-MU-MARKER) ( nested-square | paragraph-common | @stuff-less-lsb-rsb )+ RSB
                | LSB-RSB
                | LSB-PLUS RSB
+               | LSB-UNDERSCORE RSB
+               | LSB-MU-MARKER RSB
 @nested-curlie : LCB ( nested-curlie | paragraph-common | @stuff-less-lcb-rcb )+ RCB ; FIXME -less-lcb too
                | LCB-RCB
 @nested-parens : LP ( nested-parens | paragraph-common | @stuff-less-lp-rp )+ RP ; FIXME must also be -less-lb to avoid ambig
                | LP-RP
 
-@open-delim : ( LSB | LSB-PLUS ) ( paragraph-common-open | @stuff-less-rsb )+
+@open-delim : ( LSB | LSB-PLUS | LSB-UNDERSCORE | LSB-MU-MARKER ) ( paragraph-common-open | @stuff-less-rsb )+
             | LCB ( paragraph-common-open | @stuff-less-rcb )+ ; FIXME -less-lcb too
             | LP  ( paragraph-common-open | @stuff-less-rp  )+
             | LSB
             | LSB-PLUS
+            | LSB-UNDERSCORE
+            | LSB-MU-MARKER
             | LCB
             | LP
 
@@ -121,6 +126,8 @@ paragraph : newline
                  | newline
 
 @stuff-base : stuff-base-base
+            | LSB-UNDERSCORE
+            | LSB-MU-MARKER underline-ambig?
             | LSB-PLUS ; FIXME not clear this goes here ??
             ;| LSB mu-free? script?
             ;| LCB script? ; FIXME mismatch I htink
@@ -144,7 +151,7 @@ stuff-less-rcb : stuff-less-rcb-1+
                       | newline
                       | RSB mu-free? | RP mu-free?
 
-@stuff-less-lcb-rcb-1 : stuff-base-base | LP | RP mu-free? | LSB-PLUS | RSB mu-free?
+@stuff-less-lcb-rcb-1 : stuff-base-base | LP | RP mu-free? | LSB-PLUS | LSB-UNDERSCORE | LSB-MU-MARKER underline-ambig? | RSB mu-free?
 stuff-less-lcb-rcb : stuff-less-lcb-rcb-1+
 
 
@@ -155,7 +162,7 @@ stuff-less-lsb-rsb : stuff-less-lsb-rsb-1+
 stuff-less-rp : stuff-less-rp-1+
 
 ; remind me why LSB is left out from these?
-@stuff-less-lp-rp-1 : stuff-base-base | LCB | RCB mu-free? | LSB-PLUS | RSB mu-free?
+@stuff-less-lp-rp-1 : stuff-base-base | LCB | RCB mu-free? | LSB-PLUS | LSB-UNDERSCORE | LSB-MU-MARKER underline-ambig? | RSB mu-free?
 stuff-less-lp-rp : stuff-less-lp-rp-1+
 
 newline : NEWLINE
@@ -279,15 +286,19 @@ footnote-anchor : FOOTNOTE-ANCHOR
 ; FIXME RSB fighting with markup e.g. [fn:: hello =]= there ] vs [fn:: [ hello =]= there ]
 paragraph-inline : @paragraph-inline-safe ;| paired-square
 paragraph-inline-safe : markup? ( paragraph-common
-                                | LSB ( paragraph-common | @stuff-less-rsb )+ RSB ; FIXME surely we are missing script here
+                                | ( LSB | LSB-UNDERSCORE | LSB-MU-MARKER ) ( paragraph-common | @stuff-less-rsb )+ RSB ; FIXME surely we are missing script here
                                 | LSB-RSB
                                 | LSB RSB
+                                | LSB-UNDERSCORE RSB
+                                | LSB-MU-MARKER RSB
                                 | @stuff-less-rsb )+
                       | markup?
 
 @paragraph-inline-bad : markup? ( paragraph-common
-                                | LSB ( paragraph-common | @stuff-less-rsb )+
+                                | ( LSB | LSB-UNDERSCORE | LSB-MU-MARKER ) ( paragraph-common | @stuff-less-rsb )+
                                 | LSB
+                                | LSB-UNDERSCORE
+                                | LSB-MU-MARKER
                                 )+
                       | markup?
 
@@ -348,13 +359,15 @@ markup-rec-ok : underline-ok ; must be preceeded by whitespace
 
 markup-terminal : code | verbatim
 
-bold : BOLD
-italic : ITALIC
-underline : UNDERLINE
+bold : BOLD-NP | BOLD-PA
+italic : ITALIC-NP | ITALIC-PA
+underline : UNDERLINE-NP ; | UNDERLINE-PA ; underline with parens, no no no
 underline-ok : UNDERLINE-AMBIG
 underline-ambig : UNDERLINE
-strike-through : STRIKE
-code : CODE
-verbatim : VERBATIM
+strike-through : STRIKE-NP | STRIKE-PA
+code : CODE-NP | CODE-PA
+verbatim : VERBATIM-NP | VERBATIM-PA
 
 @mu-free : BOLD | ITALIC | UNDERLINE | STRIKE | VERBATIM ; x/a b/ like cases
+         | BOLD-NP | ITALIC-NP | UNDERLINE-NP | STRIKE-NP | VERBATIM-NP ; x/a b/ like cases
+         ;| BOLD-PA | ITALIC-PA | UNDERLINE-PA | STRIKE-PA | VERBATIM-PA ; x/a b/ like cases

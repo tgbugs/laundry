@@ -363,6 +363,29 @@ using from/stop-before where the stop-before pattern contains multiple charachte
   ; however it is clear that the paragraph grammar is still broken
   (lexer-srcloc ; FIXME vs lexer-src-pos ????
 
+   [(:>= 2 (:~ paragraph-special))
+    (token-back-1 'BEFORE-BEFORE-SPECIAL lexeme input-port)
+    ; then what you do is you have a bunch of these BBS blocks
+    ; separated by 2 chars and then another BBS block, then you
+    ; can build the logical of the grammar using the pairs of
+    ; chars, that seems like it may be tractable
+    ; the markup is still a nightmare in this situation though :/
+    ; FIXME nope ... not so simple, because there are a ton of
+    ; different rules for when you need to terminate a token ;_;
+    ; the one that really screws everything up is whitespace
+    ; that might be the ONE state that we track ... whether to
+    ; break on whitespace ... hrm
+    ; also the markup post bit makes this naieve appraoch seem
+    ; very unlikely to work ...
+
+    ; or we rewrite the paragraph grammar to try to avoid the
+    ; quadratic pitfalls and split everything on whitespace
+    ; except for the whole lines that contain nothing of interest
+    ; lbrc would remain the basis for stretches of text that were
+    ; uninteresting, but we would do it line by line only breaking
+    ; on newlines insteaad of all whitespace for the boring cases
+    ]
+
    #;
    [(:+
      (:~ mu-check mu-marker )
@@ -435,7 +458,76 @@ using from/stop-before where the stop-before pattern contains multiple charachte
              ; can't quite be mu-marker becuse _ is also subscript
              "=" "~" "*" "/" "+"))
     (token 'STUFF-A lexeme)]
-   #; ; no longer needed due to pay no attention to me
+   #;
+   [(:seq "[" (:* mu-marker) "_" (:~ (:or whitespace "{" "}" "[" "]" "<" ">" "@" "^" mu-marker)))
+    (token 'LSB-MU-MARKER lexeme)]
+   ;#; ; there is no no hope for this approach, something always breaks or slips out, the problem is underscore
+   ; I think it has to be parsed by itself, and the underline markup has to be handled in a different way
+   ; nesting rules will simply break otherwise ...
+   [(:&
+     (from/stop-before
+      (:seq "[" (:* mu-marker) "_")
+      (:or whitespace "{" "}" "[" "]" "(" ")" "<" ">" "@" "^"
+           ; script start ; FIXME I think this is probably missing from little black raincloud
+           "+" "-" "," "." "\\" alpha 0-9 ; FIXME alphabetic numeric has things like @ in it !? ; FIXME we HAVE to stop before these or it overruns
+           ))
+     (:seq any-string "_"))
+    ; explicitly catch these cases, back up 1 and let UNDERLINE-AMBIG take over from there
+    (if (= (string-length lexeme) 1)
+        (token 'LSB lexeme)
+        (token-back-1 'LSB-MU-MARKER lexeme input-port))
+    #;
+    (let ([next-char (peek-char input-port)])
+      (if (for/or ([not-ss '(#\space #\newline #\tab #\[ #\] #\{ #\} #\( #\) #\< #\> #\@ #\^)]) (char=? next-char not-ss))
+          (if (= (string-length lexeme) 2)
+              (token 'LSB-UNDERSCORE lexeme) ; FIXME need to differentiate script start case from the others
+              (token-back-1 'LSB-MU-MARKER lexeme input-port))
+          (if (= (string-length lexeme) 2)
+              (token 'LSB-UNDERSCORE-BEFORE-SCRIPT lexeme) ; FIXME need to differentiate script start case from the others
+              (token-back-1 'LSB-MU-MARKER-BEFORE-SCRIPT lexeme input-port))))]
+   #;
+   [(:&
+     (from/stop-before
+      (:seq "[" (:* mu-marker) "_")
+      (:or "+" "-" "," "." "\\" alpha 0-9)) ; XXX apparently alphabetic and/or numeric includes @ !?!??!
+     (:seq any-string "_"))
+    (if (= (string-length lexeme) 2)
+        (token 'LSB-UNDERSCORE-BEFORE-SCRIPT lexeme)
+        (token-back-1 'LSB-MU-MARKER-BEFORE-SCRIPT lexeme input-port))]
+   [(:seq "["
+          (:or
+           (:+ mu-marker-less-_)
+           #; ; can't even do this because [/*__+.x=+__/* needs to parse as script disabled
+           (:seq mu-marker-less-_ (:* mu-marker) mu-marker-less-_) ; FIXME ends in _{} or _asdf case
+           ;(from/stop-before (:+ "_") (:~ (:or "{" "]")))
+           #; ; [/*_{} sigh_ dooms us here ?? no, we might be ok? because of underline-ambig ?!?
+           (:seq mu-marker-less-_ (:* mu-marker) "_"
+                 ; FIXME this is really tricky, I'm not sure we can safely handle it
+                 (:~ (:or "{" "[" "]" "@" "<" whitespace))
+                 )
+           #;
+           (:seq "_"
+                 (:or
+                  (:+ mu-marker)
+                  (:~ (:or "{" "]" whitespace)) ; don't eat whitespace basically
+                  )
+                 )
+           ;(:+ (:or "*" "+" "/" "=" "~"))
+           #;
+           (:seq  (:* (:or "*" "+" "/" "=" "~")))
+           #;
+           (:seq (:+ "_") (:~ (:or "{" "]" whitespace)))))
+    ; TODO see if we need to handle underscore (we do)
+    (token 'LSB-MU-MARKER lexeme)]
+
+   #;
+   [(:seq "[" "_" (:or "+" "-" "," "." "\\" alphabetic numeric))
+    ; we only need to handle the single underline case, the stop before variant below catches the rest for us
+    ; and it only fails to handle this one because it needs token-back-1
+    ; FIXME nasty processing required in expander if we try this ???
+    (token 'LSB-SCRIPT-START lexeme)]
+
+   #; ; no longer needed due to pay no attention to me XXX FALSEish
    [(:seq "[" ; ensure that markup doesn't run wild with an incorrect parse
           (:or
            ;"=" "~" "*" "/" "+"
@@ -451,7 +543,8 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [(:seq ; interactions between markup and pb-script
      script-marker
      ; FIXME this matches __ which breaks __{sub}
-     (:~ (:or script-marker "[" "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" whitespace))
+     ; FIXME this matchs _@ too, which breaks [_@@html: html@@_]
+     (:~ (:or script-marker "@" "[" "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" whitespace))
      #;
      (:+ (:&
           (:~ (:or "{" "(" "*" "+" "-" alpha 0-9 "," "." "\\" ))
@@ -468,11 +561,35 @@ using from/stop-before where the stop-before pattern contains multiple charachte
    [markup-~ (token 'CODE lexeme)]
    |#
 
+   [markup-=-nopar (token-back-1 'VERBATIM-NP lexeme input-port)]
+   [markup-~-nopar (token-back-1 'CODE-NP lexeme input-port)]
+
+   [markup-*-nopar (token-back-1 'BOLD-NP lexeme input-port)]
+   [markup-/-nopar (token-back-1 'ITALIC-NP lexeme input-port)]
+   [markup-_-nopar (token-back-1 'UNDERLINE-NP lexeme input-port)]
+   [markup-+-nopar (token-back-1 'STRIKE-NP lexeme input-port)]
+
+
+   [markup-=-paren (token-back-1 'VERBATIM-PA lexeme input-port)]
+   [markup-~-paren (token-back-1 'CODE-PA lexeme input-port)]
+
+   [markup-*-paren (token-back-1 'BOLD-PA lexeme input-port)]
+   [markup-/-paren (token-back-1 'ITALIC-PA lexeme input-port)] ; might need to zap this one too to avoid issues with hyperlinks?
+   #; ; all the others we can handle, this one gobbles script
+   [markup-_-paren (token-back-1 'UNDERLINE-PA lexeme input-port)]
+   [markup-+-paren (token-back-1 'STRIKE-PA lexeme input-port)]
+
+
+   [markup-= (token-back-1 'VERBATIM lexeme input-port)]
+   [markup-~ (token-back-1 'CODE lexeme input-port)]
+
    ; #| ; duh we don't have to back up I fixed it in the pattern itself
    ; sadly we DO have to back up due to cases like x_{y}_{z}
    [markup-* (token-back-1 'BOLD lexeme input-port)]
    [markup-/ (token-back-1 'ITALIC lexeme input-port)]
    [markup-_-ok (token-back-1 'UNDERLINE lexeme input-port)] ; NASTY interaction with subscript
+   ; FIXME may need not allow parens in markup in cases like this? urg?
+   ; FIXME this can gobble parens for paren matching, which have to be matched if it isn't actually underline
    [markup-_-ambig (token-back-1 'UNDERLINE-AMBIG lexeme input-port)] ; I do NOT like how this is handled, but lookbehind seems worse
    [markup-+ (token-back-1 'STRIKE lexeme input-port)]
 

@@ -35,6 +35,13 @@ You can also parse individual Org files using [[file:./laundry-test/cli.rkt]].
 #+begin_src bash :results drawer
 laundry-test/cli.rkt docs/thoughts.org laundry-test/test.org
 #+end_src
+
+* Reproducible Development Environment
+To have a (GNU Guix) fully Reproducible Development Environment run
+#+begin_src bash :results drawer
+./guix-rde/run-rde.sh
+#+end_src
+
 * Status
 Laundry can parse most of Org syntax, though there are still issues
 with the correctness of the parse in a number of cases.
